@@ -133,7 +133,7 @@ export function revokeAllUserTokens(userId: number): void {
 //
 // Refresh Token 通过 HttpOnly Cookie 传输，JS 不可读取，防御 XSS 窃取。
 // 仅 /api/auth/* 路径会携带此 cookie（refresh / logout 端点）。
-// Vite 开发代理（/api → localhost:3022）下 SameSite=Lax 正常工作。
+// Vite 开发代理（/api → localhost:3023）下 SameSite=Lax 正常工作。
 
 /** Cookie 名称 */
 const REFRESH_COOKIE = 'duko_refresh_token';

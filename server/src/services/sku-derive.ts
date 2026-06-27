@@ -55,11 +55,16 @@ const americanStyleFullHeight = Object.fromEntries(AMERICAN_STYLE_CODES.flatMap(
   [`${color}B36F-D`, `${color}W3630/UT363024-D`],
   [`${color}B42F-D`, `${color}W4230-D`],
 ]))
+
 const PART_WHITELIST: Record<string, string> = {
   ...americanStyleFullHeight,
-  // 全高柜子的柜体
+  // 全高柜子的柜体 - 美式
   ...Object.fromEntries(["12", "15", "18", "21", "24", "27", "30", "33", "36", "42"].flatMap(size => [
     [`10B${size}F-C`, `10B${size}-C`]
+  ])),
+  // 全高柜子的柜体 — 欧式
+  ...Object.fromEntries(["09", "12", "15", "18", "21", "24", "27", "30", "33", "36", "42"].flatMap(size => [
+      [`30B${size}F-C`, `30B${size}-C`]
   ])),
   ...wallUseOvenDoor,
 };

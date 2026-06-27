@@ -47,7 +47,7 @@ const PORT = config.port || 3001;
 app.set('trust proxy', 1);
 
 // ---- 全局中间件 ----
-app.use(cors());          // 允许跨域（开发时前端 :5272 请求后端 :3022
+app.use(cors());          // 允许跨域（开发时前端 :5273 请求后端 :3022
 app.use(express.json({ limit: '20mb' }));  // 自动解析请求体中的 JSON
 
 // 安全响应头（CSP、HSTS、X-Frame-Options 等）

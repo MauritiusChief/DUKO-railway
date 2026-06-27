@@ -208,7 +208,7 @@ const americanStyleUtilityCab = NONE_EURO_STYLE_CODES.flatMap(color => {
 // 欧式高柜规则生成
 const europeanStyleUtilityCab = EUROPEAN_STYLE_CODES.flatMap(color => {
   return EUROPEAN_UTIL_HEIGHT.flatMap(h => {
-    return EUROPEAN_UTIL_WIDTH.map(w => ({ colorCode: color, shapeTypeCode: 'UT', shapeSizeCode: `${w}${String(Number(h)+35)}24`, subItems: `${color}B${w}F,${color}UT${w}${h}224` }))
+    return EUROPEAN_UTIL_WIDTH.map(w => ({ colorCode: color, shapeTypeCode: 'UT', shapeSizeCode: `${w}${String(Number(h)+35)}24`, subItems: `${color}B${w}F,${color}UT${w}${h}24` }))
   })
 })
 // 美式烤箱柜规则生成

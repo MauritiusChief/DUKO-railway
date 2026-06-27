@@ -33,7 +33,7 @@ export const config = {
   openrouterApiKey: getEnv('OPENROUTER_API_KEY'),
 
   /** HTTP 监听端口 */
-  port: getEnvInt('PORT', 3022),
+  port: getEnvInt('PORT', 3023),
 
   /** 启动时是否自动执行数据处理管线 */
   autoProcess: getEnvBool('AUTO_PROCESS', false),
