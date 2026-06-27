@@ -17,11 +17,20 @@
  */
 
 import { readFileSync } from 'fs';
+import path from 'path';
 import Papa from 'papaparse';
 import { getEmbeddings } from './embeddings.js';
 import { replaceAll as replaceAllLance } from '../db/lance.js';
-import { replaceAllRecords } from '../db/sku.js';
+import {
+  replaceAllRecords,
+  replaceAllColors,
+  replaceAllTypes,
+  replaceAllItems,
+  replaceAllParts,
+  replaceAllProducts,
+} from '../db/sku.js';
 import type { SkuRecord } from '../types/sku.js';
+import type { ColorEntry, ShapeTypeEntry, ItemRow, PartRow, ProductRow } from '../db/sku.js';
 
 /**
  * 解析 Exposed-Items.csv 为 SKU 记录（不生成 embedding）。
@@ -143,4 +152,151 @@ export function loadCacheFromCSV(filePath: string): number {
   const { records } = parseCSV(filePath);
   replaceAllRecords(records);
   return records.length;
+}
+
+// ==================================================================
+//  引用数据表导入（Exposed-Color, Exposed-Types, Items, Parts, Product）
+// ==================================================================
+
+/**
+ * 通用引用 CSV 解析器。
+ * 读取 CSV 文件，逐行调用 mapRow 映射为目标类型，跳过 null 行。
+ * 文件不存在或解析失败时静默返回空数组。
+ */
+function parseReferenceCSV<T>(
+  filePath: string,
+  mapRow: (row: Record<string, string>) => T | null,
+): T[] {
+  try {
+    const raw = readFileSync(filePath, 'utf-8');
+    const parsed = Papa.parse<Record<string, string>>(raw, {
+      header: true,
+      skipEmptyLines: true,
+    });
+    const results: T[] = [];
+    for (const row of parsed.data) {
+      const item = mapRow(row);
+      if (item) results.push(item);
+    }
+    return results;
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * 从 dataDir 一次性加载所有 5 张引用表到 SQLite。
+ *
+ * 加载顺序：Product → Parts → Items → Exposed-Color → Exposed-Types
+ * （逻辑上 Product 在最底层，Exposed 表在最顶层）
+ *
+ * 每张表使用事务性全量替换（DELETE + INSERT），CSV 缺失时静默跳过。
+ *
+ * @param dataDir - CSV 文件所在目录（如 server/src/data）
+ * @returns 各表加载行数的汇总
+ */
+export function loadAllReferenceData(dataDir: string): Record<string, number> {
+  const counts: Record<string, number> = {};
+
+  // ---- Product.csv → products ----
+  {
+    const products = parseReferenceCSV<ProductRow>(
+      path.join(dataDir, 'Product.csv'),
+      (row) => {
+        const name = (row['Name'] ?? '').trim();
+        if (!name) return null;
+        return {
+          name,
+          forecastedQty: parseFloat(row['Forecasted Quantity'] ?? '0') || 0,
+          freeToUseQty: parseFloat(row['Free to use Quantity'] ?? '0') || 0,
+          qtyOnHand: parseFloat(row['Quantity On Hand'] ?? '0') || 0,
+        };
+      },
+    );
+    // 去重：同名多行（OL 后缀变体）保留第一条
+    const unique = new Map<string, ProductRow>();
+    for (const p of products) {
+      if (!unique.has(p.name)) unique.set(p.name, p);
+    }
+    const deduped = [...unique.values()];
+    replaceAllProducts(deduped);
+    counts.products = deduped.length;
+    console.log(`已加载 products 表: ${deduped.length} 行`);
+  }
+
+  // ---- Parts.csv → parts ----
+  {
+    const parts = parseReferenceCSV<PartRow>(
+      path.join(dataDir, 'Parts.csv'),
+      (row) => {
+        const singlePartName = (row['singlePartName'] ?? '').trim();
+        if (!singlePartName) return null;
+        return {
+          singlePartName,
+          sharedPartName: (row['sharedPartName'] ?? '').trim(),
+          description: (row['description'] ?? '').trim(),
+        };
+      },
+    );
+    replaceAllParts(parts);
+    counts.parts = parts.length;
+    console.log(`已加载 parts 表: ${parts.length} 行`);
+  }
+
+  // ---- Items.csv → items ----
+  {
+    const items = parseReferenceCSV<ItemRow>(
+      path.join(dataDir, 'Items.csv'),
+      (row) => {
+        const itemName = (row['itemName'] ?? '').trim();
+        if (!itemName) return null;
+        return {
+          itemName,
+          colorCode: (row['colorCode'] ?? '').trim(),
+          shapeTypeCode: (row['shapeTypeCode'] ?? '').trim(),
+          shapeSizeCode: (row['shapeSizeCode'] ?? '').trim(),
+          doorPart: (row['doorPart'] ?? '').trim(),
+          cabinetPart: (row['cabinetPart'] ?? '').trim(),
+          extraPart: (row['extraPart'] ?? '').trim(),
+        };
+      },
+    );
+    replaceAllItems(items);
+    counts.items = items.length;
+    console.log(`已加载 items 表: ${items.length} 行`);
+  }
+
+  // ---- Exposed-Color.csv → exposed_colors ----
+  {
+    const colors = parseReferenceCSV<ColorEntry>(
+      path.join(dataDir, 'Exposed-Color.csv'),
+      (row) => {
+        const code = (row['colorCode'] ?? '').trim();
+        const name = (row['colorText'] ?? '').trim();
+        if (!code || !name) return null;
+        return { code, name };
+      },
+    );
+    replaceAllColors(colors);
+    counts.exposedColors = colors.length;
+    console.log(`已加载 exposed_colors 表: ${colors.length} 行`);
+  }
+
+  // ---- Exposed-Types.csv → exposed_types ----
+  {
+    const types = parseReferenceCSV<ShapeTypeEntry>(
+      path.join(dataDir, 'Exposed-Types.csv'),
+      (row) => {
+        const code = (row['shapeTypeCode'] ?? '').trim();
+        const desc = (row['description'] ?? '').trim();
+        if (!code || !desc) return null;
+        return { code, description: desc };
+      },
+    );
+    replaceAllTypes(types);
+    counts.exposedTypes = types.length;
+    console.log(`已加载 exposed_types 表: ${types.length} 行`);
+  }
+
+  return counts;
 }
