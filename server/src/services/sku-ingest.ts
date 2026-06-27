@@ -213,15 +213,9 @@ export function loadAllReferenceData(dataDir: string): Record<string, number> {
         };
       },
     );
-    // 去重：同名多行（OL 后缀变体）保留第一条
-    const unique = new Map<string, ProductRow>();
-    for (const p of products) {
-      if (!unique.has(p.name)) unique.set(p.name, p);
-    }
-    const deduped = [...unique.values()];
-    replaceAllProducts(deduped);
-    counts.products = deduped.length;
-    console.log(`已加载 products 表: ${deduped.length} 行`);
+    replaceAllProducts(products);
+    counts.products = products.length;
+    console.log(`已加载 products 表: ${products.length} 行`);
   }
 
   // ---- Parts.csv → parts ----

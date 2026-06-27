@@ -435,7 +435,7 @@ export function getProductRecordCount(): number {
 /** 事务性全量替换 exposed_colors 表 */
 export function replaceAllColors(entries: ColorEntry[]): void {
   const insert = db.prepare(`
-    INSERT INTO exposed_colors (colorCode, colorText)
+    INSERT OR IGNORE INTO exposed_colors (colorCode, colorText)
     VALUES (?, ?)
   `);
 
@@ -452,7 +452,7 @@ export function replaceAllColors(entries: ColorEntry[]): void {
 /** 事务性全量替换 exposed_types 表 */
 export function replaceAllTypes(entries: ShapeTypeEntry[]): void {
   const insert = db.prepare(`
-    INSERT INTO exposed_types (shapeTypeCode, description)
+    INSERT OR IGNORE INTO exposed_types (shapeTypeCode, description)
     VALUES (?, ?)
   `);
 
@@ -469,7 +469,7 @@ export function replaceAllTypes(entries: ShapeTypeEntry[]): void {
 /** 事务性全量替换 items 表 */
 export function replaceAllItems(rows: ItemRow[]): void {
   const insert = db.prepare(`
-    INSERT INTO items
+    INSERT OR IGNORE INTO items
       (itemName, colorCode, shapeTypeCode, shapeSizeCode,
        doorPart, cabinetPart, extraPart)
     VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -491,7 +491,7 @@ export function replaceAllItems(rows: ItemRow[]): void {
 /** 事务性全量替换 parts 表 */
 export function replaceAllParts(rows: PartRow[]): void {
   const insert = db.prepare(`
-    INSERT INTO parts (singlePartName, sharedPartName, description)
+    INSERT OR IGNORE INTO parts (singlePartName, sharedPartName, description)
     VALUES (?, ?, ?)
   `);
 
@@ -508,7 +508,7 @@ export function replaceAllParts(rows: PartRow[]): void {
 /** 事务性全量替换 products 表 */
 export function replaceAllProducts(rows: ProductRow[]): void {
   const insert = db.prepare(`
-    INSERT INTO products (name, forecastedQty, freeToUseQty, qtyOnHand)
+    INSERT OR IGNORE INTO products (name, forecastedQty, freeToUseQty, qtyOnHand)
     VALUES (?, ?, ?, ?)
   `);
 
