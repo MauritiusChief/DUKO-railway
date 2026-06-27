@@ -24,7 +24,6 @@
 * 数据库：
   * Exposed-Items → SQLite（better-sqlite3）替代 CSV，存储结构化字段
   * LanceDB 保留，用于 384 维向量语义嵌入搜索
-  * Exposed-Color 保持 CSV（仅 15 条，无需迁库）
 
 ## 设计
 
