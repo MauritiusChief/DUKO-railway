@@ -29,6 +29,7 @@ import {
 } from '../validation/schemas.js';
 import { getColorEntries } from '../services/utils.js';
 import { findComboExists, findRecordByItemNameCI, getItemRow, getPartRow, getAllItemRows } from '../db/sku.js';
+import { insertRecord } from '../db/users.js';
 import { ACCESSORY_SHAPE_TYPE_CODES, SHAPE_TYPES_COLOR_NA, SHAPE_TYPES_SIZE_NA } from '../constants.js';
 
 export const tableParseRouter = Router();
@@ -298,6 +299,30 @@ tableParseLlmRouter.post('/', validate(tableParseSchema), async (req: Request, r
     sse.send('result', {
       items: result.items,
     });
+
+    // 解析完成后自动保存历史记录
+    const lineCount = input.split('\n').filter((l) => l.trim()).length;
+    const conversation = [
+      {
+        role: 'parse_start' as const,
+        content: '',
+        meta: {
+          lineCount,
+          ...(colorHints && colorHints.length > 0 ? { colorCodes: colorHints } : {}),
+        },
+      },
+      ...(result.reply
+        ? [{ role: 'assistant' as const, content: result.reply }]
+        : []),
+    ];
+    insertRecord(
+      req.user!.userId,
+      input,
+      colorHints ?? [],
+      JSON.stringify(result.items),
+      JSON.stringify(conversation),
+      lang ?? 'zh',
+    );
 
     sse.send('done', {});
   } catch (err) {

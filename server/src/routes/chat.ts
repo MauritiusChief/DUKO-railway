@@ -26,9 +26,21 @@ import { ChatAgent } from '../agents/chat-agent.js';
 import { SSEConnection } from '../middleware/sse.js';
 import { validate } from '../middleware/validate.js';
 import { chatSchema } from '../validation/schemas.js';
+import { insertRecord } from '../db/users.js';
 import type { ParsedItem, ProductEntry, ChatNote, ChatHistoryEntry } from '../types/manifest.js';
 
 export const chatRouter = Router();
+
+/** 判断 items 是否在对话过程中发生了实质变更 */
+function itemsChanged(
+  original: unknown[] | undefined,
+  result: unknown[] | undefined,
+): boolean {
+  const orig = original ?? [];
+  const res = result ?? [];
+  if (orig.length === 0 && res.length === 0) return false;
+  return JSON.stringify(orig) !== JSON.stringify(res);
+}
 
 interface ChatRequest {
   message: string;
@@ -101,6 +113,22 @@ chatRouter.post('/', validate(chatSchema), async (req: Request, res: Response) =
       history: result.history,
       notes: result.notes,
     });
+
+    // 对话完成且有实质数据变更时自动保存历史记录
+    if (itemsChanged(items, result.items)) {
+      const conversation = (result.history ?? []).map((h) => ({
+        role: h.role,
+        content: h.content,
+      }));
+      insertRecord(
+        req.user!.userId,
+        initialInput ?? '',
+        colorHints ?? [],
+        JSON.stringify(result.items ?? []),
+        JSON.stringify(conversation),
+        lang ?? 'zh',
+      );
+    }
 
     sse.send('done', {});
   } catch (err) {
