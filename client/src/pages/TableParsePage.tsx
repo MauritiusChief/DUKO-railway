@@ -23,6 +23,7 @@
  *   由 OpenRouter 视觉模型解析图片内容后返回文本，自动预填入文本输入框。
  */
 import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTableParseStore, SHAPE_TYPES_COLOR_NA, SHAPE_TYPES_SIZE_NA } from '../stores/tableParseStore';
 import { useAuthStore } from '../stores/authStore';
 import { useI18n } from '../i18n/context';
@@ -225,6 +226,7 @@ export default function TableParsePage() {
 
   const { logout, user } = useAuthStore();
   const { lang, setLang, t } = useI18n();
+  const navigate = useNavigate();
 
   // 页面加载时获取颜色列表
   useEffect(() => {
@@ -499,6 +501,9 @@ export default function TableParsePage() {
           </span>
           <button className="tp-submit-btn tp-download-btn" onClick={handleDownloadScript}>
             {t('下载脚本')}
+          </button>
+          <button className="tp-submit-btn tp-download-btn" onClick={() => navigate('/history')}>
+            {t('前往历史记录')}
           </button>
           <button className="tp-submit-btn tp-logout-btn" onClick={logout} title={user ? `${user.username} (${user.role})` : ''}>
             {t('登出')}

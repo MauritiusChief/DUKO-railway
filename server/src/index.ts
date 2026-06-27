@@ -27,6 +27,8 @@ import { imageParseRouter } from './routes/imageParse.js';
 import { layoutParseImageRouter } from './routes/layoutParseImage.js';
 import { debugRouter } from './routes/debug.js';
 import { authRouter, meHandler } from './routes/auth.js';
+import { historyRouter } from './routes/history.js';
+import { notesRouter } from './routes/notes.js';
 import { authenticateToken } from './middleware/auth.js';
 import { authLimiter, apiLimiter, llmLimiter } from './middleware/rateLimit.js';
 import { config, validateSecrets } from './config/env.js';
@@ -89,6 +91,8 @@ app.use('/api/layout/parse-image', llmLimiter, authenticateToken, layoutParseIma
 app.use('/api', apiLimiter, authenticateToken);
 app.use('/api', tableParseRouter);    // GET /api/colors / POST /api/check-exposed / POST /api/generate-products
 app.use('/api', debugRouter);         // POST /api/debug/tool —— 工具测试接口（debug 用）
+app.use('/api', historyRouter);       // GET/POST/DELETE /api/history[/:id] —— 历史记录
+app.use('/api', notesRouter);         // GET/POST /api/notes —— 用户笔记
 
 // ---- ScriptCat 脚本下载端点 ----
 // 供前端小按钮下载，文件名带构建时间戳以便用户确认是否为最新版本

@@ -500,4 +500,62 @@ export const messages = {
     zh: '密码',
     en: 'Password',
   },
+
+  /* ---- HistoryPage ---- */
+  历史记录: {
+    zh: '历史记录',
+    en: 'History',
+  },
+  回到主页: {
+    zh: '回到主页',
+    en: 'Back to Home',
+  },
+  无记录提示: {
+    zh: '暂无历史记录',
+    en: 'No history records yet',
+  },
+  填充回主页: {
+    zh: '填充回主页',
+    en: 'Fill Back to Main Page',
+  },
+  原始输入: {
+    zh: '原始输入',
+    en: 'Original Input',
+  },
+  对话记录: {
+    zh: '对话记录',
+    en: 'Conversation',
+  },
+  删除记录: {
+    zh: '删除记录',
+    en: 'Delete Record',
+  },
+  前往历史记录: {
+    zh: '历史记录',
+    en: 'History',
+  },
+  记录行数: {
+    zh: '({n}行)',
+    en: '({n} rows)',
+  },
+  行: {
+    zh: '行',
+    en: 'rows',
+  },
+  匹配状态: {
+    zh: '匹配',
+    en: 'Status',
+  },
+  已匹配: {
+    zh: '已匹配',
+    en: 'Matched',
+  },
+  未匹配: {
+    zh: '未匹配',
+    en: 'Missing',
+  },
+  选择记录提示: {
+    zh: '选择左侧记录查看详情',
+    en: 'Select a record on the left',
+  },
 } as const;

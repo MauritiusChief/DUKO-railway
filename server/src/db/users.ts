@@ -46,6 +46,27 @@ export function initUserDB(dbDir: string): void {
       role        TEXT    NOT NULL DEFAULT 'user' CHECK(role IN ('admin','user')),
       created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS parse_records (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      input         TEXT    NOT NULL DEFAULT '',
+      color_hints   TEXT    NOT NULL DEFAULT '[]',
+      items         TEXT    NOT NULL DEFAULT '[]',
+      conversation  TEXT    NOT NULL DEFAULT '[]',
+      lang          TEXT    NOT NULL DEFAULT 'zh',
+      created_at    TEXT    NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_parse_records_user ON parse_records(user_id);
+
+    CREATE TABLE IF NOT EXISTS notes (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      original_name TEXT    NOT NULL DEFAULT '',
+      content       TEXT    NOT NULL DEFAULT '',
+      created_at    TEXT    NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_notes_user ON notes(user_id);
   `);
 }
 
@@ -78,4 +99,146 @@ export function createUser(username: string, passwordHash: string): SafeUser {
   const user = findUserById(Number(result.lastInsertRowid));
   if (!user) throw new Error('用户创建失败');
   return user;
+}
+
+// ==================================================================
+//  parse_records —— 历史记录 CRUD
+// ==================================================================
+
+/** 历史记录摘要行（从 DB 读取） */
+interface RecordSummaryRow {
+  id: number;
+  items: string;
+  created_at: string;
+}
+
+/** 历史记录完整行（从 DB 读取） */
+interface RecordFullRow {
+  id: number;
+  input: string;
+  color_hints: string;
+  items: string;
+  conversation: string;
+  lang: string;
+  created_at: string;
+}
+
+/** 每条用户最多保留的历史记录条数 */
+const MAX_RECORDS_PER_USER = 200;
+
+/** 插入一条解析记录，超限时自动删除最旧记录，返回新记录 id */
+export function insertRecord(
+  userId: number,
+  input: string,
+  colorHints: string[],
+  items: string,
+  conversation: string,
+  lang: string,
+): number {
+  const insert = db.prepare(`
+    INSERT INTO parse_records (user_id, input, color_hints, items, conversation, lang)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `);
+  const result = insert.run(userId, input, JSON.stringify(colorHints), items, conversation, lang);
+  const newId = Number(result.lastInsertRowid);
+
+  const count = db.prepare(
+    'SELECT COUNT(*) AS cnt FROM parse_records WHERE user_id = ?',
+  ).get(userId) as { cnt: number };
+
+  if (count.cnt > MAX_RECORDS_PER_USER) {
+    db.prepare(`
+      DELETE FROM parse_records
+      WHERE id IN (
+        SELECT id FROM parse_records
+        WHERE user_id = ?
+        ORDER BY created_at ASC
+        LIMIT ?
+      )
+    `).run(userId, count.cnt - MAX_RECORDS_PER_USER);
+  }
+
+  return newId;
+}
+
+/** 获取某用户的全部历史记录摘要（按时间倒序） */
+export function getRecordsByUser(
+  userId: number,
+): { id: number; itemCount: number; created_at: string }[] {
+  const rows = db.prepare(`
+    SELECT id, items, created_at
+    FROM parse_records
+    WHERE user_id = ?
+    ORDER BY created_at DESC
+  `).all(userId) as RecordSummaryRow[];
+
+  return rows.map((r) => ({
+    id: r.id,
+    itemCount: JSON.parse(r.items).length,
+    created_at: r.created_at,
+  }));
+}
+
+/** 获取某条记录的完整详情，仅限本人 */
+export function getRecordById(
+  userId: number,
+  recordId: number,
+): RecordFullRow | undefined {
+  return db.prepare(`
+    SELECT id, input, color_hints, items, conversation, lang, created_at
+    FROM parse_records
+    WHERE id = ? AND user_id = ?
+  `).get(recordId, userId) as RecordFullRow | undefined;
+}
+
+/** 删除某条记录，仅限本人 */
+export function deleteRecord(userId: number, recordId: number): boolean {
+  const result = db.prepare(`
+    DELETE FROM parse_records WHERE id = ? AND user_id = ?
+  `).run(recordId, userId);
+  return result.changes > 0;
+}
+
+// ==================================================================
+//  notes —— 用户笔记 CRUD
+// ==================================================================
+
+/** 笔记行（从 DB 读取） */
+interface NoteRow {
+  id: number;
+  original_name: string;
+  content: string;
+}
+
+/** 获取某用户的全部笔记 */
+export function getNotesByUser(userId: number): { id: number; originalName: string; content: string }[] {
+  const rows = db.prepare(`
+    SELECT id, original_name, content FROM notes WHERE user_id = ? ORDER BY id ASC
+  `).all(userId) as NoteRow[];
+
+  return rows.map((r) => ({
+    id: r.id,
+    originalName: r.original_name,
+    content: r.content,
+  }));
+}
+
+/** 全量替换某用户的笔记（先删后插） */
+export function replaceNotesForUser(
+  userId: number,
+  notes: { originalName: string; content: string }[],
+): void {
+  const deleteStmt = db.prepare('DELETE FROM notes WHERE user_id = ?');
+  const insertStmt = db.prepare(
+    'INSERT INTO notes (user_id, original_name, content) VALUES (?, ?, ?)',
+  );
+
+  const tx = db.transaction(() => {
+    deleteStmt.run(userId);
+    for (const n of notes) {
+      insertStmt.run(userId, n.originalName, n.content);
+    }
+  });
+
+  tx();
 }

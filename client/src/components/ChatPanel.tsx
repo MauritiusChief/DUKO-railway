@@ -17,7 +17,7 @@ import { fetchWithAuth } from '../lib/fetchWithAuth';
 import { useI18n } from '../i18n/context';
 import { getLang } from '../i18n/context';
 import type { TranslationKey } from '../i18n/translations';
-import type { ChatHistoryEntry, Note, ParsedItem, ProductEntry } from '../types';
+import type { ChatHistoryEntry, Note, ParsedItem, ProductEntry, ConversationEntry } from '../types';
 import { PaletteIcon, TableIcon } from './ChatIcons';
 import './ChatPanel.css';
 
@@ -91,6 +91,7 @@ interface PerCallCallbacks {
 function useSSEEventHandler(
   setDisplayMessages: React.Dispatch<React.SetStateAction<DisplayMessage[]>>,
   setHistory: React.Dispatch<React.SetStateAction<ChatHistoryEntry[]>>,
+  convRef?: React.MutableRefObject<ConversationEntry[]>,
 ) {
   const { t } = useI18n();
   const tRef = useRef(t);
@@ -219,9 +220,18 @@ function useSSEEventHandler(
           const fixed = prev.map((m) =>
             m.role === 'streaming' ? { ...m, role: 'assistant' as DisplayRole } : m,
           );
-          return fixed.filter((m) =>
+          const filtered = fixed.filter((m) =>
             m.role === 'user' || m.role === 'assistant' || m.role === 'parse_start',
           );
+          // 同步更新 convRef，供 store.saveToHistory 读取最新对话
+          if (convRef) {
+            convRef.current = filtered.map((m) => ({
+              role: m.role === 'parse_start' ? 'parse_start' : (m.role as 'user' | 'assistant'),
+              content: m.content,
+              ...(m.meta ? { meta: m.meta } : {}),
+            }));
+          }
+          return filtered;
         });
         perCall?.onDone?.();
         break;
@@ -283,6 +293,10 @@ export default function ChatPanel() {
   const [loading, setLoading] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  /** 供 store.saveToHistory 读取的最新对话消息快照 */
+  const convRef = useRef<ConversationEntry[]>([]);
+  /** 本轮聊天 SSE 流是否触发了数据变更（items/products 被修改） */
+  const dataChangeRef = useRef(false);
 
   const [showNotes, setShowNotes] = useState(false);
 
@@ -311,12 +325,23 @@ export default function ChatPanel() {
     })(),
   );
 
+  // 笔记双写：localStorage + 服务端
   useEffect(() => {
     localStorage.setItem('duko_notes', JSON.stringify(notes));
+    // fire-and-forget 同步到服务端
+    fetchWithAuth('/api/notes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        notes: notes.map((n) => ({ originalName: n.originalName, content: n.content })),
+      }),
+    }).catch(() => {
+      /* 静默失败，localStorage 已有副本 */
+    });
   }, [notes]);
 
   // 统一的 SSE 事件处理器（解析 & 聊天共享）
-  const { handleEvent } = useSSEEventHandler(setDisplayMessages, setHistory);
+  const { handleEvent } = useSSEEventHandler(setDisplayMessages, setHistory, convRef);
 
   // 新消息到达时自动滚动到底部
   useEffect(() => {
@@ -359,7 +384,39 @@ export default function ChatPanel() {
     };
   }, [handleEvent]);
 
-  // Abort previous request and clean up on unmount
+  // 注册 convRef 到 store，供 auto-save 读取
+  useEffect(() => {
+    const store = useTableParseStore.getState();
+    store.setChatMessagesRef(convRef);
+    return () => {
+      store.setChatMessagesRef(null);
+    };
+  }, []);
+
+  // 从服务端加载笔记（双写策略：localStorage 为即时缓存，服务端为准）
+  useEffect(() => {
+    const loadNotesFromServer = async () => {
+      try {
+        const res = await fetchWithAuth('/api/notes');
+        if (!res.ok) return;
+        const serverNotes: { id: number; originalName: string; content: string }[] = await res.json();
+        if (serverNotes.length > 0) {
+          const mapped: Note[] = serverNotes.map((n) => ({
+            id: n.id,
+            originalName: n.originalName,
+            content: n.content,
+          }));
+          setNotes(mapped);
+          localStorage.setItem('duko_notes', JSON.stringify(mapped));
+          // 同步 notesIdRef 避免 ID 冲突
+          notesIdRef.current = Math.max(...mapped.map((n) => n.id), 0) + 1;
+        }
+      } catch {
+        /* 静默失败，回退到 localStorage 中的数据 */
+      }
+    };
+    loadNotesFromServer();
+  }, []);
   useEffect(() => {
     return () => {
       if (abortRef.current) {
@@ -385,6 +442,9 @@ export default function ChatPanel() {
 
     // 关闭笔记面板，关注对话区
     setShowNotes(false);
+
+    // 重置本轮数据变更标记
+    dataChangeRef.current = false;
 
     // 立即在 UI 中展示用户消息
     setDisplayMessages((prev) => [...prev, { role: 'user', content: msg }]);
@@ -439,6 +499,10 @@ export default function ChatPanel() {
               onResult(data) {
                 const payload = data as unknown as SSEResultPayload;
 
+                if (payload.items || payload.products) {
+                  dataChangeRef.current = true;
+                }
+
                 if (payload.items) {
                   storeState.replaceItems(payload.items);
                 }
@@ -465,6 +529,13 @@ export default function ChatPanel() {
                 }
 
                 setHistory(payload.history);
+              },
+              // 聊天流程的 done：若本轮有数据变更则自动保存历史记录
+              onDone() {
+                if (dataChangeRef.current) {
+                  const store = useTableParseStore.getState();
+                  store.saveToHistory();
+                }
               },
             });
           }

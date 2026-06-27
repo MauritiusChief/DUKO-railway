@@ -90,6 +90,40 @@ export interface ChatHistoryEntry {
   content: string;
 }
 
+/** 存储用的对话条目 —— 兼顾历史渲染和衍生 LLM 对话上下文。
+ *  parse_start 提供解析摘要展示，user / assistant 提供对话详情。
+ *  调用 toChatHistory() 可衍生出 LLM 上下文所需的 ChatHistoryEntry[]。 */
+export interface ConversationEntry {
+  role: 'user' | 'assistant' | 'parse_start';
+  content: string;
+  meta?: { lineCount?: number; colorCodes?: string[] };
+}
+
+/** 从存储的 ConversationEntry[] 衍生 LLM 对话上下文（仅 user/assistant） */
+export function toChatHistory(entries: ConversationEntry[]): ChatHistoryEntry[] {
+  return entries
+    .filter((e) => e.role === 'user' || e.role === 'assistant')
+    .map(({ role, content }) => ({ role: role as 'user' | 'assistant', content }));
+}
+
+/** 历史记录摘要（列表用） */
+export interface HistoryRecordSummary {
+  id: number;
+  itemCount: number;
+  created_at: string;
+}
+
+/** 历史记录完整详情 */
+export interface HistoryRecordFull {
+  id: number;
+  input: string;
+  colorHints: string[];
+  items: ParsedItem[];
+  conversation: ConversationEntry[];
+  lang: string;
+  created_at: string;
+}
+
 /** POST /api/chat 的请求体 */
 export interface ChatRequest {
   message: string;

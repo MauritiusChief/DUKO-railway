@@ -4,7 +4,7 @@
  * 管理清单文本输入、颜色提示勾选、后端解析、表格编辑状态。
  */
 import { create } from 'zustand';
-import type { ColorEntry, ParsedItem, TableParseResponse, ProductEntry, GenerateProductsResponse } from '../types';
+import type { ColorEntry, ParsedItem, TableParseResponse, ProductEntry, GenerateProductsResponse, ConversationEntry } from '../types';
 import { tOutside, getLang } from '../i18n/context';
 import { fetchWithAuth } from '../lib/fetchWithAuth';
 
@@ -118,6 +118,8 @@ interface TableParseState {
   setInput: (text: string) => void;
   /** 切换颜色提示复选框 */
   toggleColorHint: (code: string) => void;
+  /** 覆盖所有颜色提示（供历史记录填充等场景） */
+  setColorHints: (codes: string[]) => void;
   /** 加载可用颜色列表 */
   fetchColors: () => Promise<void>;
   /** 提交解析请求 */
@@ -167,6 +169,15 @@ interface TableParseState {
 
   /** 切换输入模式（text ↔ image） */
   setInputMode: (mode: 'text' | 'image') => void;
+
+  // ---- 历史记录 auto-save ----
+
+  /** ChatPanel 注册的对话消息 ref（供 saveToHistory 读取最新对话） */
+  chatMessagesRef: { current: ConversationEntry[] } | null;
+  /** 供 ChatPanel 注册/注销对话消息 ref */
+  setChatMessagesRef: (ref: { current: ConversationEntry[] } | null) => void;
+  /** 自动保存当前解析状态到服务端历史记录（fire-and-forget） */
+  saveToHistory: () => Promise<void>;
   /** 添加一张图片（base64 data URL），自动生成预览 URL */
   addImage: (data: string) => void;
   /** 移除指定索引的图片 */
@@ -206,6 +217,9 @@ export const useTableParseStore = create<TableParseState>((set, get) => {
   parseEventCallback: null,
   setParseEventCallback: (cb) => set({ parseEventCallback: cb }),
 
+  chatMessagesRef: null,
+  setChatMessagesRef: (ref) => set({ chatMessagesRef: ref }),
+
   setInput: (text: string) => set({ input: text, fromImage: false }),
 
   toggleColorHint: (code: string) => {
@@ -216,6 +230,10 @@ export const useTableParseStore = create<TableParseState>((set, get) => {
       next.add(code);
     }
     set({ colorHints: next });
+  },
+
+  setColorHints: (codes: string[]) => {
+    set({ colorHints: new Set(codes) });
   },
 
   fetchColors: async () => {
@@ -318,6 +336,7 @@ export const useTableParseStore = create<TableParseState>((set, get) => {
 
       await readLoop();
       set({ loading: false });
+      get().saveToHistory();
       parseEventCallback?.({ type: 'done', data: {} });
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : `请求失败，请检查网络连接。${tOutside('联系支持')}`;
@@ -765,6 +784,31 @@ export const useTableParseStore = create<TableParseState>((set, get) => {
         error: `网络请求失败，请检查网络连接。${tOutside('联系支持')}`,
         imageLoading: false,
       });
+    }
+  },
+
+  /** 自动保存当前解析状态到服务端历史记录。
+   *  仅当 items.length > 0 且有 input 文本时执行，fire-and-forget 不阻塞 UI。 */
+  saveToHistory: async () => {
+    const { input, colorHints, items, chatMessagesRef } = get();
+    if (items.length === 0 || !input.trim()) return;
+
+    const conversation = chatMessagesRef?.current ?? [];
+
+    try {
+      await fetchWithAuth('/api/history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          input,
+          colorHints: Array.from(colorHints),
+          items,
+          conversation,
+          lang: getLang(),
+        }),
+      });
+    } catch {
+      /* 静默失败，不影响用户操作 */
     }
   },
   };

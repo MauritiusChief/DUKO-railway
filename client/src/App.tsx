@@ -3,6 +3,7 @@ import TableParsePage from './pages/TableParsePage';
 import LayoutRecognizePage from './pages/LayoutRecognizePage';
 import DebugPage from './pages/DebugPage';
 import LoginPage from './pages/LoginPage';
+import HistoryPage from './pages/HistoryPage';
 import AuthGuard from './components/AuthGuard';
 import AdminGuard from './components/AdminGuard';
 
@@ -15,6 +16,14 @@ export default function App() {
         element={
           <AuthGuard>
             <TableParsePage />
+          </AuthGuard>
+        }
+      />
+      <Route
+        path="/history"
+        element={
+          <AuthGuard>
+            <HistoryPage />
           </AuthGuard>
         }
       />

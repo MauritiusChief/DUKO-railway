@@ -1,0 +1,463 @@
+/* HistoryPage —— 用户解析记录历史页面 */
+
+/* ====== 容器 ====== */
+.history-container {
+  font-family: system-ui, -apple-system, sans-serif;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 16px;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* ====== 标题栏 ====== */
+.history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0 12px;
+  border-bottom: 1px solid #ccc;
+  margin-bottom: 12px;
+  flex-shrink: 0;
+}
+
+.history-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.history-header-title {
+  font-size: 16px;
+  font-weight: bold;
+}
+
+/* ====== 主区域 ====== */
+.history-main {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  gap: 0;
+  overflow: hidden;
+}
+
+/* ====== 左侧记录列表 ====== */
+.history-left {
+  width: 260px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid #ddd;
+  min-height: 0;
+}
+
+.history-left-header {
+  font-size: 13px;
+  font-weight: bold;
+  padding: 8px 12px;
+  background: #f5f5f5;
+  border-bottom: 1px solid #ddd;
+  flex-shrink: 0;
+}
+
+.history-list {
+  flex: 1 1 0;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.history-list-empty {
+  padding: 24px 12px;
+  font-size: 13px;
+  color: #999;
+  text-align: center;
+}
+
+.history-list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  cursor: pointer;
+  border-bottom: 1px solid #eee;
+  transition: background 0.1s;
+}
+
+.history-list-item:hover {
+  background: #f0f4f8;
+}
+
+.history-list-item-active {
+  background: #e3edf7;
+  font-weight: 500;
+}
+
+.history-item-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.history-item-time {
+  font-size: 13px;
+  color: #333;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.history-item-count {
+  font-size: 11px;
+  color: #888;
+}
+
+.history-item-delete {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  font-size: 16px;
+  line-height: 1;
+  color: #bbb;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-left: 8px;
+}
+
+.history-item-delete:hover {
+  color: #c00;
+  background: #ffebee;
+  border-color: #fcc;
+}
+
+/* ====== 右侧详情区 ====== */
+.history-right {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding-left: 16px;
+}
+
+.history-detail-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  color: #aaa;
+}
+
+.history-detail-loading {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  color: #888;
+}
+
+.history-detail {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+/* ====== Section 标签 ====== */
+.history-section-label {
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 4px;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+/* ====== TOP 区：输入文本 + 颜色提示 ====== */
+.history-top {
+  display: flex;
+  gap: 12px;
+  flex-shrink: 0;
+  margin-bottom: 16px;
+}
+
+.history-top-left {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.history-top-right {
+  width: 160px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.history-textarea {
+  width: 100%;
+  flex: 1;
+  min-height: 100px;
+  max-height: 200px;
+  padding: 6px 8px;
+  font-size: 13px;
+  font-family: Consolas, 'Courier New', monospace;
+  line-height: 1.5;
+  resize: vertical;
+  box-sizing: border-box;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: #f9f9f9;
+  color: #333;
+}
+
+.history-textarea:focus {
+  outline: none;
+}
+
+.history-color-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 6px 8px;
+  font-size: 13px;
+  color: #333;
+  font-family: Consolas, 'Courier New', monospace;
+}
+
+.history-color-item {
+  padding: 2px 0;
+  font-weight: 500;
+}
+
+.history-no-colors {
+  padding: 6px 8px;
+  font-size: 13px;
+  color: #aaa;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  text-align: center;
+}
+
+/* ====== 结果表格区 ====== */
+.history-result-section {
+  flex-shrink: 0;
+  margin-bottom: 12px;
+}
+
+.history-table-wrapper {
+  max-height: 400px;
+  overflow: auto;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.history-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.history-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.history-table th {
+  padding: 6px 8px;
+  background: #f0f0f0;
+  border-bottom: 2px solid #ccc;
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.history-table td {
+  padding: 4px 8px;
+  border-bottom: 1px solid #eee;
+}
+
+.history-table tbody tr:hover {
+  background: #f7f9fb;
+}
+
+.history-th-name,
+.history-td-name {
+  width: 25%;
+  font-family: Consolas, 'Courier New', monospace;
+}
+
+.history-th-field,
+.history-td-field {
+  width: 14%;
+}
+
+.history-th-qty,
+.history-td-qty {
+  width: 8%;
+}
+
+.history-th-req,
+.history-td-req {
+  width: 8%;
+}
+
+.history-th-status,
+.history-td-status {
+  width: 10%;
+}
+
+.history-table .cell-input {
+  width: 100%;
+  padding: 3px 4px;
+  font-size: 12px;
+  border: 1px solid #eee;
+  border-radius: 2px;
+  box-sizing: border-box;
+  background: #fafafa;
+  color: #555;
+}
+
+.history-table .cell-input:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
+.cell-input-qty {
+  text-align: center;
+}
+
+.history-req-text {
+  font-size: 12px;
+  color: #555;
+  padding: 0 4px;
+}
+
+.history-status {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.history-status-found {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.history-status-missing {
+  background: #fff3e0;
+  color: #e65100;
+}
+
+/* ====== 填充按钮行 ====== */
+.history-fill-row {
+  flex-shrink: 0;
+  margin-bottom: 16px;
+}
+
+/* ====== 对话记录区 ====== */
+.history-conversation-section {
+  flex-shrink: 0;
+}
+
+.history-conversation-list {
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 8px;
+  max-height: 360px;
+  overflow-y: auto;
+  background: #fafafa;
+}
+
+.history-conv-msg {
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #eee;
+}
+
+.history-conv-msg:last-child {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.history-conv-role {
+  font-size: 11px;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.history-conv-msg-user .history-conv-role {
+  color: #1565c0;
+}
+
+.history-conv-msg-assistant .history-conv-role {
+  color: #2e7d32;
+}
+
+.history-conv-msg-parse_start .history-conv-role {
+  color: #6a1b9a;
+}
+
+.history-conv-content {
+  font-size: 13px;
+  line-height: 1.5;
+  color: #333;
+}
+
+.history-conv-content p {
+  margin: 0 0 4px;
+}
+
+.history-conv-content p:last-child {
+  margin-bottom: 0;
+}
+
+.history-conv-content code {
+  background: #eee;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 12px;
+}
+
+.history-conv-parse-start {
+  font-size: 12px;
+  color: #666;
+}
+
+.history-parse-start-list {
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.history-parse-start-list li {
+  padding: 1px 0;
+}
+
+.history-parse-start-code {
+  background: #eee;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 11px;
+  margin-right: 4px;
+}
+
+/* ====== Shared button style override ====== */
+.history-header .tp-submit-btn {
+  margin-top: 0;
+  font-size: 13px;
+  padding: 5px 14px;
+}
