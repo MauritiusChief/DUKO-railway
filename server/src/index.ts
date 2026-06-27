@@ -31,9 +31,9 @@ import { authenticateToken } from './middleware/auth.js';
 import { authLimiter, apiLimiter, llmLimiter } from './middleware/rateLimit.js';
 import { config, validateSecrets } from './config/env.js';
 import { initDB } from './db/lance.js';
-import { initSkuDB, getRecordCount } from './db/sku.js';
+import { initSkuDB, getRecordCount, getItemRecordCount, getPartRecordCount } from './db/sku.js';
 import { initUserDB, seedAdminUser } from './db/users.js';
-import { ingestFromFile, loadCacheFromCSV } from './services/sku-ingest.js';
+import { ingestFromFile, loadCacheFromCSV, loadAllReferenceData } from './services/sku-ingest.js';
 import { initBm25Index } from './services/bm25.js';
 import { runAllSteps } from './process-cli.js';
 
@@ -176,6 +176,12 @@ app.get('*', (_req, res) => {
     } else {
       console.log(`${getRecordCount()} 项数据已从 SQLite 读取.`);
     }
+  }
+
+  // 引用数据表（items / parts / products / exposed_colors / exposed_types）为空时自动从 CSV 加载
+  if (getItemRecordCount() === 0 || getPartRecordCount() === 0) {
+    loadAllReferenceData(dbDir);
+    console.log('引用数据表已加载到 SQLite.');
   }
 
   // 预热 BM25 描述文本索引（从 SQLite 读取全量数据）

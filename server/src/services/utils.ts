@@ -3,91 +3,56 @@
  *
  * 供 chat 路由和 table-parse 路由共用。
  * 包含：
- *  - getColorEntries  —— 加载 Exposed-Color.csv 颜色代码对照表
- *  - getColorTable     —— 加载 Exposed-Color.csv 转为 Markdown 表格（系统提示词用）
- *  - getItemsMap       —— 加载 Items.csv 产品映射
- *  - getPartsMap       —— 加载 Parts.csv 部件映射
+ *  - getColorEntries  —— 加载 Exposed-Color 颜色代码对照表（SQLite）
+ *  - getColorTable     —— 加载 Exposed-Color 转为 Markdown 表格（系统提示词用）
+ *  - getShapeTypeTable —— 加载 Exposed-Types 转为 Markdown 表格（系统提示词用）
+ *  - getItemsMap       —— 加载 Items 产品映射（SQLite）
+ *  - getPartsMap       —— 加载 Parts 部件映射（SQLite）
+ *  - getProductMap     —— 加载 Product 库存映射（SQLite）
  */
 
-import { readFileSync } from 'fs';
-import { fileURLToPath } from 'url';
-import { dirname, resolve } from 'path';
-import Papa from 'papaparse';
-
-// ---- CSV 路径工具 ----
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-function resolveDataPath(relativeCsv: string): string {
-  return resolve(__dirname, '..', 'data', relativeCsv);
-}
+import {
+  getAllColorEntries,
+  getAllShapeTypeEntries,
+  getAllItemRows,
+  getAllPartRows,
+  getAllProductRows,
+} from '../db/sku.js';
+import type { ColorEntry } from '../db/sku.js';
 
 // ---- 颜色对照表加载（系统提示词用） ----
 
-export interface ColorEntry {
-  code: string;
-  name: string;
-}
-
 let colorEntriesCache: ColorEntry[] | null = null;
 
-/** 从 Exposed-Color.csv 读取颜色代码列表（带缓存，PapaParse 解析） */
+/** 从 SQLite exposed_colors 表读取颜色代码列表（带缓存） */
 export function getColorEntries(): ColorEntry[] {
   if (colorEntriesCache) return colorEntriesCache;
   try {
-    const csvPath = resolveDataPath('Exposed-Color.csv');
-    const raw = readFileSync(csvPath, 'utf-8');
-    const parsed = Papa.parse<Record<string, string>>(raw, {
-      header: true,
-      skipEmptyLines: true,
-    });
-    const entries: ColorEntry[] = [];
-    for (const row of parsed.data) {
-      const code = (row['colorCode'] ?? '').trim();
-      const name = (row['colorText'] ?? '').trim();
-      if (code && name) entries.push({ code, name });
-    }
-    colorEntriesCache = entries;
-    return entries;
+    colorEntriesCache = getAllColorEntries();
+    return colorEntriesCache;
   } catch (err) {
     console.error('getColorEntries error:', err);
     return [];
   }
 }
 
-/** 从 Exposed-Color.csv 读取颜色代码对照表并格式化为 Markdown 表格 */
+/** 从 SQLite exposed_colors 表读取颜色代码对照表并格式化为 Markdown 表格 */
 export function getColorTable(): string {
   const entries = getColorEntries();
-  if (entries.length === 0) throw new Error('Exposed-Color.csv 内容为空');
+  if (entries.length === 0) throw new Error('Exposed-Color 对照表为空');
   return entries.map((e) => `| ${e.code} | ${e.name} |`).join('\n');
 }
 
 // ---- 形状代码对照表加载（系统提示词用） ----
 
-export interface ShapeTypeEntry {
-  code: string;
-  description: string;
-}
-
 let shapeTypeTableCache: string | null = null;
 
-/** 从 Exposed-Types.csv 读取形状代码对照表并格式化为 Markdown 表格 */
+/** 从 SQLite exposed_types 表读取形状代码对照表并格式化为 Markdown 表格 */
 export function getShapeTypeTable(): string {
   if (shapeTypeTableCache) return shapeTypeTableCache;
   try {
-    const csvPath = resolveDataPath('Exposed-Types.csv');
-    const raw = readFileSync(csvPath, 'utf-8');
-    const parsed = Papa.parse<Record<string, string>>(raw, {
-      header: true,
-      skipEmptyLines: true,
-    });
-    const rows: string[] = [];
-    for (const row of parsed.data) {
-      const code = (row['shapeTypeCode'] ?? '').trim();
-      const desc = (row['description'] ?? '').trim();
-      if (code && desc) rows.push(`| ${code} | ${desc} |`);
-    }
+    const entries = getAllShapeTypeEntries();
+    const rows = entries.map((e) => `| ${e.code} | ${e.description} |`);
     shapeTypeTableCache = rows.join('\n');
     return shapeTypeTableCache;
   } catch (err) {
@@ -96,7 +61,7 @@ export function getShapeTypeTable(): string {
   }
 }
 
-// ---- Items.csv 懒加载缓存（itemName → shapeTypeCode / doorPart / cabinetPart / extraPart） ----
+// ---- Items 懒加载缓存（itemName → shapeTypeCode / doorPart / cabinetPart / extraPart） ----
 
 interface ItemRow {
   shapeTypeCode: string;
@@ -108,7 +73,7 @@ interface ItemRow {
 let itemsMapCache: Map<string, ItemRow> | null = null;
 
 /**
- * 从 Items.csv 读取全量数据，构建 itemName → { shapeTypeCode, doorPart, cabinetPart, extraPart } 映射。
+ * 从 SQLite items 表读取全量数据，构建 itemName → { shapeTypeCode, doorPart, cabinetPart, extraPart } 映射。
  * 用于产品生成时将用户确认的 itemName 解析为 DUKO 部件名。
  * 数据约 3000 行，全部缓存在内存中。
  */
@@ -117,21 +82,13 @@ export function getItemsMap(): Map<string, ItemRow> {
 
   const map = new Map<string, ItemRow>();
   try {
-    const csvPath = resolveDataPath('Items.csv');
-    const raw = readFileSync(csvPath, 'utf-8');
-    const parsed = Papa.parse<Record<string, string>>(raw, {
-      header: true,
-      skipEmptyLines: true,
-    });
-
-    for (const row of parsed.data) {
-      const itemName = (row['itemName'] ?? '').trim();
-      if (!itemName) continue;
-      map.set(itemName, {
-        shapeTypeCode: (row['shapeTypeCode'] ?? '').trim(),
-        doorPart: (row['doorPart'] ?? '').trim(),
-        cabinetPart: (row['cabinetPart'] ?? '').trim(),
-        extraPart: (row['extraPart'] ?? '').trim(),
+    const rows = getAllItemRows();
+    for (const r of rows) {
+      map.set(r.itemName, {
+        shapeTypeCode: r.shapeTypeCode,
+        doorPart: r.doorPart,
+        cabinetPart: r.cabinetPart,
+        extraPart: r.extraPart,
       });
     }
   } catch (err) {
@@ -142,7 +99,7 @@ export function getItemsMap(): Map<string, ItemRow> {
   return map;
 }
 
-// ---- Parts.csv 懒加载缓存（singlePartName → sharedPartName / description） ----
+// ---- Parts 懒加载缓存（singlePartName → sharedPartName / description） ----
 
 interface PartRow {
   sharedPartName: string;
@@ -152,8 +109,8 @@ interface PartRow {
 let partsMapCache: Map<string, PartRow> | null = null;
 
 /**
- * 从 Parts.csv 读取全量数据，构建 singlePartName → { sharedPartName, description } 映射。
- * sharedPartName 即为 Product.csv 中的 NAME（原始 DUKO 产品编码）。
+ * 从 SQLite parts 表读取全量数据，构建 singlePartName → { sharedPartName, description } 映射。
+ * sharedPartName 即为 Product 表中的 Name（原始 DUKO 产品编码）。
  * 数据约 6900 行，全部缓存在内存中。
  */
 export function getPartsMap(): Map<string, PartRow> {
@@ -161,19 +118,11 @@ export function getPartsMap(): Map<string, PartRow> {
 
   const map = new Map<string, PartRow>();
   try {
-    const csvPath = resolveDataPath('Parts.csv');
-    const raw = readFileSync(csvPath, 'utf-8');
-    const parsed = Papa.parse<Record<string, string>>(raw, {
-      header: true,
-      skipEmptyLines: true,
-    });
-
-    for (const row of parsed.data) {
-      const singlePartName = (row['singlePartName'] ?? '').trim();
-      if (!singlePartName) continue;
-      map.set(singlePartName, {
-        sharedPartName: (row['sharedPartName'] ?? '').trim(),
-        description: (row['description'] ?? '').trim(),
+    const rows = getAllPartRows();
+    for (const r of rows) {
+      map.set(r.singlePartName, {
+        sharedPartName: r.sharedPartName,
+        description: r.description,
       });
     }
   } catch (err) {
@@ -184,9 +133,9 @@ export function getPartsMap(): Map<string, PartRow> {
   return map;
 }
 
-// ---- Product.csv 懒加载缓存（Name → Forecasted Quantity / Free to use Quantity / Quantity On Hand） ----
+// ---- Product 懒加载缓存（Name → Forecasted Quantity / Free to use Quantity / Quantity On Hand） ----
 
-export interface ProductRow {
+interface ProductRow {
   forecastedQty: number;
   freeToUseQty: number;
   qtyOnHand: number;
@@ -195,40 +144,22 @@ export interface ProductRow {
 let productMapCache: Map<string, ProductRow> | null = null;
 
 /**
- * 从 Product.csv 读取全量数据，构建 Name（sharedPartName）→ { forecastedQty, freeToUseQty, qtyOnHand } 映射。
+ * 从 SQLite products 表读取全量数据，构建 Name → { forecastedQty, freeToUseQty, qtyOnHand } 映射。
  * 用于对话工具根据产品名查询库存信息。
  * 数据约 5800 行，全部缓存在内存中。
- *
- * Product.csv 对应列：
- *   ⑦ Forecasted Quantity
- *   ⑧ Free to use Quantity
- *   ⑩ Name（= sharedPartName）
- *   ⑪ Quantity On Hand
  */
 export function getProductMap(): Map<string, ProductRow> {
   if (productMapCache) return productMapCache;
 
   const map = new Map<string, ProductRow>();
   try {
-    const csvPath = resolveDataPath('Product.csv');
-    const raw = readFileSync(csvPath, 'utf-8');
-    const parsed = Papa.parse<Record<string, string>>(raw, {
-      header: true,
-      skipEmptyLines: true,
-    });
-
-    for (const row of parsed.data) {
-      const name = (row['Name'] ?? '').trim();
-      if (!name) continue;
-
-      const forecastedQty = parseFloat(row['Forecasted Quantity'] ?? '0') || 0;
-      const freeToUseQty = parseFloat(row['Free to use Quantity'] ?? '0') || 0;
-      const qtyOnHand = parseFloat(row['Quantity On Hand'] ?? '0') || 0;
-
-      // 若有同名多行（OL 后缀变体），保留先遇到的（标准行在前）
-      if (!map.has(name)) {
-        map.set(name, { forecastedQty, freeToUseQty, qtyOnHand });
-      }
+    const rows = getAllProductRows();
+    for (const r of rows) {
+      map.set(r.name, {
+        forecastedQty: r.forecastedQty,
+        freeToUseQty: r.freeToUseQty,
+        qtyOnHand: r.qtyOnHand,
+      });
     }
   } catch (err) {
     console.error('getProductMap error:', err);

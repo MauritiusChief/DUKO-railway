@@ -393,6 +393,40 @@ export function getAllProductRows(): ProductRow[] {
 }
 
 // ==================================================================
+// #region 引用数据表 — 记录数检查
+// ==================================================================
+
+/** 返回 exposed_colors 记录数 */
+export function getColorRecordCount(): number {
+  const row = db.prepare('SELECT COUNT(*) as cnt FROM exposed_colors').get() as { cnt: number };
+  return row.cnt;
+}
+
+/** 返回 exposed_types 记录数 */
+export function getTypeRecordCount(): number {
+  const row = db.prepare('SELECT COUNT(*) as cnt FROM exposed_types').get() as { cnt: number };
+  return row.cnt;
+}
+
+/** 返回 items 记录数 */
+export function getItemRecordCount(): number {
+  const row = db.prepare('SELECT COUNT(*) as cnt FROM items').get() as { cnt: number };
+  return row.cnt;
+}
+
+/** 返回 parts 记录数 */
+export function getPartRecordCount(): number {
+  const row = db.prepare('SELECT COUNT(*) as cnt FROM parts').get() as { cnt: number };
+  return row.cnt;
+}
+
+/** 返回 products 记录数 */
+export function getProductRecordCount(): number {
+  const row = db.prepare('SELECT COUNT(*) as cnt FROM products').get() as { cnt: number };
+  return row.cnt;
+}
+
+// ==================================================================
 // #region 引用数据表 — 写入（事务性全量替换）
 // ==================================================================
 
