@@ -60,11 +60,11 @@ export default function LoginPage() {
           <div className="login-actions">
             <button onClick={() => navigate(homeRedirect)}>{t('进入系统')}</button>
             {user.role === 'admin' && (
-              <button onClick={() => setShowRegister(!showRegister)} className="btn-secondary">
+              <button onClick={() => setShowRegister(!showRegister)}>
                 {showRegister ? t('取消注册') : t('注册新用户')}
               </button>
             )}
-            <button onClick={() => logout()} className="btn-danger">
+            <button onClick={() => logout()}>
               {t('登出')}
             </button>
           </div>
