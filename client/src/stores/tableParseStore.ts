@@ -4,7 +4,7 @@
  * 管理清单文本输入、颜色提示勾选、后端解析、表格编辑状态。
  */
 import { create } from 'zustand';
-import type { ColorEntry, ParsedItem, TableParseResponse, ProductEntry, GenerateProductsResponse } from '../types';
+import type { ColorEntry, ParsedItem, TableParseResponse, ProductEntry, GenerateProductsResponse, ConversationEntry } from '../types';
 import { tOutside, getLang } from '../i18n/context';
 import { fetchWithAuth } from '../lib/fetchWithAuth';
 
@@ -169,6 +169,12 @@ interface TableParseState {
 
   /** 切换输入模式（text ↔ image） */
   setInputMode: (mode: 'text' | 'image') => void;
+
+  // ---- 历史记录填充 ----
+
+  /** 供 HistoryPage 设置待填充的对话记录，ChatPanel 消费后自动置 null */
+  fillConversation: ConversationEntry[] | null;
+  setFillConversation: (conv: ConversationEntry[] | null) => void;
   /** 添加一张图片（base64 data URL），自动生成预览 URL */
   addImage: (data: string) => void;
   /** 移除指定索引的图片 */
@@ -201,6 +207,9 @@ export const useTableParseStore = create<TableParseState>((set, get) => {
   imagePreviewUrls: [],
   imageLoading: false,
   fromImage: false,
+
+  fillConversation: null,
+  setFillConversation: (conv) => set({ fillConversation: conv }),
 
   copySuccess: false,
 

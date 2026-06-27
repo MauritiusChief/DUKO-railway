@@ -314,11 +314,6 @@
   width: 8%;
 }
 
-.history-th-status,
-.history-td-status {
-  width: 10%;
-}
-
 .history-table .cell-input {
   width: 100%;
   padding: 3px 4px;
@@ -345,20 +340,9 @@
   padding: 0 4px;
 }
 
-.history-status {
-  font-size: 11px;
-  padding: 2px 6px;
-  border-radius: 3px;
-}
-
-.history-status-found {
-  background: #e8f5e9;
-  color: #2e7d32;
-}
-
-.history-status-missing {
-  background: #fff3e0;
-  color: #e65100;
+/* 复用主页面 cell-exposed-missing 色值 (#fff9c4)，仅对数据库未匹配的字段加黄色背景 */
+.history-cell-missing {
+  background-color: #fff9c4;
 }
 
 /* ====== 填充按钮行 ====== */

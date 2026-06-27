@@ -9,10 +9,9 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { useTableParseStore, SHAPE_TYPES_COLOR_NA, SHAPE_TYPES_SIZE_NA } from '../stores/tableParseStore';
+import { useTableParseStore } from '../stores/tableParseStore';
 import { fetchWithAuth } from '../lib/fetchWithAuth';
 import { useI18n } from '../i18n/context';
-import type { TranslationKey } from '../i18n/translations';
 import type { HistoryRecordSummary, HistoryRecordFull, ParsedItem, ConversationEntry } from '../types';
 import './HistoryPage.css';
 
@@ -28,16 +27,12 @@ function formatTime(iso: string): string {
   }
 }
 
-/** 获取 item 的匹配状态文本 */
-function getStatusText(item: ParsedItem, t: (key: TranslationKey) => string): string {
-  const shapeTypeCode = item.shapeType.values.length > 0 ? item.shapeType.values[0].toUpperCase() : '';
-  const colorIgnored = shapeTypeCode.length > 0 && SHAPE_TYPES_COLOR_NA.has(shapeTypeCode);
-  const sizeIgnored = shapeTypeCode.length > 0 && SHAPE_TYPES_SIZE_NA.has(shapeTypeCode);
-
-  if (!item.shapeType.values.length) return t('未知');
-  if (item.colorIgnored ?? colorIgnored) return 'N/A';
-  if (item.shapeSizeIgnored ?? sizeIgnored) return 'N/A';
-  return item.status === 'found' ? t('已匹配') : t('未匹配');
+/** 计算单元格 CSS 类名（仅复用主页面的 missing 黄色系统，不使用信心度颜色） */
+function getCellClass(field: 'color' | 'shapeType' | 'shapeSize', item: ParsedItem): string {
+  if (item.status !== 'missing') return '';
+  if (field === 'color' && item.colorIgnored) return '';
+  if (field === 'shapeSize' && item.shapeSizeIgnored) return '';
+  return 'history-cell-missing';
 }
 
 export default function HistoryPage() {
@@ -53,6 +48,7 @@ export default function HistoryPage() {
   const replaceItems = useTableParseStore((s) => s.replaceItems);
   const setInput = useTableParseStore((s) => s.setInput);
   const setColorHints = useTableParseStore((s) => s.setColorHints);
+  const setFillConversation = useTableParseStore((s) => s.setFillConversation);
 
   /** 加载记录摘要列表 */
   const fetchRecords = async () => {
@@ -109,13 +105,14 @@ export default function HistoryPage() {
     }
   };
 
-  /** 填充回主页：将记录的 items / input / colorHints 写入 store，跳转到 "/" */
+  /** 填充回主页：将记录的 items / input / colorHints / conversation 写入 store，跳转到 "/" */
   const handleFillBack = () => {
     if (!detail) return;
 
     replaceItems(detail.items);
     setInput(detail.input);
     setColorHints(detail.colorHints);
+    setFillConversation(detail.conversation);
 
     navigate('/');
   };
@@ -212,6 +209,15 @@ export default function HistoryPage() {
                 </div>
               </div>
 
+              {/* 填充回主页按钮 */}
+              {hasItems && (
+                <div className="history-fill-row">
+                  <button className="tp-submit-btn" onClick={handleFillBack}>
+                    {t('填充回主页')}
+                  </button>
+                </div>
+              )}
+
               {/* MID 区：解析结果表格（只读） */}
               {hasItems && (
                 <div className="history-result-section">
@@ -228,14 +234,13 @@ export default function HistoryPage() {
                           <th className="history-th-field">{t('形状尺寸')}</th>
                           <th className="history-th-qty">{t('数量')}</th>
                           <th className="history-th-req">{t('定制要求')}</th>
-                          <th className="history-th-status">{t('匹配状态')}</th>
                         </tr>
                       </thead>
                       <tbody>
                         {detail.items.map((item, i) => (
                           <tr key={i}>
                             <td className="history-td-name">{item.originalName}</td>
-                            <td className="history-td-field">
+                            <td className={`history-td-field ${getCellClass('color', item)}`}>
                               <input
                                 type="text"
                                 className="cell-input"
@@ -244,7 +249,7 @@ export default function HistoryPage() {
                                 disabled
                               />
                             </td>
-                            <td className="history-td-field">
+                            <td className={`history-td-field ${getCellClass('shapeType', item)}`}>
                               <input
                                 type="text"
                                 className="cell-input"
@@ -253,7 +258,7 @@ export default function HistoryPage() {
                                 disabled
                               />
                             </td>
-                            <td className="history-td-field">
+                            <td className={`history-td-field ${getCellClass('shapeSize', item)}`}>
                               <input
                                 type="text"
                                 className="cell-input"
@@ -280,25 +285,11 @@ export default function HistoryPage() {
                                     : '-'}
                               </span>
                             </td>
-                            <td className="history-td-status">
-                              <span className={`history-status history-status-${item.status}`}>
-                                {getStatusText(item, t)}
-                              </span>
-                            </td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
-                </div>
-              )}
-
-              {/* 填充回主页按钮 */}
-              {hasItems && (
-                <div className="history-fill-row">
-                  <button className="tp-submit-btn" onClick={handleFillBack}>
-                    {t('填充回主页')}
-                  </button>
                 </div>
               )}
 

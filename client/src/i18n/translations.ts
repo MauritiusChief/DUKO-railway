@@ -542,18 +542,6 @@ export const messages = {
     zh: '行',
     en: 'rows',
   },
-  匹配状态: {
-    zh: '匹配',
-    en: 'Status',
-  },
-  已匹配: {
-    zh: '已匹配',
-    en: 'Matched',
-  },
-  未匹配: {
-    zh: '未匹配',
-    en: 'Missing',
-  },
   选择记录提示: {
     zh: '选择左侧记录查看详情',
     en: 'Select a record on the left',

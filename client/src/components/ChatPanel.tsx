@@ -17,7 +17,7 @@ import { fetchWithAuth } from '../lib/fetchWithAuth';
 import { useI18n } from '../i18n/context';
 import { getLang } from '../i18n/context';
 import type { TranslationKey } from '../i18n/translations';
-import type { ChatHistoryEntry, Note, ParsedItem, ProductEntry } from '../types';
+import type { ChatHistoryEntry, Note, ParsedItem, ProductEntry, ConversationEntry } from '../types';
 import { PaletteIcon, TableIcon } from './ChatIcons';
 import './ChatPanel.css';
 
@@ -402,6 +402,30 @@ export default function ChatPanel() {
       }
     };
   }, []);
+
+  // 消费 HistoryPage 填充的对话记录
+  const fillConversation = useTableParseStore((s) => s.fillConversation);
+  const setFillConversation = useTableParseStore((s) => s.setFillConversation);
+
+  useEffect(() => {
+    if (!fillConversation) return;
+    // 转为 displayMessages 供 UI 渲染
+    setDisplayMessages(
+      fillConversation.map((e) => ({
+        role: (e.role === 'parse_start' ? 'parse_start' : e.role) as DisplayRole,
+        content: e.content,
+        ...(e.meta ? { meta: e.meta } : {}),
+      })),
+    );
+    // 转为 history 供 LLM 上下文（仅 user/assistant）
+    setHistory(
+      fillConversation
+        .filter((e) => e.role === 'user' || e.role === 'assistant')
+        .map((e) => ({ role: e.role as 'user' | 'assistant', content: e.content })),
+    );
+    // 消费后清除信号
+    setFillConversation(null);
+  }, [fillConversation, setFillConversation]);
 
   const handleSend = useCallback(async () => {
     const msg = input.trim();
