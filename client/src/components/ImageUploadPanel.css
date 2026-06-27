@@ -1,0 +1,177 @@
+/* ImageUploadPanel —— 图片上传面板样式 */
+
+.iup-panel {
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 12px;
+  background: #fafafa;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.iup-header {
+  font-size: 13px;
+  font-weight: 600;
+  color: #555;
+}
+
+/* 拖拽区 */
+
+.iup-dropzone {
+  border: 2px dashed #ccc;
+  border-radius: 4px;
+  min-height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  background: #fff;
+  transition: border-color 0.15s, background 0.15s;
+  overflow: hidden;
+}
+
+.iup-dropzone:hover {
+  border-color: #aaa;
+}
+
+.iup-dragover {
+  border-color: #4a90d9;
+  background: #e8f0fe;
+}
+
+.iup-has-image {
+  border-style: solid;
+  border-color: #ddd;
+  padding: 0;
+}
+
+.iup-preview {
+  width: 100%;
+  max-height: 200px;
+  object-fit: contain;
+}
+
+.iup-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  color: #aaa;
+  font-size: 12px;
+  padding: 16px;
+}
+
+.iup-placeholder-icon {
+  font-size: 24px;
+  opacity: 0.5;
+}
+
+/* 行 */
+
+.iup-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.iup-row-col {
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.iup-label {
+  font-size: 11px;
+  color: #666;
+  white-space: nowrap;
+}
+
+.iup-select {
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  padding: 3px 6px;
+  font-size: 11px;
+  font-family: inherit;
+  background: #fff;
+  cursor: pointer;
+  outline: none;
+}
+
+.iup-select:focus {
+  border-color: #4a90d9;
+}
+
+/* 多选框 */
+
+.iup-checkboxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+
+.iup-check {
+  font-size: 11px;
+  color: #555;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  cursor: pointer;
+}
+
+.iup-check input {
+  margin: 0;
+}
+
+/* 按钮 */
+
+.iup-btn {
+  background: #4a90d9;
+  color: #fff;
+  border: 1px solid #3a7bc8;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 5px 12px;
+  font-family: inherit;
+}
+
+.iup-btn:hover:not(:disabled) {
+  background: #3a7bc8;
+}
+
+.iup-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.iup-btn-clear {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #999;
+  font-size: 11px;
+  padding: 2px 0;
+  font-family: inherit;
+}
+
+.iup-btn-clear:hover {
+  color: #c00;
+}
+
+/* 反馈 */
+
+.iup-error {
+  font-size: 11px;
+  color: #c00;
+  padding: 4px 8px;
+  background: #fff0f0;
+  border-radius: 3px;
+}
+
+.iup-success {
+  font-size: 11px;
+  color: #2a7d2a;
+  padding: 4px 8px;
+  background: #f0fff0;
+  border-radius: 3px;
+}

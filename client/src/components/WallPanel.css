@@ -1,0 +1,310 @@
+/* WallPanel —— 墙/岛台面板样式 */
+
+.wp-panel {
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  margin-bottom: 12px;
+  background: #fafafa;
+}
+
+/* 墙头 */
+
+.wp-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: #f0f0f0;
+  border-bottom: 1px solid #ccc;
+  border-radius: 4px 4px 0 0;
+  flex-wrap: wrap;
+}
+
+.wp-collapse-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  color: #666;
+  padding: 0 2px;
+  line-height: 1;
+}
+
+.wp-type-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 2px;
+  color: #fff;
+}
+
+.wp-wall {
+  background: #4a90d9;
+}
+
+.wp-island {
+  background: #e67e22;
+}
+
+.wp-name-input {
+  border: 1px solid transparent;
+  background: transparent;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 2px 4px;
+  border-radius: 2px;
+  width: 100px;
+  font-family: inherit;
+  outline: none;
+}
+
+.wp-name-input:hover,
+.wp-name-input:focus {
+  border-color: #ccc;
+  background: #fff;
+}
+
+.wp-field {
+  font-size: 11px;
+  color: #666;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.wp-width-input {
+  width: 50px;
+  border: 1px solid #ccc;
+  border-radius: 2px;
+  padding: 1px 4px;
+  font-size: 11px;
+  font-family: inherit;
+  text-align: right;
+}
+
+.wp-check {
+  font-size: 11px;
+  color: #666;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.wp-check input {
+  margin: 0;
+}
+
+.wp-connected {
+  font-size: 10px;
+  color: #4a90d9;
+  background: #e8f0fe;
+  padding: 1px 6px;
+  border-radius: 2px;
+}
+
+.wp-remove-btn {
+  margin-left: auto;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #ccc;
+  font-size: 14px;
+  padding: 2px 6px;
+  border-radius: 2px;
+}
+
+.wp-remove-btn:hover {
+  color: #c00;
+  background: #fee;
+}
+
+/* 主体 */
+
+.wp-body {
+  padding: 8px 10px;
+}
+
+/* 轨道 */
+
+.wp-track {
+  margin-bottom: 10px;
+}
+
+.wp-track:last-child {
+  margin-bottom: 0;
+}
+
+.wp-track-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.wp-track-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #555;
+}
+
+.wp-add-btn {
+  font-size: 11px;
+  background: none;
+  border: 1px dashed #ccc;
+  border-radius: 3px;
+  cursor: pointer;
+  color: #888;
+  padding: 1px 8px;
+}
+
+.wp-add-btn:hover {
+  border-color: #4a90d9;
+  color: #4a90d9;
+}
+
+/* 轨道 blocks 容器 */
+
+.wp-track-blocks {
+  height: 72px;
+  border: 1px solid #eee;
+  border-radius: 3px;
+  background: #fff;
+  overflow: hidden;
+}
+
+/* block 包装器（绝对定位） */
+
+.wp-block-wrapper {
+  top: 0;
+  height: 100%;
+  padding: 4px 2px;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.wp-block-wrapper.wp-dragging {
+  opacity: 0.4;
+}
+
+/* 拖拽指示线 */
+
+.wp-drop-indicator {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #4a90d9;
+  z-index: 10;
+  pointer-events: none;
+}
+
+/* 添加表单 */
+
+.wp-add-form {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  padding: 4px 0;
+}
+
+.wp-add-select {
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  padding: 3px 6px;
+  font-size: 11px;
+  font-family: inherit;
+  background: #fff;
+  cursor: pointer;
+}
+
+.wp-add-input {
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  padding: 3px 6px;
+  font-size: 11px;
+  font-family: inherit;
+  width: 55px;
+}
+
+.wp-add-sku {
+  width: 80px;
+}
+
+.wp-add-ok {
+  font-size: 11px;
+  background: #4a90d9;
+  color: #fff;
+  border: 1px solid #3a7bc8;
+  border-radius: 3px;
+  cursor: pointer;
+  padding: 2px 8px;
+}
+
+.wp-add-ok:hover {
+  background: #3a7bc8;
+}
+
+.wp-add-cancel {
+  font-size: 11px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #888;
+  padding: 2px 4px;
+}
+
+.wp-add-cancel:hover {
+  color: #333;
+}
+
+/* 叠放吊柜表单 */
+
+.wp-stacked-form {
+  margin-top: 2px;
+  padding-left: 4px;
+  border-left: 2px solid #ddd;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.wp-stacked-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.wp-stacked-label {
+  font-size: 10px;
+  color: #999;
+}
+
+.wp-stacked-add {
+  font-size: 10px;
+  background: none;
+  border: 1px dashed #ccc;
+  border-radius: 2px;
+  cursor: pointer;
+  color: #888;
+  padding: 1px 6px;
+  align-self: flex-start;
+}
+
+.wp-stacked-add:hover {
+  border-color: #4a90d9;
+  color: #4a90d9;
+}
+
+/* 折叠状态 */
+
+.wp-collapsed .wp-body {
+  display: none;
+}
+
+.wp-collapsed .wp-header {
+  border-radius: 4px;
+  border-bottom: none;
+}

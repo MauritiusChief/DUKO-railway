@@ -1,0 +1,13 @@
+/* LayoutCanvas —— 布局画布容器样式 */
+
+.lc-canvas {
+  display: flex;
+  flex-direction: column;
+}
+
+.lc-empty {
+  text-align: center;
+  padding: 40px;
+  color: #999;
+  font-size: 13px;
+}

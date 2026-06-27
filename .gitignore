@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+*.log
+server/src/data/
+server/src/log/
+server/public/script
+.cache/
+experiment/
+scripts/

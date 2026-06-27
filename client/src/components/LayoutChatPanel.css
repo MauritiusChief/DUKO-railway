@@ -1,0 +1,30 @@
+/* LayoutChatPanel —— 对话面板占位样式 */
+
+.lc-panel {
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background: #fafafa;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.lc-panel-header {
+  font-size: 13px;
+  font-weight: 600;
+  color: #555;
+  padding: 10px 12px;
+  border-bottom: 1px solid #eee;
+  flex-shrink: 0;
+}
+
+.lc-panel-placeholder {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #bbb;
+  font-size: 12px;
+  padding: 20px;
+}

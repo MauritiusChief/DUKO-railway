@@ -1,0 +1,186 @@
+/* BlockCard —— 物品卡片样式 */
+
+.bc-card {
+  display: flex;
+  align-items: flex-start;
+  border: 1px solid #d0d0d0;
+  border-radius: 3px;
+  background: #fff;
+  padding: 4px 6px;
+  gap: 6px;
+  min-width: 0;
+  flex-shrink: 0;
+  user-select: none;
+  position: relative;
+  transition: border-color 0.1s;
+}
+
+.bc-card:hover {
+  border-color: #aaa;
+}
+
+.bc-gap {
+  background: repeating-linear-gradient(
+    45deg,
+    transparent,
+    transparent 2px,
+    #f0f0f0 2px,
+    #f0f0f0 4px
+  );
+  border-style: dashed;
+  border-color: #ddd;
+}
+
+.bc-dual {
+  border-color: #4a90d9;
+}
+
+/* 拖拽手柄 */
+
+.bc-drag-handle {
+  cursor: grab;
+  color: #bbb;
+  font-size: 14px;
+  line-height: 1;
+  padding: 2px 2px;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.bc-drag-handle:hover {
+  color: #666;
+}
+
+.bc-drag-handle:active {
+  cursor: grabbing;
+}
+
+/* 主体 */
+
+.bc-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.bc-top-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 4px;
+}
+
+.bc-category {
+  font-size: 11px;
+  font-weight: 600;
+  color: #333;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.bc-cat-gap {
+  color: #aaa;
+  font-weight: 400;
+}
+
+.bc-dual-badge {
+  font-size: 10px;
+  color: #4a90d9;
+}
+
+.bc-width {
+  font-size: 11px;
+  color: #666;
+  white-space: nowrap;
+}
+
+.bc-bottom-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 4px;
+  margin-top: 1px;
+}
+
+.bc-sku {
+  font-size: 11px;
+  color: #888;
+  font-family: monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bc-pos {
+  font-size: 10px;
+  color: #bbb;
+  white-space: nowrap;
+}
+
+/* 堆叠物品 */
+
+.bc-stacked {
+  margin-top: 2px;
+  padding-top: 2px;
+  border-top: 1px dotted #eee;
+}
+
+.bc-stacked-item {
+  font-size: 10px;
+  color: #999;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.bc-stacked-remove {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #ccc;
+  font-size: 10px;
+  padding: 0 2px;
+  line-height: 1;
+  border-radius: 2px;
+}
+
+.bc-stacked-remove:hover {
+  color: #c00;
+  background: #fee;
+}
+
+/* 删除按钮 */
+
+.bc-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+
+.bc-card:hover .bc-actions {
+  opacity: 1;
+}
+
+.bc-delete-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #ccc;
+  font-size: 12px;
+  padding: 1px 3px;
+  line-height: 1;
+  border-radius: 2px;
+}
+
+.bc-delete-btn:hover {
+  color: #c00;
+  background: #fee;
+}
+
+.bc-delete-static:hover {
+  color: #e67e22;
+  background: #fff3e0;
+}

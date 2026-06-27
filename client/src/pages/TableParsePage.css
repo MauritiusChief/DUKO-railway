@@ -1,0 +1,785 @@
+/* TableParsePage —— 清单解析界面样式 */
+
+/* ====== 容器 ====== */
+
+.table-parse-container {
+  font-family: system-ui, -apple-system, sans-serif;
+  max-width: 1500px;
+  margin: 0 auto;
+  padding: 16px;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* ====== 标题栏 ====== */
+
+.tp-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0 12px;
+  border-bottom: 1px solid #ccc;
+  margin-bottom: 12px;
+  flex-shrink: 0;
+}
+
+/* .tp-header-left { */
+  /* 标题 + 副标题容器 */
+/* } */
+
+.tp-header-title {
+  font-size: 16px;
+  font-weight: bold;
+}
+
+.tp-header-sub {
+  font-size: 11px;
+  color: #666;
+  margin-top: 2px;
+}
+
+.tp-download-btn {
+  margin-top: 0;
+  flex-shrink: 0;
+}
+
+.tp-logout-btn {
+  margin-top: 0;
+  flex-shrink: 0;
+  background: #888;
+  font-size: 12px;
+  padding: 4px 10px;
+}
+
+.tp-logout-btn:hover {
+  background: #666;
+}
+
+.tp-header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.tp-seg-switch {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  font-size: 12px;
+}
+
+.tp-seg-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #888;
+  font-size: 12px;
+  padding: 2px 4px;
+}
+
+.tp-seg-btn:hover {
+  color: #333;
+}
+
+.tp-seg-active {
+  color: #333;
+  font-weight: bold;
+}
+
+.tp-seg-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.tp-seg-sep {
+  color: #ccc;
+  font-size: 12px;
+}
+
+/* ====== 上二列区（清单输入 | 分割线 | 颜色勾选） ====== */
+
+.tp-top-area {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: row;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.tp-top-left {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  flex-shrink: 0;
+  min-width: 0;
+  padding-right: 4px;
+}
+
+.tp-top-resize-handle {
+  width: 4px;
+  cursor: col-resize;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+
+.tp-top-resize-handle:hover {
+  background: #4a90d9;
+}
+
+.tp-top-right {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding-left: 4px;
+}
+
+/* ---- 文本域 ---- */
+
+.tp-textarea {
+  width: 100%;
+  flex: 1 1 0;
+  min-height: 0;
+  padding: 6px 8px;
+  font-size: 13px;
+  font-family: Consolas, 'Courier New', monospace;
+  line-height: 1.5;
+  resize: none;
+  box-sizing: border-box;
+  border: 1px solid #aaa;
+  border-radius: 4px;
+}
+
+.tp-textarea:focus {
+  outline: none;
+  border-color: #4a90d9;
+  box-shadow: 0 0 0 2px rgba(74, 144, 217, 0.2);
+}
+
+/* ---- 颜色勾选区 ---- */
+
+.tp-color-hints-label {
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 4px;
+  display: block;
+  flex-shrink: 0;
+}
+
+.tp-color-list {
+  flex: 1 1 0;
+  overflow-y: auto;
+  min-height: 0;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  padding: 4px 8px;
+}
+
+.tp-color-row {
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+  padding: 2px 0;
+}
+
+.tp-color-row input[type='checkbox'] {
+  margin: 0;
+  flex-shrink: 0;
+}
+
+/* ---- 横向分隔条（上下拖拽调节） ---- */
+
+.tp-horizontal-handle {
+  height: 4px;
+  cursor: row-resize;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+
+.tp-horizontal-handle:hover {
+  background: #4a90d9;
+}
+
+/* ---- 提交按钮 ---- */
+
+.tp-submit-btn {
+  margin-top: 10px;
+  padding: 8px 24px;
+  font-size: 14px;
+  cursor: pointer;
+  border: 1px solid #888;
+  border-radius: 4px;
+  background: #f0f0f0;
+}
+
+.tp-submit-btn:hover:not(:disabled) {
+  background: #e0e0e0;
+}
+
+.tp-submit-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.tp-hint {
+  margin-left: 10px;
+  font-size: 11px;
+  color: #999;
+}
+
+/* ---- 错误信息 ---- */
+
+.tp-error {
+  margin-top: 8px;
+  color: #c00;
+  font-size: 13px;
+}
+
+/* ====== 结果区（可滚动） ====== */
+
+.tp-result-section {
+  flex: 1 1 0;
+  overflow-y: auto;
+  min-height: 0;
+  margin-top: 12px;
+}
+
+.tp-result-section.tp-collapsed {
+  flex: 0 0 auto;
+  overflow: hidden;
+}
+
+/* 折叠标题栏 */
+
+.tp-result-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  background: #f0f0f0;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  cursor: pointer;
+  user-select: none;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.tp-result-header:hover {
+  background: #e4e4e4;
+}
+
+.tp-result-header-icon {
+  font-size: 14px;
+  line-height: 1;
+  color: #666;
+  width: 16px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.tp-result-header-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: #333;
+}
+
+.tp-table-wrapper {
+  overflow-x: auto;
+}
+
+/* ====== 表格 ====== */
+
+.tp-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  table-layout: fixed;
+}
+
+.tp-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.tp-table th {
+  background: #f5f5f5;
+  border-bottom: 2px solid #bbb;
+  padding: 6px 8px;
+  text-align: left;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.tp-table td {
+  border-bottom: 1px solid #e0e0e0;
+  padding: 4px 8px;
+  vertical-align: top;
+}
+
+.tp-table tbody tr:hover {
+  background: #fafafa;
+}
+
+/* 列宽分配 */
+
+.tp-th-name,
+.tp-td-name {
+  width: 22%;
+  word-break: break-all;
+}
+
+.tp-th-field,
+.tp-td-field {
+  width: 20%;
+}
+
+.tp-th-req,
+.tp-td-req {
+  width: 8%;
+  text-align: center;
+}
+
+.tp-th-qty,
+.tp-td-qty {
+  width: 10%;
+}
+
+/* ====== 信心感知背景色 ====== */
+
+/* 候选（橙色） */
+.cell-candidates {
+  background-color: #fff3e0;
+}
+
+/* 未知（红色） */
+.cell-unknown {
+  background-color: #ffebee;
+}
+
+/* N/A 兼容（灰色 —— 该型号天生不带此字段，无需填写） */
+.cell-na {
+  background-color: #f5f5f5;
+}
+
+/* 未在 Exposed-Items 中查到（黄色）—— 仅对确认（白色）格子生效 */
+.cell-exposed-missing {
+  background-color: #fff9c4;
+}
+
+/* ====== 文本输入框（单元格内） ====== */
+
+.cell-input {
+  width: 100%;
+  padding: 4px 6px;
+  font-size: 13px;
+  border: 1px solid #ccc;
+  border-radius: 2px;
+  box-sizing: border-box;
+  background: #fff;
+}
+
+.cell-input:focus {
+  outline: none;
+  border-color: #4a90d9;
+  box-shadow: 0 0 0 1px rgba(74, 144, 217, 0.3);
+}
+
+/* 未知模式的输入框 */
+.cell-input-unknown {
+  background: #fff;
+}
+
+/* N/A 兼容单元格内的输入框使用更柔和的样式 */
+.cell-na .cell-input-unknown {
+  background: #fafafa;
+  border-color: #ddd;
+  color: #999;
+}
+
+/* 数量输入框 */
+.cell-input-qty {
+  text-align: center;
+}
+
+/* 定制要求下拉框 */
+.tp-select-req {
+  width: 100%;
+  padding: 4px 2px;
+  font-size: 12px;
+  border: 1px solid #ccc;
+  border-radius: 2px;
+  box-sizing: border-box;
+  background: #fff;
+  cursor: pointer;
+}
+
+.tp-select-req:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* ====== 候选 radio 组 ====== */
+
+.cell-candidates .cell-candidates {
+  /* 双层嵌套重置（avoid double orange from td.cell-candidates） */
+  background-color: transparent;
+}
+
+.cell-radio-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 0;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.cell-radio-label input[type='radio'] {
+  margin: 0;
+  flex-shrink: 0;
+}
+
+.cell-radio-custom {
+  /* 自定义 radio 行稍微上间距 */
+  margin-top: 2px;
+}
+
+.cell-input-inline {
+  width: auto;
+  flex: 1;
+  min-width: 60px;
+  font-size: 12px;
+  padding: 2px 4px;
+}
+
+.cell-input-inline:disabled {
+  background: #f5f5f5;
+  cursor: not-allowed;
+}
+
+/* ====== 删除按钮 ====== */
+
+.tp-th-action,
+.tp-td-action {
+  width: 40px;
+  text-align: center;
+}
+
+.tp-delete-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  font-size: 16px;
+  font-weight: bold;
+  line-height: 1;
+  color: #999;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.tp-delete-btn:hover:not(:disabled) {
+  color: #c00;
+  background: #ffebee;
+  border-color: #fcc;
+}
+
+.tp-delete-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+/* ====== 产品清单区域 ====== */
+
+.tp-generate-btn {
+  margin-top: 10px;
+}
+
+/* 未解析提示 */
+
+.tp-unresolved-hint {
+  margin-top: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: #8d6e00;
+  background: #fff9c4;
+  border: 1px solid #ffe082;
+  border-radius: 4px;
+}
+
+/* 产品清单表格包装 */
+
+.tp-product-table-wrapper {
+  margin-top: 12px;
+  overflow-x: auto;
+}
+
+/* .tp-product-table { */
+  /* 继承 tp-table 基样式 */
+/* } */
+
+.tp-product-table tbody tr:hover {
+  background: #f0f8e8;
+}
+
+/* 产品清单列宽 */
+
+.tp-th-sku,
+.tp-td-sku {
+  width: 30%;
+  font-family: Consolas, 'Courier New', monospace;
+  white-space: nowrap;
+}
+
+.tp-th-desc,
+.tp-td-desc {
+  width: 55%;
+}
+
+.tp-th-qty,
+.tp-td-qty {
+  width: 15%;
+}
+
+/* ====== ScriptCat 操作按钮 ====== */
+
+.tp-scriptcat-actions {
+  margin-top: 12px;
+}
+
+/* ====== 解析按钮行（解析清单 + 加载存档） ====== */
+
+.tp-action-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+}
+
+.tp-action-row-left {
+  display: flex;
+  align-items: center;
+}
+
+.tp-action-row .tp-submit-btn {
+  margin-top: 0;
+}
+
+.tp-archive-btn {
+  flex-shrink: 0;
+}
+
+/* ====== 生成产品清单 + 保存存档按钮行 ====== */
+
+.tp-button-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.tp-button-row .tp-submit-btn {
+  margin-top: 0;
+}
+
+/* ====== 主区域：左栏 + 分割线 + 右栏（对话） ====== */
+
+.tp-main-area {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: row;
+  margin-top: 12px;
+  overflow: hidden;
+}
+
+.tp-left-column {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.tp-chat-column {
+  flex-shrink: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-left: 1px solid #ddd;
+}
+
+/* ====== 底部分栏（仅含左面板） ====== */
+
+.tp-bottom-area {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: row;
+  overflow: hidden;
+}
+
+/* 左侧面板：解析结果 + 产品清单（全宽） */
+.tp-left-panel {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}
+
+/* 左侧面板内的 result-section 去掉 margin-top（由容器提供） */
+.tp-left-panel .tp-result-section:first-child {
+  margin-top: 0;
+}
+
+/* 可拖拽分割线 */
+.tp-resize-handle {
+  width: 4px;
+  cursor: col-resize;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+
+.tp-resize-handle:hover {
+  background: #4a90d9;
+}
+
+/* ====== 图片上传 Drop Zone ====== */
+
+.tp-image-dropzone {
+  flex: 1 1 0;
+  min-height: 120px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 2px dashed #ccc;
+  border-radius: 8px;
+  background: #fafafa;
+  cursor: pointer;
+  padding: 20px;
+  text-align: center;
+}
+
+.tp-image-dropzone:hover,
+.tp-dropzone-active {
+  border-color: #4a90d9;
+  background: #eef4fb;
+}
+
+.tp-dropzone-text {
+  font-size: 13px;
+  color: #888;
+  white-space: pre-line;
+  line-height: 1.5;
+}
+
+.tp-browse-btn {
+  margin-top: 4px;
+}
+
+/* ====== 图片预览区域 ====== */
+
+.tp-image-preview-area {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.tp-image-preview-wrapper {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background: #fafafa;
+}
+
+.tp-image-preview {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.tp-image-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.tp-image-actions .tp-submit-btn {
+  margin-top: 0;
+}
+
+.tp-clear-btn {
+  background: #fff !important;
+  border-color: #ccc !important;
+}
+
+.tp-clear-btn:hover:not(:disabled) {
+  background: #fee !important;
+}
+
+/* ====== 多图片缩略图列表 ====== */
+
+.tp-image-thumbnails {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.tp-image-thumbnail-wrapper {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  overflow: hidden;
+  background: #fafafa;
+}
+
+.tp-image-thumbnail {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.tp-thumbnail-delete-btn {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.5);
+  color: #fff;
+  font-size: 12px;
+  line-height: 20px;
+  text-align: center;
+  cursor: pointer;
+}
+
+.tp-thumbnail-delete-btn:hover {
+  background: rgba(220, 0, 0, 0.8);
+}

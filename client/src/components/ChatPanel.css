@@ -1,0 +1,477 @@
+/* ChatPanel —— 对话面板样式 */
+
+.tp-chat-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #fafafa;
+}
+
+/* 标题栏 */
+.tp-chat-header {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #333;
+  background: #f0f0f0;
+  border-bottom: 1px solid #ddd;
+}
+
+.tp-notes-toggle {
+  background: none;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  padding: 1px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  color: #666;
+}
+
+.tp-notes-toggle:hover {
+  background: #e8e8e8;
+}
+
+.tp-notes-active {
+  background: #4a90d9;
+  color: #fff;
+  border-color: #4a90d9;
+}
+
+.tp-notes-active:hover {
+  background: #3a7bc8;
+}
+
+/* 消息列表区域 */
+.tp-chat-messages {
+  flex: 1 1 0;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+/* 空消息提示 */
+.tp-chat-empty {
+  color: #999;
+  font-size: 12px;
+  text-align: center;
+  padding-top: 20px;
+}
+
+/* 单条消息 */
+.tp-chat-msg {
+  margin-bottom: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.tp-chat-msg-role {
+  font-weight: 600;
+  margin-bottom: 2px;
+  color: #555;
+}
+
+.tp-chat-msg-user .tp-chat-msg-role {
+  color: #4a90d9;
+}
+
+.tp-chat-msg-assistant .tp-chat-msg-role {
+  color: #2e7d32;
+}
+
+.tp-chat-msg-tool .tp-chat-msg-role {
+  color: #e67e22;
+  font-size: 11px;
+}
+
+.tp-chat-msg-tool .tp-chat-msg-content {
+  color: #999;
+  font-size: 11px;
+  font-style: italic;
+}
+
+.tp-chat-msg-streaming .tp-chat-msg-role {
+  color: #2e7d32;
+  animation: tp-fade-blink 1s infinite;
+}
+
+@keyframes tp-fade-blink {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+.tp-chat-msg-content {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ====== Markdown 渲染样式 ====== */
+
+.tp-chat-msg-assistant .tp-chat-msg-content h1,
+.tp-chat-msg-assistant .tp-chat-msg-content h2,
+.tp-chat-msg-assistant .tp-chat-msg-content h3,
+.tp-chat-msg-assistant .tp-chat-msg-content h4,
+.tp-chat-msg-assistant .tp-chat-msg-content h5,
+.tp-chat-msg-assistant .tp-chat-msg-content h6 {
+  margin: 8px 0 4px;
+  font-size: inherit;
+  font-weight: 600;
+}
+
+.tp-chat-msg-assistant .tp-chat-msg-content h1 { font-size: 14px; }
+.tp-chat-msg-assistant .tp-chat-msg-content h2 { font-size: 13px; }
+.tp-chat-msg-assistant .tp-chat-msg-content h3 { font-size: 12px; }
+
+.tp-chat-msg-assistant .tp-chat-msg-content p {
+  margin: 4px 0;
+}
+
+.tp-chat-msg-assistant .tp-chat-msg-content ul,
+.tp-chat-msg-assistant .tp-chat-msg-content ol {
+  margin: 4px 0;
+  padding-left: 20px;
+}
+
+.tp-chat-msg-assistant .tp-chat-msg-content li {
+  margin-bottom: 2px;
+}
+
+.tp-chat-msg-assistant .tp-chat-msg-content code {
+  background: #eee;
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-family: Consolas, 'Courier New', monospace;
+  font-size: 11px;
+}
+
+.tp-chat-msg-assistant .tp-chat-msg-content pre {
+  background: #f4f4f4;
+  padding: 6px 10px;
+  border-radius: 4px;
+  overflow-x: auto;
+  margin: 4px 0;
+}
+
+.tp-chat-msg-assistant .tp-chat-msg-content pre code {
+  background: none;
+  padding: 0;
+}
+
+.tp-chat-msg-assistant .tp-chat-msg-content table {
+  border-collapse: collapse;
+  margin: 4px 0;
+  font-size: 11px;
+}
+
+.tp-chat-msg-assistant .tp-chat-msg-content th,
+.tp-chat-msg-assistant .tp-chat-msg-content td {
+  border: 1px solid #ccc;
+  padding: 3px 8px;
+  text-align: left;
+}
+
+.tp-chat-msg-assistant .tp-chat-msg-content th {
+  background: #f0f0f0;
+  font-weight: 600;
+}
+
+.tp-chat-msg-assistant .tp-chat-msg-content blockquote {
+  margin: 4px 0;
+  padding-left: 12px;
+  border-left: 3px solid #ccc;
+  color: #666;
+}
+
+.tp-chat-msg-assistant .tp-chat-msg-content hr {
+  border: none;
+  border-top: 1px solid #ddd;
+  margin: 8px 0;
+}
+
+.tp-chat-msg-assistant .tp-chat-msg-content a {
+  color: #4a90d9;
+  text-decoration: underline;
+}
+
+.tp-chat-msg-assistant .tp-chat-msg-content strong {
+  font-weight: 600;
+}
+
+.tp-chat-msg-assistant .tp-chat-msg-content em {
+  font-style: italic;
+}
+
+/* 输入行 */
+.tp-chat-input-row {
+  flex-shrink: 0;
+  display: flex;
+  gap: 6px;
+  padding: 8px;
+  border-top: 1px solid #ddd;
+  background: #fff;
+}
+
+.tp-chat-input {
+  flex: 1;
+  padding: 4px 6px;
+  font-size: 12px;
+  font-family: system-ui, -apple-system, sans-serif;
+  line-height: 1.5;
+  resize: none;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+
+.tp-chat-input:focus {
+  outline: none;
+  border-color: #4a90d9;
+  box-shadow: 0 0 0 1px rgba(74, 144, 217, 0.3);
+}
+
+.tp-chat-send-btn {
+  flex-shrink: 0;
+  padding: 4px 12px;
+  font-size: 12px;
+  color: #333;
+  background: #e8e8e8;
+  border: 1px solid #aaa;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.tp-chat-send-btn:hover:not(:disabled) {
+  background: #d8d8d8;
+}
+
+.tp-chat-send-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 加载中状态 */
+.tp-chat-loading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tp-chat-spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid #ccc;
+  border-top-color: #4a90d9;
+  border-radius: 50%;
+  animation: tp-chat-spin 0.8s linear infinite;
+}
+
+@keyframes tp-chat-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ====== 笔记底部抽屉布局 ====== */
+
+/* 笔记切换按钮行 */
+.tp-notes-toggle-row {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: center;
+  padding: 4px 8px;
+  border-top: 1px solid #ddd;
+  background: #fafafa;
+}
+
+/* ====== 笔记面板（底部抽屉） ====== */
+
+.tp-notes-panel {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  max-height: 0;
+  overflow: hidden;
+  background: #fff;
+  border-top: 1px solid #ddd;
+  transition: max-height 0.25s ease;
+}
+
+.tp-notes-panel.tp-notes-open {
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.tp-notes-header {
+  flex-shrink: 0;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #333;
+  background: #f0f0f0;
+  border-bottom: 1px solid #ddd;
+}
+
+.tp-notes-list {
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.tp-note-row {
+  display: flex;
+  align-items: flex-start;
+  padding: 4px 8px;
+  border-bottom: 1px solid #f0f0f0;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.tp-note-row:hover {
+  background: #fafafa;
+}
+
+.tp-note-name {
+  width: 35%;
+  flex-shrink: 0;
+  font-family: Consolas, 'Courier New', monospace;
+  word-break: break-all;
+  padding-top: 2px;
+}
+
+.tp-note-content {
+  flex: 1 1 0;
+  word-break: break-word;
+  white-space: pre-wrap;
+  padding-top: 2px;
+}
+
+.tp-note-del {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  font-size: 14px;
+  font-weight: bold;
+  line-height: 1;
+  color: #999;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.tp-note-del:hover {
+  color: #c00;
+  background: #ffebee;
+  border-color: #fcc;
+}
+
+/* ====== 添加笔记行 ====== */
+
+.tp-notes-add {
+  flex-shrink: 0;
+  display: flex;
+  gap: 4px;
+  padding: 4px 8px;
+  border-top: 1px solid #ddd;
+  background: #fafafa;
+}
+
+.tp-note-add-name {
+  width: 35%;
+  flex-shrink: 0;
+  min-width: 0;
+  padding: 3px 5px;
+  font-size: 12px;
+  font-family: Consolas, 'Courier New', monospace;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  box-sizing: border-box;
+}
+
+.tp-note-add-content {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 3px 5px;
+  font-size: 12px;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  box-sizing: border-box;
+}
+
+.tp-note-add-name:focus,
+.tp-note-add-content:focus {
+  outline: none;
+  border-color: #4a90d9;
+  box-shadow: 0 0 0 1px rgba(74, 144, 217, 0.3);
+}
+
+.tp-note-add-btn {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  font-size: 16px;
+  font-weight: bold;
+  line-height: 1;
+  color: #4a90d9;
+  background: #eaf2fc;
+  border: 1px solid #b3d0f5;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.tp-note-add-btn:hover:not(:disabled) {
+  background: #d4e4f9;
+}
+
+.tp-note-add-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ====== parse_start 解析清单摘要 ====== */
+
+.tp-chat-parse-start {
+  font-size: 12px;
+}
+
+.tp-parse-start-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.tp-parse-start-list li {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  line-height: 1.5;
+}
+
+.tp-parse-start-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  opacity: 0.5;
+  color: #4a90d9;
+}
+
+.tp-parse-start-sep {
+  color: #999;
+  margin: 0 2px;
+}
+
+.tp-parse-start-code {
+  background: #e8e8e8;
+  border-radius: 2px;
+  padding: 0 4px;
+  font-family: monospace;
+  font-size: 11px;
+  margin-right: 4px;
+}
