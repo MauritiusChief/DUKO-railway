@@ -31,9 +31,9 @@ import { authenticateToken } from './middleware/auth.js';
 import { authLimiter, apiLimiter, llmLimiter } from './middleware/rateLimit.js';
 import { config, validateSecrets } from './config/env.js';
 import { initDB } from './db/lance.js';
-import { initSkuDB, getRecordCount, getItemRecordCount, getPartRecordCount } from './db/sku.js';
+import { initSkuDB, getRecordCount } from './db/sku.js';
 import { initUserDB, seedAdminUser } from './db/users.js';
-import { ingestFromFile, loadCacheFromCSV, loadAllReferenceData } from './services/sku-ingest.js';
+import { ingestFromFile, loadAllReferenceData } from './services/sku-ingest.js';
 import { initBm25Index } from './services/bm25.js';
 import { runAllSteps } from './process-cli.js';
 
@@ -150,7 +150,7 @@ app.get('*', (_req, res) => {
   }
 
   if (process.env.AUTO_INGEST === 'true') {
-    // AUTO_INGEST=true：SQLite 为空时自动导入 CSV 到 SQLite + LanceDB
+    // AUTO_INGEST=true：SQLite 为空时自动导入 CSV 到 SQLite + LanceDB + 引用表
     if (getRecordCount() === 0) {
       const csvPath = path.resolve(__dirname, 'data', 'Exposed-Items.csv');
       try {
@@ -161,27 +161,13 @@ app.get('*', (_req, res) => {
         const end = performance.now();
         console.warn(`[警告] 执行耗时 ${((end - start) / 1000).toFixed(2)} 秒，请确保 odoo 数据链接通畅`);
         console.log(`已录入 ${result.count} 项.`);
+        loadAllReferenceData(dbDir);
       } catch (err) {
         console.warn('自动解析失败, odoo 数据库为空！', err);
       }
     } else {
       console.log(`${getRecordCount()} 项数据已存入数据库.`);
     }
-  } else {
-    // 无 AUTO_INGEST：SQLite 为空时从 Exposed-Items.csv 直接加载文本字段（跳过 embedding，秒级完成）
-    if (getRecordCount() === 0) {
-      const csvPath = path.resolve(__dirname, 'data', 'Exposed-Items.csv');
-      const count = loadCacheFromCSV(csvPath);
-      console.log(`已从 CSV 加载 ${count} 项数据到 SQLite.`);
-    } else {
-      console.log(`${getRecordCount()} 项数据已从 SQLite 读取.`);
-    }
-  }
-
-  // 引用数据表（items / parts / products / exposed_colors / exposed_types）为空时自动从 CSV 加载
-  if (getItemRecordCount() === 0 || getPartRecordCount() === 0) {
-    loadAllReferenceData(dbDir);
-    console.log('引用数据表已加载到 SQLite.');
   }
 
   // 预热 BM25 描述文本索引（从 SQLite 读取全量数据）

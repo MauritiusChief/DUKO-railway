@@ -4,8 +4,8 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "prebuild": "npm run db:process && npm run db:ingest -- src/data/Exposed-Items.csv",
-    "build": "tsc && xcopy src\\data\\*.csv dist\\data\\ /Y /I && rd /s /q dist\\data\\sku.lance 2>nul & xcopy src\\data\\sku.lance dist\\data\\sku.lance\\ /E /Y /I",
+    "prebuild": "npm run db:process && npm run db:ingest",
+    "build": "tsc && md dist\\data 2>nul & xcopy src\\data\\sku.sqlite dist\\data\\ /Y && rd /s /q dist\\data\\sku.lance 2>nul & xcopy src\\data\\sku.lance dist\\data\\sku.lance\\ /E /Y /I",
     "start": "node dist/index.js",
     "db:ingest": "tsx src/ingest-cli.ts",
     "db:process": "tsx src/process-cli.ts",

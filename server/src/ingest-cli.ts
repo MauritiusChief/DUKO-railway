@@ -3,10 +3,11 @@
  *
  * 用法：
  *   cd server
- *   npm run db:ingest -- "path\to\Exposed-Items.csv"
+ *   npm run db:ingest
  *
  * 流程：
- *   加载 .env → 初始化 LanceDB → 解析 Exposed-Items CSV → 生成 embedding → 写入数据库
+ *   加载 .env → 初始化 LanceDB → 解析 Exposed-Items CSV → 生成 embedding → 写入 SQLite + LanceDB
+ *   → 写入 5 张引用表到 SQLite
  *
  * 数据映射（与 Exposed-Items.csv 列一一对应）：
  *   itemName / colorCode / shapeTypeCode / shapeTypeAlias
@@ -23,17 +24,10 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { initDB, countRows } from './db/lance.js';
 import { initSkuDB } from './db/sku.js';
-import { ingestFromFile } from './services/sku-ingest.js';
+import { ingestFromFile, loadAllReferenceData } from './services/sku-ingest.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-const filePath = process.argv[2];
-
-if (!filePath) {
-  console.error('Usage: npm run db:ingest -- <file-path>');
-  console.error('  [警告] 未检测到 odoo 实时数据，请在 <file-path> 处保存 odoo 实时数据！');
-  process.exit(1);
-}
+const dataDir = path.join(__dirname, 'data');
 
 (async () => {
   try {
@@ -41,15 +35,17 @@ if (!filePath) {
     await initDB();
 
     // 初始化 SQLite 数据库（ingestFromFile 需要写入结构化字段）
-    const dbDir = path.join(__dirname, 'data');
-    initSkuDB(dbDir);
+    initSkuDB(dataDir);
 
-    console.log(`解析 odoo 数据: ${filePath}`);
-    console.warn('[警告] 数据库连接失败！请检查 odoo 数据连接');
+    const csvPath = path.join(dataDir, 'Exposed-Items.csv');
+    console.log(`解析数据: ${csvPath}`);
     const start = performance.now();
-    const result = await ingestFromFile(filePath);
+    const result = await ingestFromFile(csvPath);
     const end = performance.now();
     console.warn(`[警告] 执行耗时 ${((end - start) / 1000).toFixed(2)} 秒，请确保 odoo 数据链接通畅`);
+
+    loadAllReferenceData(dataDir);
+
     const total = await countRows();
     console.log(`向量数据库初始化完成. 已录入 ${result.count} 项. 数据库总数: ${total}`);
   } catch (err) {
