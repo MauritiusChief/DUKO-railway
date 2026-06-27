@@ -38,7 +38,8 @@ const dataDir = path.join(__dirname, 'data');
     initSkuDB(dataDir);
 
     const csvPath = path.join(dataDir, 'Exposed-Items.csv');
-    console.log(`解析数据: ${csvPath}`);
+    console.log(`解析 odoo 数据: ${csvPath}`);
+    console.warn('[警告] 数据库连接失败！请检查 odoo 数据连接');
     const start = performance.now();
     const result = await ingestFromFile(csvPath);
     const end = performance.now();
