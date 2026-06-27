@@ -379,19 +379,21 @@ export async function executeSearchSkuStructured(args: Record<string, unknown>):
     .map((id) => colorFilteredById.get(id)!)
     .filter(Boolean);
 
-  // [4] 向量检索（与当前候选集取交集）
+  // [4] 向量检索（软排序：匹配的排前面，未匹配的不丢弃）
   if (vectorQuery && candidates.length > 0) {
     const queryVector = await getEmbedding(vectorQuery);
-    const vectorResults = await searchSimilar(queryVector, Math.max(topK * 4, 20));
-    const vectorIdSet = new Set(vectorResults.map((r) => r.id));
-
-    candidates = candidates.filter((r) => vectorIdSet.has(r.id));
-
-    // 按向量距离升序排列
+    const searchK = Math.max(candidates.length, 20);
+    const vectorResults = await searchSimilar(queryVector, searchK);
     const vectorDistMap = new Map(vectorResults.map((r) => [r.id, r._distance]));
+
+    const maxDist = vectorResults.length > 0
+      ? Math.max(...vectorResults.map((r) => r._distance))
+      : 2;
+    const fallbackDist = maxDist + 0.1;
+
     candidates.sort((a, b) => {
-      const da = vectorDistMap.get(a.id) ?? Infinity;
-      const db = vectorDistMap.get(b.id) ?? Infinity;
+      const da = vectorDistMap.get(a.id) ?? fallbackDist;
+      const db = vectorDistMap.get(b.id) ?? fallbackDist;
       return da - db;
     });
   } else if (bm25ScoreMap.size > 0 && candidates.length > 0) {
