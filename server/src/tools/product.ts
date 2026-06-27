@@ -12,8 +12,7 @@
 import { markdownTable } from 'markdown-table';
 import type { ToolDefinition } from '../types/tool.js';
 import type { MutableManifest, ProductEntry } from '../types/manifest.js';
-import { findRecordByItemNameCI } from '../db/sku.js';
-import { getItemsMap, getPartsMap, getProductMap } from '../services/utils.js';
+import { findRecordByItemNameCI, getItemRow, getPartRow, getProductRow } from '../db/sku.js';
 
 // ==================================================================
 //  lookupProductInventory
@@ -44,10 +43,6 @@ export function executeLookupProductInventory(args: Record<string, unknown>): st
     return '## lookupProductInventory 结果\n\n**错误**: `itemName` 为必填项。';
   }
 
-  const itemsMap = getItemsMap();
-  const partsMap = getPartsMap();
-  const productMap = getProductMap();
-
   const exposedRecord = findRecordByItemNameCI(itemName);
   if (!exposedRecord) {
     return `## lookupProductInventory 结果\n\n**未找到**: Exposed-Items 中不存在产品 "${itemName}"。请核实名称是否正确。`;
@@ -74,7 +69,7 @@ export function executeLookupProductInventory(args: Record<string, unknown>): st
   const seenProductNames = new Set<string>();
 
   for (const resolveName of itemNamesToResolve) {
-    const itemRow = itemsMap.get(resolveName);
+    const itemRow = getItemRow(resolveName);
     if (!itemRow) continue;
 
     const partNames = new Set<string>();
@@ -83,13 +78,13 @@ export function executeLookupProductInventory(args: Record<string, unknown>): st
     if (itemRow.extraPart) partNames.add(itemRow.extraPart);
 
     for (const partName of partNames) {
-      const partRow = partsMap.get(partName);
+      const partRow = getPartRow(partName);
       const sharedPartName = partRow?.sharedPartName || partName;
 
       if (seenProductNames.has(sharedPartName)) continue;
       seenProductNames.add(sharedPartName);
 
-      const productRow = productMap.get(sharedPartName);
+      const productRow = getProductRow(sharedPartName);
 
       rows.push({
         exposedItem: resolveName,
@@ -163,9 +158,6 @@ export function executeLookupItemComponents(args: Record<string, unknown>): stri
     return '## lookupItemComponents 结果\n\n**错误**: `itemName` 为必填项。';
   }
 
-  const itemsMap = getItemsMap();
-  const partsMap = getPartsMap();
-
   const exposedRecord = findRecordByItemNameCI(itemName);
   if (!exposedRecord) {
     return `## lookupItemComponents 结果\n\n**未找到**: Exposed-Items 中不存在产品 "${itemName}"。请核实名称是否正确。`;
@@ -189,11 +181,11 @@ export function executeLookupItemComponents(args: Record<string, unknown>): stri
   const rows: ComponentRow[] = [];
 
   for (const resolveName of itemNamesToResolve) {
-    const itemRow = itemsMap.get(resolveName);
+    const itemRow = getItemRow(resolveName);
     if (!itemRow) continue;
 
     if (itemRow.doorPart) {
-      const partRow = partsMap.get(itemRow.doorPart);
+      const partRow = getPartRow(itemRow.doorPart);
       rows.push({
         sourceItem: resolveName,
         componentType: '柜门组件',
@@ -203,7 +195,7 @@ export function executeLookupItemComponents(args: Record<string, unknown>): stri
     }
 
     if (itemRow.cabinetPart) {
-      const partRow = partsMap.get(itemRow.cabinetPart);
+      const partRow = getPartRow(itemRow.cabinetPart);
       rows.push({
         sourceItem: resolveName,
         componentType: '主体组件',
@@ -213,7 +205,7 @@ export function executeLookupItemComponents(args: Record<string, unknown>): stri
     }
 
     if (itemRow.extraPart) {
-      const partRow = partsMap.get(itemRow.extraPart);
+      const partRow = getPartRow(itemRow.extraPart);
       rows.push({
         sourceItem: resolveName,
         componentType: '额外组件',

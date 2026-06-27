@@ -27,12 +27,8 @@ import {
   checkExposedSchema,
   generateProductsSchema,
 } from '../validation/schemas.js';
-import {
-  getColorEntries,
-  getItemsMap,
-  getPartsMap,
-} from '../services/utils.js';
-import { findComboExists, findRecordByItemNameCI } from '../db/sku.js';
+import { getColorEntries } from '../services/utils.js';
+import { findComboExists, findRecordByItemNameCI, getItemRow, getPartRow, getAllItemRows } from '../db/sku.js';
 import { ACCESSORY_SHAPE_TYPE_CODES, SHAPE_TYPES_COLOR_NA, SHAPE_TYPES_SIZE_NA } from '../constants.js';
 
 export const tableParseRouter = Router();
@@ -114,9 +110,6 @@ tableParseRouter.post('/generate-products', validate(generateProductsSchema), (_
     return;
   }
 
-  const itemsMap = getItemsMap();
-  const partsMap = getPartsMap();
-
   // sharedPartName → quantity 聚合
   const productQtyMap = new Map<string, ProductEntry>();
   const unresolvedIndices: number[] = [];
@@ -170,7 +163,7 @@ tableParseRouter.post('/generate-products', validate(generateProductsSchema), (_
     let resolvedCount = 0;
 
     for (const resolveName of itemNamesToResolve) {
-      const itemRow = itemsMap.get(resolveName);
+      const itemRow = getItemRow(resolveName);
       if (!itemRow) continue;
 
       // 根据定制要求过滤零件：
@@ -190,7 +183,7 @@ tableParseRouter.post('/generate-products', validate(generateProductsSchema), (_
       }
 
       for (const partName of partNames) {
-        const partRow = partsMap.get(partName);
+        const partRow = getPartRow(partName);
         const sharedPartName = partRow?.sharedPartName || partName;
 
         const existing = productQtyMap.get(sharedPartName);
@@ -208,22 +201,22 @@ tableParseRouter.post('/generate-products', validate(generateProductsSchema), (_
       resolvedCount++;
     }
 
-    // 若复合物品所有子项均无法解析，或普通物品在 Items.csv 中找不到 → 未解析
+    // 若复合物品所有子项均无法解析，或普通物品在 items 表中找不到 → 未解析
     if (resolvedCount === 0) {
       unresolvedIndices.push(i);
     }
   }
 
-  // 从 Items.csv 中找出所有配件 shapeType 对应的 sharedPartName，
+  // 从 items 表中找出所有配件 shapeType 对应的 sharedPartName，
   // 用于将配件产品排在最终结果末尾
   const accSharedParts = new Set<string>();
-  for (const [, itemRow] of itemsMap) {
+  for (const itemRow of getAllItemRows()) {
     if (ACCESSORY_SHAPE_TYPE_CODES.includes(itemRow.shapeTypeCode)) {
       const partNames = new Set(
         [itemRow.doorPart, itemRow.cabinetPart, itemRow.extraPart].filter(Boolean),
       );
       for (const partName of partNames) {
-        const partRow = partsMap.get(partName);
+        const partRow = getPartRow(partName);
         accSharedParts.add(partRow?.sharedPartName || partName);
       }
     }
