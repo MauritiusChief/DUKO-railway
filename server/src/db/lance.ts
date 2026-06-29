@@ -2,7 +2,7 @@
  * LanceDB 向量数据库连接层
  *
  * LanceDB 是一款嵌入式向量数据库，数据以文件形式存储在本地
- * （server/src/data/sku.lance/），无需额外服务进程。
+ * （<DB_DIR>/sku.lance/），无需额外服务进程。
  *
  * 功能：
  *  - 连接管理（首次建表时用占位记录推断 schema，随后 replaceAll 覆盖）
@@ -28,6 +28,7 @@
 import * as lancedb from '@lancedb/lancedb';
 import type { Connection, Table, Data } from '@lancedb/lancedb';
 import path from 'path';
+import fs from 'fs';
 import type { SkuRecord, SkuSearchResult } from '../types/sku.js';
 
 // 全局缓存：Connection 和 Table 对象复用
@@ -45,6 +46,7 @@ let resolvedDbPath: string;
  * @param dbDir - 数据根目录（由 DB_DIR 决定），LanceDB 数据写入 <dbDir>/sku.lance/
  */
 export async function initDB(dbDir: string): Promise<Table> {
+  fs.mkdirSync(dbDir, { recursive: true });
   resolvedDbPath = path.join(dbDir, 'sku.lance');
   db = await lancedb.connect(resolvedDbPath);
   const tableNames = await db.tableNames();

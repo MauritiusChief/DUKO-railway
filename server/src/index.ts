@@ -137,7 +137,7 @@ app.get('*', (_req, res) => {
   validateSecrets();
 
   // 初始化用户数据库并播种管理员账号
-  const dbDir = path.resolve(__dirname, config.dbDir);
+  const dbDir = config.dbDir;
   initUserDB(dbDir);
   const adminHash = bcrypt.hashSync(config.adminPassword, 12);
   seedAdminUser(config.adminUsername, adminHash);

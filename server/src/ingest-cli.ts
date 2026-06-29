@@ -21,12 +21,12 @@
 
 import 'dotenv/config';
 import path from 'path';
-import { fileURLToPath } from 'url';
+import { config } from './config/env.js';
 import { initDB, countRows } from './db/lance.js';
 import { initSkuDB } from './db/sku.js';
 import { ingestFromFile, loadAllReferenceData } from './services/sku-ingest.js';
 
-const dataDir = path.resolve(process.env.DB_DIR || path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'data'));
+const dataDir = config.dbDir;
 
 (async () => {
   try {

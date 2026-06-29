@@ -19,12 +19,14 @@
  *   Parts.csv ─┘
  */
 
+import 'dotenv/config';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { cleanCSV } from './services/sku-clean.js';
 import { deriveColorTable, deriveSinglePartTable } from './services/sku-derive.js';
 import { generateItemsTable } from './services/sku-items.js';
 import { generateExposedItemsTable, generateExposedColorTable, generateExposedTypesTable } from './services/sku-exposed.js';
+import { config } from './config/env.js';
 
 /** 根据 dataDir 计算所有输入/输出路径 */
 function resolvePaths(dataDir: string) {
@@ -107,8 +109,7 @@ export function runAllSteps(dataDir: string): void {
 const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 
 if (isMain) {
-  const dir = path.resolve(process.env.DB_DIR || path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'data'));
-  const p = resolvePaths(dir);
+  const p = resolvePaths(config.dbDir);
   const step = (process.argv[2] || 'all').toLowerCase();
 
   const validSteps = ['all', 'clean', 'color', 'parts', 'items', 'exposed'];

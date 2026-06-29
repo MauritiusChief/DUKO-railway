@@ -7,6 +7,7 @@
 
 import Database from 'better-sqlite3';
 import path from 'path';
+import fs from 'fs';
 
 let db: Database.Database;
 
@@ -32,6 +33,7 @@ export interface SafeUser {
 
 /** 初始化用户数据库：打开/创建 SQLite 文件并建表 */
 export function initUserDB(dbDir: string): void {
+  fs.mkdirSync(dbDir, { recursive: true });
   const dbPath = path.join(dbDir, 'users.sqlite');
   db = new Database(dbPath);
 

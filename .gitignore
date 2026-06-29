@@ -8,3 +8,5 @@ server/public/script
 .cache/
 experiment/
 scripts/
+simvolume_data/
+dev_data/

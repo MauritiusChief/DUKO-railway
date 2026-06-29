@@ -23,14 +23,14 @@
 import 'dotenv/config';
 import path from 'path';
 import fs from 'fs';
-import { fileURLToPath } from 'url';
+import { config } from './config/env.js';
 import { runAllSteps } from './process-cli.js';
 import { initDB } from './db/lance.js';
 import { initSkuDB, getRecordCount, getColorRecordCount, getTypeRecordCount, getItemRecordCount, getPartRecordCount, getProductRecordCount } from './db/sku.js';
 import { ingestFromFile, loadAllReferenceData } from './services/sku-ingest.js';
 import { initBm25Index } from './services/bm25.js';
 
-const dataDir = path.resolve(process.env.DB_DIR || path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'data'));
+const dataDir = path.resolve(config.dbDir);
 
 // ==================================================================
 // 步骤 1：校验前置条件
