@@ -65,6 +65,7 @@ app.use(helmet({
       objectSrc: ["'none'"],
       frameSrc: ["'none'"],
     },
+    useDefaults: false,  // ← 同 wifi 网络下测试时，阻止 Helmet 合并默认值（含 upgrade-insecure-requests）
   },
   hsts: {
     maxAge: 31536000,
