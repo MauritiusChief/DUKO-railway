@@ -2,7 +2,9 @@
 
 ## 目标
 
-将当前项目部署到 Railway，使其可通过公网 HTTPS 在全美国稳定访问，并支持管理员只上传 `Product-raw.csv` 后，剩余 SKU 数据处理、SQLite 导入、LanceDB 向量库重建都在云端完成。
+将当前项目部署到 Railway，使其可通过公网 HTTPS 在全美国稳定访问。当前阶段只需要一次性手动将 `Product-raw.csv` 放入 Railway Volume，随后在云端手动运行数据刷新命令，完成 SKU 数据处理、SQLite 导入和 LanceDB 向量库重建。
+
+本阶段不新增管理员上传 API，也不新增管理员页面。未来接入 ERP API 时，复用同一套云端数据刷新流程，只替换 `Product-raw.csv` 的来源。
 
 最终目标架构：
 
@@ -66,7 +68,7 @@ DB_DIR=/data
 
 ## 数据处理目标流程
 
-管理员上传 `Product-raw.csv` 后，云端执行完整数据管线：
+一次性手动将 `Product-raw.csv` 放入 `/data` 后，云端执行完整数据管线：
 
 ```text
 Product-raw.csv
@@ -82,12 +84,12 @@ Product-raw.csv
   -> BM25 内存索引重建
 ```
 
-上传后的服务行为：
+刷新后的服务行为：
 
-- 导入过程中旧数据继续服务。
-- 同一时间只允许一个导入任务运行。
-- 导入成功后整体切换为新数据。
-- 导入失败时保留错误状态，尽量不影响已存在数据。
+- 当前阶段只计划手动执行一次数据刷新。
+- 数据刷新通过 Railway Shell 或 one-off command 手动触发。
+- 数据刷新不通过 Web API 暴露给前端或管理员页面。
+- 未来 ERP API 接入后，由 ERP 拉取流程替代手动放置 `Product-raw.csv`。
 
 ## 阶段 1：新增 Railway 部署入口
 
@@ -203,113 +205,147 @@ const dataDir = path.resolve(__dirname, 'data');
 runAllSteps(dataDir)
 ```
 
-CLI 仍可保留默认行为，但服务端后台任务应能显式传入 `/data`。
+CLI 仍可保留默认行为，但 Railway 数据刷新命令应能显式使用 `/data`。
 
-## 阶段 5：新增管理员上传 API
+## 阶段 5：新增手动数据刷新 CLI
 
-新增管理员专用数据管理路由。
+当前阶段不新增管理员上传 API、状态 API 或后台 job。改为新增一个可在 Railway Shell 或 one-off command 中手动执行的 CLI。
 
-建议文件：
-
-```text
-server/src/routes/adminData.ts
-server/src/services/data-import-job.ts
-```
-
-建议接口：
+建议新增：
 
 ```text
-POST /api/admin/data/upload-product-raw
-GET  /api/admin/data/import-status
-POST /api/admin/data/rebuild
+server/src/refresh-data-cli.ts
 ```
 
-权限要求：
+建议新增 npm script：
 
-```text
-authenticateToken
-requireAdmin
-```
-
-上传接口行为：
-
-```text
-1. 校验管理员权限
-2. 校验上传文件存在
-3. 校验文件扩展名为 .csv
-4. 限制文件大小，例如 50MB 或 100MB
-5. 保存为 /data/Product-raw.csv.tmp
-6. 校验 CSV 基本格式和必要列
-7. 原子替换为 /data/Product-raw.csv
-8. 启动后台导入任务
-9. 立即返回当前导入状态
-```
-
-上传建议使用 `multipart/form-data`。可以引入 `multer`，也可以使用其他轻量方案。
-
-## 阶段 6：新增后台导入 Job
-
-不建议上传请求同步跑完整导入，因为 embedding 和 LanceDB 重建可能耗时较长，容易超时。
-
-第一版建议使用进程内单任务 Job，不引入 Redis 或独立队列。
-
-状态模型：
-
-```ts
-type ImportStatus = 'idle' | 'processing' | 'success' | 'failed';
-```
-
-状态内容：
-
-```ts
+```json
 {
-  status: 'processing',
-  step: 'ingesting',
-  startedAt: string,
-  finishedAt?: string,
-  error?: string,
-  counts?: {
-    products?: number,
-    parts?: number,
-    items?: number,
-    exposedItems?: number,
-    vectors?: number
+  "scripts": {
+    "data:refresh": "node dist/refresh-data-cli.js"
   }
 }
 ```
 
-Job 执行流程：
+或在部署后直接运行：
+
+```bash
+node dist/refresh-data-cli.js
+```
+
+CLI 默认读取：
 
 ```text
-1. 检查是否已有任务运行
-2. 设置状态为 processing
+<DB_DIR>/Product-raw.csv
+```
+
+Railway 生产环境中即：
+
+```text
+/data/Product-raw.csv
+```
+
+CLI 执行流程：
+
+```text
+1. 校验 DB_DIR 存在
+2. 校验 /data/Product-raw.csv 存在
 3. 执行 runAllSteps(dataDir)
 4. 初始化 SQLite
 5. 初始化 LanceDB
 6. 执行 ingestFromFile(/data/Exposed-Items.csv)
 7. 执行 loadAllReferenceData(dataDir)
 8. 执行 initBm25Index()
-9. 设置状态为 success
-10. 捕获错误并设置状态为 failed
+9. 输出处理结果和计数
+10. 失败时以非 0 exit code 退出
 ```
 
-导入完成后必须重建 BM25：
+导入完成后仍必须重建 BM25：
 
 ```ts
 initBm25Index()
 ```
 
-否则 SQLite 中的新数据已经存在，但 BM25 内存索引仍可能使用旧数据。
+否则 SQLite 中的新数据已经存在，但当前进程中的 BM25 内存索引仍可能使用旧数据。
 
-## 阶段 7：运行时数据刷新策略
+如果数据刷新 CLI 是在独立 one-off command 中运行，Web Service 进程不会自动拿到新的 BM25 内存索引。刷新完成后应重启 Railway Web Service，让服务启动时重新读取 SQLite 并初始化 BM25。
+
+## 阶段 6：一次性手动放置 Product-raw.csv
+
+当前阶段只需要上传一次 `Product-raw.csv`，可以接受手动操作。
+
+可选方式：
+
+- 如果 Railway Dashboard 当前提供 Volume 文件上传能力，可以临时使用一次，将文件放到 `/data/Product-raw.csv`。
+- 如果 Dashboard 不方便上传，则将 CSV 放到临时私有下载链接，再在 Railway Shell 中下载到 `/data/Product-raw.csv`。
+
+临时下载方式示例：
+
+```bash
+curl -L "<temporary-csv-url>" -o /data/Product-raw.csv
+```
+
+建议下载后检查文件：
+
+```bash
+ls -lh /data/Product-raw.csv
+head -n 1 /data/Product-raw.csv
+```
+
+然后运行数据刷新：
+
+```bash
+npm --prefix server run data:refresh
+```
+
+或：
+
+```bash
+node server/dist/refresh-data-cli.js
+```
+
+刷新完成后重启 Web Service，确保运行中的 Express 进程重新加载最新 SQLite、LanceDB 和 BM25。
+
+## 阶段 7：未来 ERP API 演进方向
+
+未来接 ERP API 时，不改变核心数据刷新管线，只替换 `Product-raw.csv` 的来源。
+
+当前临时流程：
+
+```text
+手动放置 Product-raw.csv
+  -> refresh-data-cli
+  -> Product.csv / Items.csv / Exposed-Items.csv
+  -> SQLite / LanceDB
+```
+
+未来 ERP 流程：
+
+```text
+ERP API 拉取 Product raw 数据
+  -> 写入 /data/Product-raw.csv
+  -> 同一套 refresh pipeline
+  -> Product.csv / Items.csv / Exposed-Items.csv
+  -> SQLite / LanceDB
+```
+
+因此第一版代码应尽量把核心逻辑设计成：
+
+```text
+refreshFromRawCsv(dataDir)
+```
+
+而不是绑定到上传 API 或页面。
+
+## 阶段 8：运行时数据刷新策略
 
 第一版采用最小复杂度策略：
 
-- 旧数据在导入过程中继续服务。
+- 数据刷新手动执行，计划只执行一次。
+- Web Service 可在数据刷新完成后重启。
 - SQLite 表使用事务性全量替换。
 - LanceDB 使用现有全量替换流程。
-- 导入完成后重建 BM25。
-- 同一时间禁止第二个导入任务。
+- Web Service 重启后重新初始化 BM25。
 
 后续如果发现 LanceDB 重建期间有短暂查询失败，可以升级为蓝绿目录切换：
 
@@ -319,34 +355,6 @@ initBm25Index()
 ```
 
 第一版不建议直接引入该复杂度。
-
-## 阶段 8：可选管理员页面
-
-可以先只做 API，用 Postman 或 curl 上传。但为了日常使用，建议增加管理员页面。
-
-建议新增：
-
-```text
-client/src/pages/AdminDataPage.tsx
-client/src/pages/AdminDataPage.css
-```
-
-建议路由：
-
-```text
-/admin/data
-```
-
-页面功能：
-
-- 选择 `Product-raw.csv`
-- 上传文件
-- 显示当前导入状态
-- 显示当前步骤
-- 显示错误信息
-- 显示完成时间和导入数量
-
-页面应使用现有 `AdminGuard` 保护。
 
 ## 阶段 9：Railway 环境变量
 
@@ -386,25 +394,29 @@ Railway 操作步骤：
 5. 添加 Volume，挂载到 `/data`。
 6. 配置环境变量。
 7. 部署。
-8. 打开 Railway 生成域名测试。
-9. 稳定后绑定自定义域名。
+8. 一次性将 `Product-raw.csv` 放入 `/data/Product-raw.csv`。
+9. 运行数据刷新命令。
+10. 重启 Web Service。
+11. 打开 Railway 生成域名测试。
+12. 稳定后绑定自定义域名。
 
 区域建议：
 
 - 用户遍布全美国：优先 US East 或 Railway 推荐的美国默认区域。
 - 西海岸用户明显更多：选择 US West。
 
-## 阶段 11：安全要求
+## 阶段 11：手动数据操作要求
 
-上传和导入相关接口必须满足：
+当前阶段没有 Web 上传接口，主要风险来自手动文件放置和命令执行。
 
-- 仅 admin 可访问。
-- 只接受 `.csv`。
-- 限制文件大小。
-- 上传到固定路径，不允许用户控制最终文件路径。
-- 使用临时文件再原子替换，避免半写入文件被处理。
-- 导入任务加锁，防止并发导入。
-- 错误响应不要泄露 API key、绝对路径或敏感环境变量。
+要求：
+
+- 文件最终路径固定为 `/data/Product-raw.csv`。
+- 放置文件后检查文件大小和 CSV 表头。
+- 数据刷新命令只在 Railway 运维环境中手动执行。
+- 不把 `Product-raw.csv` 提交进 Git。
+- 不在日志或文档中记录临时下载链接中的敏感 token。
+- 刷新完成后重启 Web Service。
 
 ## 阶段 12：本地验证清单
 
@@ -421,9 +433,9 @@ npm run railway:start
 1. 首页可打开
 2. admin 可以登录
 3. /api/script/download 可下载脚本
-4. 上传 Product-raw.csv 成功
-5. import-status 显示 processing
-6. import-status 最终显示 success
+4. 手动放置 Product-raw.csv
+5. 手动执行 data:refresh 成功
+6. 重启服务后数据仍可用
 7. /api/check-exposed 可用
 8. /api/generate-products 可用
 9. /api/chat 中产品查询工具可用
@@ -438,8 +450,8 @@ Railway 首次部署后验证：
 1. 首页可打开
 2. 登录可用
 3. Cookie refresh 可用
-4. 管理员上传 Product-raw.csv
-5. 导入任务成功完成
+4. `/data/Product-raw.csv` 已存在
+5. 手动数据刷新命令成功完成
 6. SKU 搜索有真实结果
 7. Table parse 可用
 8. Product generation 可用
@@ -455,14 +467,14 @@ Railway 首次部署后验证：
 2. 修复 `server/package.json`，移除 Windows-only build 和 `prebuild`。
 3. 统一 `DB_DIR`，让 CSV、SQLite、LanceDB 都使用 `/data`。
 4. 修改 `process-cli.ts`，让数据处理函数支持传入 `dataDir`。
-5. 新增 `data-import-job` 服务。
-6. 新增 admin 上传和状态查询 API。
-7. 导入完成后刷新 SQLite、LanceDB 和 BM25。
-8. 可选新增管理员上传页面。
-9. 本地完整验证。
-10. Railway 添加 Volume 和环境变量。
-11. Railway 部署。
-12. 上传真实 `Product-raw.csv` 并验证核心功能。
+5. 新增手动数据刷新 CLI。
+6. 数据刷新流程写入 SQLite 和 LanceDB。
+7. 刷新完成后通过服务重启重新加载 BM25。
+8. 本地完整验证。
+9. Railway 添加 Volume 和环境变量。
+10. Railway 部署。
+11. 一次性放置真实 `Product-raw.csv`。
+12. 手动运行数据刷新命令并验证核心功能。
 
 ## 第一版建议范围
 
@@ -472,10 +484,9 @@ Railway 首次部署后验证：
 - `script/` build 集成。
 - `server` build 跨平台化。
 - `DB_DIR` 统一。
-- admin CSV 上传 API。
-- 后台导入 job。
-- import status API。
+- 手动数据刷新 CLI。
+- 一次性手动放置 `Product-raw.csv` 的操作说明。
 - BM25 重建。
 - Railway 部署说明文档。
 
-管理员上传 UI 可以作为第二步。如果上线后需要非技术人员操作，则应在第一版中一起完成。
+不在第一版实现管理员上传 API、import status API 或管理员页面。未来接 ERP API 时，再把数据来源从手动文件替换为 ERP 拉取。
