@@ -124,7 +124,7 @@ railway ssh
 
 进入后可执行 `ls /data`、`node server/dist/refresh-data-cli.js` 等远程命令。
 
-> 关于 `railway volume` 的更详细用法（`upload`、`download` 等子命令），请参阅 [Railway CLI 官方文档](https://docs.railway.app/reference/cli)。
+> 关于 `railway volume` 的更详细用法（`upload`、`download` 等子命令），请参阅 [Railway CLI 官方文档](https://docs.railway.com/cli)。
 
 ## 7. 本地刷新数据后上传到 Volume
 
