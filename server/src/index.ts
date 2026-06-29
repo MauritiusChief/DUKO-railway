@@ -88,16 +88,9 @@ app.use('/api/table-parse', llmLimiter, authenticateToken, tableParseLlmRouter);
 app.use('/api/image-parse', llmLimiter, authenticateToken, imageParseRouter);              // POST /api/image-parse
 app.use('/api/layout/parse-image', llmLimiter, authenticateToken, layoutParseImageRouter); // POST /api/layout/parse-image
 
-// ---- 非 LLM 路由（/api 前缀 + apiLimiter）----
-app.use('/api', apiLimiter, authenticateToken);
-app.use('/api', tableParseRouter);    // GET /api/colors / POST /api/check-exposed / POST /api/generate-products
-app.use('/api', debugRouter);         // POST /api/debug/tool —— 工具测试接口（debug 用）
-app.use('/api', historyRouter);       // GET/POST/DELETE /api/history[/:id] —— 历史记录
-app.use('/api', notesRouter);         // GET/POST /api/notes —— 用户笔记
-
-// ---- ScriptCat 脚本下载端点 ----
+// ---- ScriptCat 脚本下载端点（无需登录）----
 // 供前端小按钮下载，文件名带构建时间戳以便用户确认是否为最新版本
-app.get('/api/script/download', (_req, res) => {
+app.get('/api/script/download', apiLimiter, (_req, res) => {
   const scriptPath = path.resolve(__dirname, '../public/script/duko-filler.user.js');
 
   if (!fs.existsSync(scriptPath)) {
@@ -120,6 +113,13 @@ app.get('/api/script/download', (_req, res) => {
   res.setHeader('Content-Disposition', `attachment; filename="${downloadName}"`);
   res.sendFile(scriptPath);
 });
+
+// ---- 非 LLM 路由（/api 前缀 + apiLimiter）----
+app.use('/api', apiLimiter, authenticateToken);
+app.use('/api', tableParseRouter);    // GET /api/colors / POST /api/check-exposed / POST /api/generate-products
+app.use('/api', debugRouter);         // POST /api/debug/tool —— 工具测试接口（debug 用）
+app.use('/api', historyRouter);       // GET/POST/DELETE /api/history[/:id] —— 历史记录
+app.use('/api', notesRouter);         // GET/POST /api/notes —— 用户笔记
 
 // ---- 前端静态文件（生产模式） ----
 const clientDist = path.resolve(__dirname, '../../client/dist');
