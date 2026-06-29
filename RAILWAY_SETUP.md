@@ -51,24 +51,18 @@
 
 首次部署后，服务应能启动（首页可打开），但 SKU 数据尚未加载。
 
-## 5. 一次性放置 Product-raw.csv
+## 5. 上传 Product-raw.csv 到 Volume
 
-### 方式 A：通过 Railway Shell 下载
+通过 Railway CLI 的 `railway volume browse /` 命令（TUI 文件管理器）将本地 `Product-raw.csv` 上传到 Volume 的 `/data` 目录。
 
-如果 CSV 文件托管在临时下载链接：
+1. 确保已安装 Railway CLI 并完成 SSH 配置
+2. 执行 `railway volume browse /`
+3. 在 TUI 中导航至 `/data`
+4. 上传 `Product-raw.csv`
 
-```bash
-# 进入 Railway Shell（从 Dashboard → Shell 标签页）
-curl -L "<csv-download-url>" -o /data/Product-raw.csv
-
-# 验证文件
-ls -lh /data/Product-raw.csv
-head -n 1 /data/Product-raw.csv
-```
-
-### 方式 B：通过 Railway Dashboard 上传
-
-如果 Dashboard 当前提供 Volume 文件管理功能，可直接上传到 `/data/Product-raw.csv`。
+> **Windows 用户**：需在 WSL 中安装 Railway CLI，详见 [RAILWAY_SETUP_WSL.md](./RAILWAY_SETUP_WSL.md)。
+>
+> 关于 `railway volume` 的更多用法，请参阅 [Railway CLI 官方文档](https://docs.railway.com/cli)。
 
 ## 6. 运行数据刷新
 
@@ -92,6 +86,43 @@ node server/dist/refresh-data-cli.js
 - 预热 BM25 索引
 
 成功后输出各项记录数汇总。
+
+### 本地刷新后上传（当 Railway 远程刷新耗时过长时）
+
+若 `refresh-data-cli` 在 Railway 上因 embedding 生成等步骤耗时过久（如超过 30 分钟），可在本地完成刷新，再将产物上传到 Volume：
+
+1. **准备本地环境**
+
+   ```bash
+   export DB_DIR=./local_data
+   mkdir -p $DB_DIR
+   cp /path/to/Product-raw.csv $DB_DIR/
+   ```
+
+2. **本地运行刷新**
+
+   ```bash
+   # 确保依赖已安装
+   npm run build
+   node server/dist/refresh-data-cli.js
+   ```
+
+3. **上传产物到 Railway Volume**
+
+   刷新完成后，`DB_DIR` 下生成的关键产物：
+
+   | 文件/目录 | 说明 | 必须上传 |
+   |-----------|------|:---:|
+   | `sku.sqlite` + `-wal` + `-shm` | SKU 结构化数据 | ✅ |
+   | `sku.lance/` | LanceDB 向量库 | ✅ |
+   | `Product-raw.csv` ~ `Exposed-Types.csv` 等中间 CSV | 已入 SQLite，可选保留 | ❌ |
+   | `users.sqlite` | 由 Web Service 启动时自动创建 | ❌ 无需上传 |
+
+   使用 `railway volume browse /` 进入 Volume TUI，导航至 `/data`，仅上传 `sku.sqlite*` 和 `sku.lance/` 目录即可。
+
+4. **重启 Railway Web Service**（在 Dashboard 中点击 Redeploy）
+
+   服务启动时会自动创建 `users.sqlite` 并从环境变量中初始化管理员账号。
 
 ## 7. 重启服务
 
