@@ -1,0 +1,10 @@
+{
+  "private": true,
+  "scripts": {
+    "railway:build": "npm --prefix client ci && npm --prefix client run build && npm --prefix script ci && npm --prefix script run build && npm --prefix server ci && npm --prefix server run build",
+    "railway:start": "npm --prefix server start"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
