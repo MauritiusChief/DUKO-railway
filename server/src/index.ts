@@ -65,6 +65,7 @@ app.use(helmet({
       objectSrc: ["'none'"],
       frameSrc: ["'none'"],
     },
+    // useDefaults: false,  // ← 同 wifi 网络下测试时，阻止 Helmet 合并默认值（含 upgrade-insecure-requests）
   },
   hsts: {
     maxAge: 31536000,
@@ -179,7 +180,7 @@ app.get('*', (_req, res) => {
   console.log('BM25 描述文本索引已就绪.');
 
   // 启动 HTTP 监听
-  app.listen(PORT, () => {
+  app.listen(PORT, '0.0.0.0', () => {
     console.log(`服务器正在监听 ${PORT} 端口`);
   });
 })();

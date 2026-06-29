@@ -1,11 +1,11 @@
 module.exports = {
   apps: [{
-    name: 'duko-chat',
+    name: 'duko-advance',
     script: 'dist/index.js',
     cwd: './server',
     env: {
       NODE_ENV: 'production',
-      PORT: 3021,
+      PORT: 3023,
     },
   }],
 };
