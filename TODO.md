@@ -20,9 +20,12 @@
 - chat panel 发消息会有竞态问题导致bug
 - N/A 占位处理逻辑分散在各个 agent 中，需要优化
 - N/A 逻辑当前是强行覆盖住，需要更合理的矫正手段，不会因为点了一下就强制要求了
+- 检查欧式 UT 为啥只有 BxxF, 没有上半部分
 
 ## 未完成
 
+- 发现 railway web 的 console 可以管理 `/data` 目录，应该不需要用到 railway cli 来管理 volume 了。
+  - 但疑似缺少新建目录功能，需要调整 refresh cli 来配合
+  - console 可以管理 `/data` 的话，那整个 wsl 都变成可选了
 - 还有个指挥者 agent，看怎么处理
 - ScriptCat 覆写模式不会检查数量
-- 检查欧式 UT 为啥只有 BxxF, 没有上半部分
