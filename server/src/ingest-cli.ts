@@ -26,13 +26,12 @@ import { initDB, countRows } from './db/lance.js';
 import { initSkuDB } from './db/sku.js';
 import { ingestFromFile, loadAllReferenceData } from './services/sku-ingest.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const dataDir = path.join(__dirname, 'data');
+const dataDir = path.resolve(process.env.DB_DIR || path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'data'));
 
 (async () => {
   try {
     console.log('初始化向量数据库...');
-    await initDB();
+    await initDB(dataDir);
 
     // 初始化 SQLite 数据库（ingestFromFile 需要写入结构化字段）
     initSkuDB(dataDir);

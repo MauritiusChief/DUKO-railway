@@ -28,15 +28,12 @@
 import * as lancedb from '@lancedb/lancedb';
 import type { Connection, Table, Data } from '@lancedb/lancedb';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import type { SkuRecord, SkuSearchResult } from '../types/sku.js';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DB_PATH = path.resolve(__dirname, '../data/sku.lance');
 
 // 全局缓存：Connection 和 Table 对象复用
 let db: Connection | null = null;
 let table: Table | null = null;
+let resolvedDbPath: string;
 
 /**
  * 初始化数据库连接并确保 sku 表存在。
@@ -44,9 +41,12 @@ let table: Table | null = null;
  * 首次建表时写入一条占位记录（384 维零向量），
  * 让 LanceDB 据此推断各列的 schema（类型、维度）。
  * 后续 replaceAll 会覆盖这条占位记录，不影响实际数据。
+ *
+ * @param dbDir - 数据根目录（由 DB_DIR 决定），LanceDB 数据写入 <dbDir>/sku.lance/
  */
-export async function initDB(): Promise<Table> {
-  db = await lancedb.connect(DB_PATH);
+export async function initDB(dbDir: string): Promise<Table> {
+  resolvedDbPath = path.join(dbDir, 'sku.lance');
+  db = await lancedb.connect(resolvedDbPath);
   const tableNames = await db.tableNames();
   if (tableNames.includes('sku')) {
     table = await db.openTable('sku');
@@ -71,10 +71,10 @@ export async function initDB(): Promise<Table> {
   return table;
 }
 
-/** 懒加载：获取已缓存的 Table 实例，没有则先初始化 */
+/** 获取已缓存的 Table 实例（需先调用 initDB） */
 export async function getTable(): Promise<Table> {
   if (table) return table;
-  return initDB();
+  throw new Error('LanceDB 未初始化，请先调用 initDB(dbDir)');
 }
 
 /** 追加写入记录到 LanceDB（不含 SQLite 同步 —— 由上层协调） */
@@ -89,7 +89,8 @@ export async function insertRows(records: SkuRecord[]): Promise<void> {
  */
 export async function replaceAll(records: SkuRecord[]): Promise<void> {
   if (!db) {
-    db = await lancedb.connect(DB_PATH);
+    if (!resolvedDbPath) throw new Error('LanceDB 未初始化，请先调用 initDB()');
+    db = await lancedb.connect(resolvedDbPath);
   }
   try { await db.dropTable('sku'); } catch { /* 表可能不存在 */ }
   table = null;

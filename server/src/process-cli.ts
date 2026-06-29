@@ -26,58 +26,64 @@ import { deriveColorTable, deriveSinglePartTable } from './services/sku-derive.j
 import { generateItemsTable } from './services/sku-items.js';
 import { generateExposedItemsTable, generateExposedColorTable, generateExposedTypesTable } from './services/sku-exposed.js';
 
-// ============================================================
-// ESM 路径解析 —— 确保无论 CLI 运行还是被 import 路径都正确
-// ============================================================
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const dataDir = path.resolve(__dirname, 'data');
+/** 根据 dataDir 计算所有输入/输出路径 */
+function resolvePaths(dataDir: string) {
+  return {
+    raw: path.join(dataDir, 'Product-raw.csv'),
+    clean: path.join(dataDir, 'Product.csv'),
+    color: path.join(dataDir, 'Color.csv'),
+    parts: path.join(dataDir, 'Parts.csv'),
+    items: path.join(dataDir, 'Items.csv'),
+    exposedItems: path.join(dataDir, 'Exposed-Items.csv'),
+    exposedColor: path.join(dataDir, 'Exposed-Color.csv'),
+    exposedTypes: path.join(dataDir, 'Exposed-Types.csv'),
+  };
+}
 
-const PATH_RAW = path.join(dataDir, 'Product-raw.csv');
-const PATH_CLEAN = path.join(dataDir, 'Product.csv');
-const PATH_COLOR = path.join(dataDir, 'Color.csv');
-const PATH_PARTS = path.join(dataDir, 'Parts.csv');
-const PATH_ITEMS = path.join(dataDir, 'Items.csv');
-const PATH_EXPOSED_ITEMS = path.join(dataDir, 'Exposed-Items.csv');
-const PATH_EXPOSED_COLOR = path.join(dataDir, 'Exposed-Color.csv');
-const PATH_EXPOSED_TYPES = path.join(dataDir, 'Exposed-Types.csv');
-
 // ============================================================
-// 步骤函数
+// 步骤函数（均接受明确路径参数）
 // ============================================================
 
 /** 步骤 1：清洗 Product-raw.csv → Product.csv */
-function runClean(): void {
-  const { count } = cleanCSV(PATH_RAW, PATH_CLEAN);
+function runClean(rawPath: string, cleanPath: string): void {
+  const { count } = cleanCSV(rawPath, cleanPath);
   console.log(`[警告] Product 数据可能不是最新! ${count} 行`);
 }
 
 /** 步骤 2：从 Product.csv 生成 Color.csv */
-function runColor(): void {
-  const { count } = deriveColorTable(PATH_CLEAN, PATH_COLOR);
+function runColor(cleanPath: string, colorPath: string): void {
+  const { count } = deriveColorTable(cleanPath, colorPath);
   console.log(`[警告] Color 数据可能不是最新! ${count} 行`);
 }
 
 /** 步骤 3：从 Product.csv 生成 Parts.csv */
-function runParts(): void {
-  const { count } = deriveSinglePartTable(PATH_CLEAN, PATH_PARTS);
+function runParts(cleanPath: string, partsPath: string): void {
+  const { count } = deriveSinglePartTable(cleanPath, partsPath);
   console.log(`[警告] Parts 数据可能不是最新! ${count} 行`);
 }
 
 /** 步骤 4：从 Parts.csv 生成 Items.csv */
-function runItems(): void {
-  const { count } = generateItemsTable(PATH_PARTS, PATH_ITEMS);
+function runItems(partsPath: string, itemsPath: string): void {
+  const { count } = generateItemsTable(partsPath, itemsPath);
   console.log(`[警告] Items 数据可能不是最新! ${count} 行`);
 }
 
-/** 步骤 5：从 Items.csv + Parts.csv 生成 Exposed-Items.csv，同时从 Color.csv 生成 Exposed-Color.csv */
-function runExposed(): void {
-  const { count } = generateExposedItemsTable(PATH_ITEMS, PATH_PARTS, PATH_EXPOSED_ITEMS);
+/** 步骤 5：从 Items.csv + Parts.csv 生成 Exposed-Items.csv，同时从 Color.csv 生成 Exposed-Color/Exposed-Types.csv */
+function runExposed(
+  itemsPath: string,
+  partsPath: string,
+  exposedItemsPath: string,
+  colorPath: string,
+  exposedColorPath: string,
+  exposedTypesPath: string,
+): void {
+  const { count } = generateExposedItemsTable(itemsPath, partsPath, exposedItemsPath);
   console.log(`[警告] DUKO Exported Items 数据可能不是最新! ${count} 行`);
 
-  const { count: colorCount } = generateExposedColorTable(PATH_COLOR, PATH_EXPOSED_COLOR);
+  const { count: colorCount } = generateExposedColorTable(colorPath, exposedColorPath);
   console.log(`[警告] DUKO Exported Color 数据可能不是最新! ${colorCount} 行`);
 
-  const { count: typesCount } = generateExposedTypesTable(PATH_ITEMS, PATH_PARTS, PATH_EXPOSED_TYPES);
+  const { count: typesCount } = generateExposedTypesTable(itemsPath, partsPath, exposedTypesPath);
   console.log(`[警告] DUKO Exported Types 数据可能不是最新! ${typesCount} 行`);
 }
 
@@ -86,12 +92,13 @@ function runExposed(): void {
 // ============================================================
 
 /** 按序执行全部处理步骤（clean → color → parts → items → exposed） */
-export function runAllSteps(): void {
-  runClean();
-  runColor();
-  runParts();
-  runItems();
-  runExposed();
+export function runAllSteps(dataDir: string): void {
+  const p = resolvePaths(dataDir);
+  runClean(p.raw, p.clean);
+  runColor(p.clean, p.color);
+  runParts(p.clean, p.parts);
+  runItems(p.parts, p.items);
+  runExposed(p.items, p.parts, p.exposedItems, p.color, p.exposedColor, p.exposedTypes);
 }
 
 // ============================================================
@@ -100,6 +107,8 @@ export function runAllSteps(): void {
 const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 
 if (isMain) {
+  const dir = path.resolve(process.env.DB_DIR || path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'data'));
+  const p = resolvePaths(dir);
   const step = (process.argv[2] || 'all').toLowerCase();
 
   const validSteps = ['all', 'clean', 'color', 'parts', 'items', 'exposed'];
@@ -110,11 +119,11 @@ if (isMain) {
   }
 
   try {
-    if (step === 'clean' || step === 'all') runClean();
-    if (step === 'color' || step === 'all') runColor();
-    if (step === 'parts' || step === 'all') runParts();
-    if (step === 'items' || step === 'all') runItems();
-    if (step === 'exposed' || step === 'all') runExposed();
+    if (step === 'clean' || step === 'all') runClean(p.raw, p.clean);
+    if (step === 'color' || step === 'all') runColor(p.clean, p.color);
+    if (step === 'parts' || step === 'all') runParts(p.clean, p.parts);
+    if (step === 'items' || step === 'all') runItems(p.parts, p.items);
+    if (step === 'exposed' || step === 'all') runExposed(p.items, p.parts, p.exposedItems, p.color, p.exposedColor, p.exposedTypes);
   } catch (err) {
     console.error('数据处理失败:', err);
     process.exit(1);

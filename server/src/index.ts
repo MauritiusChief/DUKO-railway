@@ -147,17 +147,17 @@ app.get('*', (_req, res) => {
   initSkuDB(dbDir);
 
   // 初始化 LanceDB 连接/建表（向量索引）
-  await initDB();
+  await initDB(dbDir);
 
   // AUTO_PROCESS：dev 模式下自动执行清洗数据库 → 生成 exposed 表
   if (process.env.AUTO_PROCESS === 'true') {
-    runAllSteps();
+    runAllSteps(dbDir);
   }
 
   if (process.env.AUTO_INGEST === 'true') {
     // AUTO_INGEST=true：SQLite 为空时自动导入 CSV 到 SQLite + LanceDB + 引用表
     if (getRecordCount() === 0) {
-      const csvPath = path.resolve(__dirname, 'data', 'Exposed-Items.csv');
+      const csvPath = path.join(dbDir, 'Exposed-Items.csv');
       try {
         console.log(`自动解析 odoo 数据: ${csvPath}`);
         console.warn('[警告] 数据库连接失败！请检查 odoo 数据连接');
