@@ -65,7 +65,7 @@ app.use(helmet({
       objectSrc: ["'none'"],
       frameSrc: ["'none'"],
     },
-    useDefaults: false,  // ← 同 wifi 网络下测试时，阻止 Helmet 合并默认值（含 upgrade-insecure-requests）
+    // useDefaults: false,  // ← 同 wifi 网络下测试时，阻止 Helmet 合并默认值（含 upgrade-insecure-requests）
   },
   hsts: {
     maxAge: 31536000,
@@ -88,16 +88,9 @@ app.use('/api/table-parse', llmLimiter, authenticateToken, tableParseLlmRouter);
 app.use('/api/image-parse', llmLimiter, authenticateToken, imageParseRouter);              // POST /api/image-parse
 app.use('/api/layout/parse-image', llmLimiter, authenticateToken, layoutParseImageRouter); // POST /api/layout/parse-image
 
-// ---- 非 LLM 路由（/api 前缀 + apiLimiter）----
-app.use('/api', apiLimiter, authenticateToken);
-app.use('/api', tableParseRouter);    // GET /api/colors / POST /api/check-exposed / POST /api/generate-products
-app.use('/api', debugRouter);         // POST /api/debug/tool —— 工具测试接口（debug 用）
-app.use('/api', historyRouter);       // GET/POST/DELETE /api/history[/:id] —— 历史记录
-app.use('/api', notesRouter);         // GET/POST /api/notes —— 用户笔记
-
-// ---- ScriptCat 脚本下载端点 ----
+// ---- ScriptCat 脚本下载端点（无需登录）----
 // 供前端小按钮下载，文件名带构建时间戳以便用户确认是否为最新版本
-app.get('/api/script/download', (_req, res) => {
+app.get('/api/script/download', apiLimiter, (_req, res) => {
   const scriptPath = path.resolve(__dirname, '../public/script/duko-filler.user.js');
 
   if (!fs.existsSync(scriptPath)) {
@@ -121,6 +114,13 @@ app.get('/api/script/download', (_req, res) => {
   res.sendFile(scriptPath);
 });
 
+// ---- 非 LLM 路由（/api 前缀 + apiLimiter）----
+app.use('/api', apiLimiter, authenticateToken);
+app.use('/api', tableParseRouter);    // GET /api/colors / POST /api/check-exposed / POST /api/generate-products
+app.use('/api', debugRouter);         // POST /api/debug/tool —— 工具测试接口（debug 用）
+app.use('/api', historyRouter);       // GET/POST/DELETE /api/history[/:id] —— 历史记录
+app.use('/api', notesRouter);         // GET/POST /api/notes —— 用户笔记
+
 // ---- 前端静态文件（生产模式） ----
 const clientDist = path.resolve(__dirname, '../../client/dist');
 app.use(express.static(clientDist));
@@ -137,7 +137,7 @@ app.get('*', (_req, res) => {
   validateSecrets();
 
   // 初始化用户数据库并播种管理员账号
-  const dbDir = path.resolve(__dirname, config.dbDir);
+  const dbDir = config.dbDir;
   initUserDB(dbDir);
   const adminHash = bcrypt.hashSync(config.adminPassword, 12);
   seedAdminUser(config.adminUsername, adminHash);
@@ -147,17 +147,17 @@ app.get('*', (_req, res) => {
   initSkuDB(dbDir);
 
   // 初始化 LanceDB 连接/建表（向量索引）
-  await initDB();
+  await initDB(dbDir);
 
   // AUTO_PROCESS：dev 模式下自动执行清洗数据库 → 生成 exposed 表
   if (process.env.AUTO_PROCESS === 'true') {
-    runAllSteps();
+    runAllSteps(dbDir);
   }
 
   if (process.env.AUTO_INGEST === 'true') {
     // AUTO_INGEST=true：SQLite 为空时自动导入 CSV 到 SQLite + LanceDB + 引用表
     if (getRecordCount() === 0) {
-      const csvPath = path.resolve(__dirname, 'data', 'Exposed-Items.csv');
+      const csvPath = path.join(dbDir, 'Exposed-Items.csv');
       try {
         console.log(`自动解析 odoo 数据: ${csvPath}`);
         console.warn('[警告] 数据库连接失败！请检查 odoo 数据连接');
@@ -180,7 +180,7 @@ app.get('*', (_req, res) => {
   console.log('BM25 描述文本索引已就绪.');
 
   // 启动 HTTP 监听
-  app.listen(PORT, () => {
+  app.listen(PORT, '0.0.0.0', () => {
     console.log(`服务器正在监听 ${PORT} 端口`);
   });
 })();

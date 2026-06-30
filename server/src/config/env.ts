@@ -6,7 +6,15 @@
  *
  * 注意：对话轮数、搜索预算等 Agent 行为参数属于各 Agent 自身的配置，
  *       不由此处统一管理，而是由 Agent 构造函数参数决定。
+ *
+ * 数据目录解析规则（DB_DIR）：
+ *   1. DB_DIR 环境变量已设置 → 直接使用（Railway 上为 /data）
+ *   2. 运行环境是 dist/ 或 NODE_ENV=production → <项目根>/simvolume_data/
+ *   3. 其他情况（tsx dev 模式）        → <项目根>/dev_data/
  */
+
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 function getEnv(key: string, fallback?: string): string {
   return process.env[key] ?? fallback ?? '';
@@ -23,6 +31,18 @@ function getEnvInt(key: string, fallback: number): number {
   if (v === undefined) return fallback;
   const n = parseInt(v, 10);
   return isNaN(n) ? fallback : n;
+}
+
+/** 根据运行时上下文解析默认数据目录 */
+function resolveDataDir(): string {
+  const envDir = path.dirname(fileURLToPath(import.meta.url));
+  const serverDir = path.resolve(envDir, '..', '..');
+  const projectRoot = path.resolve(serverDir, '..');
+
+  const isProductionLike = envDir.split(path.sep).includes('dist') || process.env.NODE_ENV === 'production';
+  const subDir = isProductionLike ? 'simvolume_data' : 'dev_data';
+
+  return path.join(projectRoot, subDir);
 }
 
 export const config = {
@@ -56,8 +76,8 @@ export const config = {
   /** 管理员初始密码 —— 无 fallback，缺失或为默认值则启动报错 */
   adminPassword: getEnv('ADMIN_PASSWORD'),
 
-  /** SQLite 数据库目录（相对于 server/src） */
-  dbDir: getEnv('DB_DIR', 'data'),
+  /** 数据目录（SQLite / LanceDB / CSV）—— DB_DIR 环境变量优先，否则根据运行上下文自动选择 */
+  dbDir: getEnv('DB_DIR', resolveDataDir()),
 } as const;
 
 export type AppConfig = typeof config;

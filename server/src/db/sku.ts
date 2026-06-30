@@ -15,12 +15,14 @@
 
 import Database from 'better-sqlite3';
 import path from 'path';
+import fs from 'fs';
 import type { SkuRecord } from '../types/sku.js';
 
 let db: Database.Database;
 
 /** 初始化 Exposed-Items 数据库：打开/创建 SQLite 文件并建表建索引 */
 export function initSkuDB(dbDir: string): void {
+  fs.mkdirSync(dbDir, { recursive: true });
   const dbPath = path.join(dbDir, 'sku.sqlite');
   db = new Database(dbPath);
 

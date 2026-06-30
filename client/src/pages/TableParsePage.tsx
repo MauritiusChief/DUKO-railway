@@ -27,7 +27,6 @@ import { useNavigate } from 'react-router-dom';
 import { useTableParseStore, SHAPE_TYPES_COLOR_NA, SHAPE_TYPES_SIZE_NA } from '../stores/tableParseStore';
 import { useAuthStore } from '../stores/authStore';
 import { useI18n } from '../i18n/context';
-import type { Lang } from '../i18n/translations';
 import type { ParsedItem } from '../types';
 import ChatPanel from '../components/ChatPanel';
 import './TableParsePage.css';
