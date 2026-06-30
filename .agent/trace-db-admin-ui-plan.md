@@ -104,7 +104,7 @@ Columns:
 | --- | --- | --- |
 | `id` | `INTEGER PRIMARY KEY AUTOINCREMENT` | Internal key. |
 | `conversation_id` | `TEXT NOT NULL REFERENCES trace_sessions(conversation_id) ON DELETE CASCADE` | Session ID. |
-| `message_index` | `INTEGER NOT NULL` | Message order within this conversation, matching markdown-style sequence. |
+| `message_index` | `INTEGER NOT NULL` | Message order within this conversation, matching markdown-style sequence and considering the existence of client_received message. |
 | `role` | `TEXT NOT NULL` | `system`, `user`, `tool`, or `tool_schema`. |
 | `name` | `TEXT` | Tool name or schema name. |
 | `tool_call_id` | `TEXT` | Tool result call ID. |
@@ -131,7 +131,7 @@ Columns:
 | --- | --- | --- |
 | `id` | `INTEGER PRIMARY KEY AUTOINCREMENT` | Internal key. |
 | `conversation_id` | `TEXT NOT NULL REFERENCES trace_sessions(conversation_id) ON DELETE CASCADE` | Session ID. |
-| `message_index` | `INTEGER NOT NULL` | Assistant message order within this conversation. |
+| `message_index` | `INTEGER NOT NULL` | Message order within this conversation, considering the existence of client_sent message. |
 | `finish_reason` | `TEXT` | `stop`, `tool_calls`, `length`, `content_filter`, etc. |
 | `reply` | `TEXT` | Assistant content. |
 | `reasoning` | `TEXT` | Reasoning content. |
@@ -278,8 +278,7 @@ Response shape:
 ```json
 {
   "session": {},
-  "sent": [],
-  "received": []
+  "messages": []
 }
 ```
 
@@ -302,7 +301,7 @@ Follow `/history` left/right structure:
 
 - Header with title and button back to home.
 - Left panel: reverse chronological trace session list.
-- Right panel: selected trace details.
+- Right panel: placeholer only, currently the layout system itself is under development.
 
 ### Left List
 
@@ -356,7 +355,7 @@ For markdown content:
 
 ## UI Grouping Algorithm
 
-Input: sorted `sent` and `received` arrays.
+Input: sorted `messages` arrays.
 
 Suggested approach:
 
@@ -364,7 +363,7 @@ Suggested approach:
 2. Treat each `client_received` row as an assistant top-level message.
 3. Match real tool result rows from `client_sent` where `role = 'tool'` to the nearest preceding assistant whose `tool_call_ids_json` contains `tool_call_id`.
 4. For `_budget_info`, attach by sequence to the previous real assistant/tool group.
-5. Tool schemas can be shown in a compact collapsible section near the top, or hidden behind a `Tool schemas` section.
+5. Tool schemas shown in a compact collapsible section near the top.
 
 ## Migration and Backward Compatibility
 
