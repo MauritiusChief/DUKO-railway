@@ -22,12 +22,15 @@
  */
 
 import { Router, type Request, type Response } from 'express';
+import { randomUUID } from 'crypto';
 import { createOpenRouterProvider } from '../llm/index.js';
 import { config } from '../config/env.js';
 import { ImageParseAgent } from '../agents/image-parse-agent.js';
 import { SSEConnection } from '../middleware/sse.js';
 import { validate } from '../middleware/validate.js';
 import { imageParseSchema } from '../validation/schemas.js';
+import { insertTraceSession, markSessionCompleted, markSessionError } from '../services/trace.js';
+import type { TraceContext } from '../types/trace.js';
 
 export const imageParseRouter = Router();
 
@@ -69,6 +72,35 @@ imageParseRouter.post('/', validate(imageParseSchema), async (req: Request, res:
     apiKey: config.openrouterApiKey,
   });
 
+  // ---- Trace：创建 session ----
+  const traceEnabled = config.traceLog;
+  let traceContext: TraceContext | undefined;
+  if (traceEnabled) {
+    const conversationId = randomUUID();
+    traceContext = {
+      conversationId,
+      userId: req.user!.userId,
+      username: req.user!.username,
+      mainAgent: 'ImageParseAgent',
+      agentName: 'ImageParseAgent',
+      route: '/api/image-parse',
+      provider: llm.providerName,
+      model: llm.model,
+      enabled: true,
+    };
+    insertTraceSession(
+      conversationId,
+      traceContext.userId,
+      traceContext.username,
+      traceContext.mainAgent,
+      traceContext.agentName,
+      null,
+      traceContext.route,
+      traceContext.provider,
+      traceContext.model,
+    );
+  }
+
   const agent = new ImageParseAgent(llm, {
     searchBudgetLimit: 16,
     maxRounds: 24,
@@ -84,8 +116,16 @@ imageParseRouter.post('/', validate(imageParseSchema), async (req: Request, res:
     },
   });
 
+  if (traceContext) {
+    agent.trace = traceContext;
+  }
+
   try {
     const text = await agent.parse({ images: imageList, colorHints, lang, notes });
+
+    if (traceContext) {
+      markSessionCompleted(traceContext.conversationId);
+    }
 
     sse.send('reply_done', {});
 
@@ -95,6 +135,9 @@ imageParseRouter.post('/', validate(imageParseSchema), async (req: Request, res:
     sse.send('done', {});
   } catch (err) {
     console.error('[image-parse] error:', err);
+    if (traceContext) {
+      markSessionError(traceContext.conversationId, err instanceof Error ? err.message : '图片解析失败');
+    }
     sse.send('error', {
       message: err instanceof Error ? err.message : '图片解析失败',
     });

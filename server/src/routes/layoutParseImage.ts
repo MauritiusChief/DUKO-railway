@@ -20,6 +20,7 @@
  */
 
 import { Router, type Request, type Response } from 'express';
+import { randomUUID } from 'crypto';
 import { createOpenRouterProvider } from '../llm/index.js';
 import { config } from '../config/env.js';
 import { LayoutAgent } from '../agents/layout-agent.js';
@@ -27,6 +28,8 @@ import { SSEConnection } from '../middleware/sse.js';
 import { validate } from '../middleware/validate.js';
 import { requireAdmin } from '../middleware/auth.js';
 import { layoutParseSchema } from '../validation/schemas.js';
+import { insertTraceSession, markSessionCompleted, markSessionError } from '../services/trace.js';
+import type { TraceContext } from '../types/trace.js';
 
 export const layoutParseImageRouter = Router();
 
@@ -61,6 +64,35 @@ layoutParseImageRouter.post('/', requireAdmin, validate(layoutParseSchema), asyn
     apiKey: config.openrouterApiKey,
   });
 
+  // ---- Trace：创建 session ----
+  const traceEnabled = config.traceLog;
+  let traceContext: TraceContext | undefined;
+  if (traceEnabled) {
+    const conversationId = randomUUID();
+    traceContext = {
+      conversationId,
+      userId: req.user!.userId,
+      username: req.user!.username,
+      mainAgent: 'LayoutAgent',
+      agentName: 'LayoutAgent',
+      route: '/api/layout/parse-image',
+      provider: llm.providerName,
+      model: llm.model,
+      enabled: true,
+    };
+    insertTraceSession(
+      conversationId,
+      traceContext.userId,
+      traceContext.username,
+      traceContext.mainAgent,
+      traceContext.agentName,
+      null,
+      traceContext.route,
+      traceContext.provider,
+      traceContext.model,
+    );
+  }
+
   const agent = new LayoutAgent(llm, {
     searchBudgetLimit: 5,
     maxRounds: 30,
@@ -72,6 +104,10 @@ layoutParseImageRouter.post('/', requireAdmin, validate(layoutParseSchema), asyn
     },
   });
 
+  if (traceContext) {
+    agent.trace = traceContext;
+  }
+
   try {
     const updatedLayout = await agent.parse({
       image: body.image,
@@ -80,9 +116,16 @@ layoutParseImageRouter.post('/', requireAdmin, validate(layoutParseSchema), asyn
       layout: body.layout,
     });
 
+    if (traceContext) {
+      markSessionCompleted(traceContext.conversationId);
+    }
+
     sse.send('done', {});
   } catch (err) {
     console.error('[layout-parse] error:', err);
+    if (traceContext) {
+      markSessionError(traceContext.conversationId, err instanceof Error ? err.message : '布局识别失败');
+    }
     sse.send('error', {
       message: err instanceof Error ? err.message : '布局识别失败',
     });

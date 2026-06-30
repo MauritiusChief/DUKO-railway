@@ -64,6 +64,9 @@ export const config = {
   /** 是否将对话历史写入 Markdown 日志文件 */
   chatLog: getEnvBool('CHAT_LOG', false),
 
+  /** 是否将 LLM 对话 trace 写入 SQLite 数据库（管理员可通过 /trace 页面查看） */
+  traceLog: getEnvBool('TRACE_LOG', false),
+
   /** JWT Access Token 签名密钥（15 分钟过期）—— 无 fallback，缺失或为示例值则启动报错 */
   jwtAccessSecret: getEnv('JWT_ACCESS_SECRET'),
 

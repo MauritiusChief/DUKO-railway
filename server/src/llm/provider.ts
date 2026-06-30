@@ -84,6 +84,9 @@ export interface LlmProvider<
   /** 此实例使用的模型名称（只读） */
   readonly model: string;
 
+  /** Provider 名称标识（如 'deepseek' / 'openrouter'），用于 trace 记录 */
+  readonly providerName: string;
+
   /** 发送多轮对话到 LLM，支持 function calling（非流式） */
   sendChat(
     messages: TMessage[],
@@ -156,6 +159,7 @@ export function createDeepSeekProvider(
 
   return {
     model: cfg.model,
+    providerName: 'deepseek',
 
     async sendChat(
       messages: ChatMessage[],
@@ -384,6 +388,7 @@ export function createOpenRouterProvider(
 
   return {
     model: cfg.model,
+    providerName: 'openrouter',
 
     async sendChat(
       messages: MultimodalChatMessage[],

@@ -29,12 +29,14 @@ import { debugRouter } from './routes/debug.js';
 import { authRouter, meHandler } from './routes/auth.js';
 import { historyRouter } from './routes/history.js';
 import { notesRouter } from './routes/notes.js';
+import { traceRouter } from './routes/trace.js';
 import { authenticateToken } from './middleware/auth.js';
 import { authLimiter, apiLimiter, llmLimiter } from './middleware/rateLimit.js';
 import { config, validateSecrets } from './config/env.js';
 import { initDB } from './db/lance.js';
 import { initSkuDB, getRecordCount } from './db/sku.js';
-import { initUserDB, seedAdminUser } from './db/users.js';
+import { initUserDB, seedAdminUser, getUserDb } from './db/users.js';
+import { initTraceDB, cleanupOldTraces } from './services/trace.js';
 import { ingestFromFile, loadAllReferenceData } from './services/sku-ingest.js';
 import { initBm25Index } from './services/bm25.js';
 import { runAllSteps } from './process-cli.js';
@@ -120,6 +122,7 @@ app.use('/api', tableParseRouter);    // GET /api/colors / POST /api/check-expos
 app.use('/api', debugRouter);         // POST /api/debug/tool —— 工具测试接口（debug 用）
 app.use('/api', historyRouter);       // GET/POST/DELETE /api/history[/:id] —— 历史记录
 app.use('/api', notesRouter);         // GET/POST /api/notes —— 用户笔记
+app.use('/api', traceRouter);         // GET /api/trace[/:conversationId] —— trace 查看（管理员）
 
 // ---- 前端静态文件（生产模式） ----
 const clientDist = path.resolve(__dirname, '../../client/dist');
@@ -139,6 +142,8 @@ app.get('*', (_req, res) => {
   // 初始化用户数据库并播种管理员账号
   const dbDir = config.dbDir;
   initUserDB(dbDir);
+  initTraceDB(getUserDb());
+  cleanupOldTraces();
   const adminHash = bcrypt.hashSync(config.adminPassword, 12);
   seedAdminUser(config.adminUsername, adminHash);
   console.log(`用户数据库已就绪 (管理员: ${config.adminUsername})`);

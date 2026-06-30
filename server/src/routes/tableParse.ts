@@ -17,6 +17,7 @@
  */
 
 import { Router, type Request, type Response } from 'express';
+import { randomUUID } from 'crypto';
 import { createDeepSeekProvider } from '../llm/index.js';
 import { config } from '../config/env.js';
 import { MainAgent } from '../agents/main-agent.js';
@@ -30,6 +31,8 @@ import {
 import { getColorEntries } from '../services/utils.js';
 import { findComboExists, findRecordByItemNameCI, getItemRow, getPartRow, getAllItemRows } from '../db/sku.js';
 import { insertRecord } from '../db/users.js';
+import { insertTraceSession, markSessionCompleted, markSessionError } from '../services/trace.js';
+import type { TraceContext } from '../types/trace.js';
 import { ACCESSORY_SHAPE_TYPE_CODES, SHAPE_TYPES_COLOR_NA, SHAPE_TYPES_SIZE_NA } from '../constants.js';
 
 export const tableParseRouter = Router();
@@ -270,6 +273,35 @@ tableParseLlmRouter.post('/', validate(tableParseSchema), async (req: Request, r
     apiKey: config.deepseekApiKey,
   });
 
+  // ---- Trace：创建 session ----
+  const traceEnabled = config.traceLog;
+  let traceContext: TraceContext | undefined;
+  if (traceEnabled) {
+    const conversationId = randomUUID();
+    traceContext = {
+      conversationId,
+      userId: req.user!.userId,
+      username: req.user!.username,
+      mainAgent: 'MainAgent',
+      agentName: 'MainAgent',
+      route: '/api/table-parse',
+      provider: llm.providerName,
+      model: llm.model,
+      enabled: true,
+    };
+    insertTraceSession(
+      conversationId,
+      traceContext.userId,
+      traceContext.username,
+      traceContext.mainAgent,
+      traceContext.agentName,
+      null,
+      traceContext.route,
+      traceContext.provider,
+      traceContext.model,
+    );
+  }
+
   const agent = new MainAgent(llm, {
     searchBudgetLimit: 32,
     maxRounds: 40,
@@ -285,6 +317,10 @@ tableParseLlmRouter.post('/', validate(tableParseSchema), async (req: Request, r
     },
   });
 
+  if (traceContext) {
+    agent.trace = traceContext;
+  }
+
   try {
     const result = await agent.parse({
       input,
@@ -293,6 +329,10 @@ tableParseLlmRouter.post('/', validate(tableParseSchema), async (req: Request, r
       notes,
       fromImage,
     });
+
+    if (traceContext) {
+      markSessionCompleted(traceContext.conversationId);
+    }
 
     sse.send('reply_done', {});
 
@@ -327,6 +367,9 @@ tableParseLlmRouter.post('/', validate(tableParseSchema), async (req: Request, r
     sse.send('done', {});
   } catch (err) {
     console.error('[table-parse] error:', err);
+    if (traceContext) {
+      markSessionError(traceContext.conversationId, err instanceof Error ? err.message : '解析失败');
+    }
     sse.send('error', {
       message: err instanceof Error ? err.message : '解析失败',
     });
