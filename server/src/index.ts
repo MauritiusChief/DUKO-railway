@@ -90,6 +90,9 @@ app.use('/api/table-parse', llmLimiter, authenticateToken, tableParseLlmRouter);
 app.use('/api/image-parse', llmLimiter, authenticateToken, imageParseRouter);              // POST /api/image-parse
 app.use('/api/layout/parse-image', llmLimiter, authenticateToken, layoutParseImageRouter); // POST /api/layout/parse-image
 
+// ---- Trace 路由（管理员只读，使用 apiLimiter）----
+app.use('/api/trace', apiLimiter, authenticateToken, traceRouter);                          // GET /api/trace[/:conversationId]
+
 // ---- ScriptCat 脚本下载端点（无需登录）----
 // 供前端小按钮下载，文件名带构建时间戳以便用户确认是否为最新版本
 app.get('/api/script/download', apiLimiter, (_req, res) => {
@@ -122,7 +125,6 @@ app.use('/api', tableParseRouter);    // GET /api/colors / POST /api/check-expos
 app.use('/api', debugRouter);         // POST /api/debug/tool —— 工具测试接口（debug 用）
 app.use('/api', historyRouter);       // GET/POST/DELETE /api/history[/:id] —— 历史记录
 app.use('/api', notesRouter);         // GET/POST /api/notes —— 用户笔记
-app.use('/api', traceRouter);         // GET /api/trace[/:conversationId] —— trace 查看（管理员）
 
 // ---- 前端静态文件（生产模式） ----
 const clientDist = path.resolve(__dirname, '../../client/dist');
