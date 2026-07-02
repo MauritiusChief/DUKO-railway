@@ -33,6 +33,8 @@ import { searchBm25All } from '../services/bm25.js';
 import { getEmbedding } from '../services/embeddings.js';
 import { searchSimilar } from '../db/lance.js';
 
+// #region 测试辅助函数
+
 function makeRecord(overrides: Partial<SkuRecord> = {}): SkuRecord {
   return {
     id: 'default-id',
@@ -72,13 +74,14 @@ function resultCount() {
   return results().length;
 }
 
-// ==================================================================
+// #endregion
+
 describe('searchSkuStructured', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  // ------------------------------------------------------------------
+  // #region 基本路径
   describe('基本路径', () => {
     it('仅传入 colorCode 时返回所有颜色匹配的记录', async () => {
       mockGetAll.mockReturnValue([
@@ -128,8 +131,9 @@ describe('searchSkuStructured', () => {
       expect(resultCount()).toBe(3);
     });
   });
+  // #endregion
 
-  // ------------------------------------------------------------------
+  // #region shapeFilter 正常场景
   describe('shapeFilter - 正常场景', () => {
     beforeEach(() => {
       mockGetAll.mockReturnValue([
@@ -279,8 +283,9 @@ describe('searchSkuStructured', () => {
       expect(resultCount()).toBe(3);
     });
   });
+  // #endregion
 
-  // ------------------------------------------------------------------
+  // #region descriptionFilter 正常场景
   describe('descriptionFilter - 正常场景', () => {
     beforeEach(() => {
       mockGetAll.mockReturnValue([
@@ -348,8 +353,9 @@ describe('searchSkuStructured', () => {
       expect(resultCount()).toBe(3);
     });
   });
+  // #endregion
 
-  // ------------------------------------------------------------------
+  // #region 组合过滤
   describe('组合过滤', () => {
     it('shapeFilter 与 descriptionFilter 取交集', async () => {
       mockGetAll.mockReturnValue([
@@ -402,8 +408,9 @@ describe('searchSkuStructured', () => {
       expect(ids[0]).toBe('r2');
     });
   });
+  // #endregion
 
-  // =================================================================
+  // #region shapeFilter 畸形输入
   describe('shapeFilter 畸形输入不应崩溃', () => {
     beforeEach(() => {
       mockGetAll.mockReturnValue([
@@ -511,8 +518,9 @@ describe('searchSkuStructured', () => {
       expect(resultCount()).toBe(1);
     });
   });
+  // #endregion
 
-  // =================================================================
+  // #region descriptionFilter 畸形输入
   describe('descriptionFilter 畸形输入不应崩溃', () => {
     beforeEach(() => {
       mockGetAll.mockReturnValue([
@@ -549,8 +557,9 @@ describe('searchSkuStructured', () => {
       expect(output).toMatch(/匹配结果.*0/);
     });
   });
+  // #endregion
 
-  // =================================================================
+  // #region 未知 operator
   describe('未知 operator', () => {
     it('未知 operator 返回空集', async () => {
       mockGetAll.mockReturnValue([
@@ -565,4 +574,5 @@ describe('searchSkuStructured', () => {
       expect(output).toMatch(/匹配结果.*0/);
     });
   });
+  // #endregion
 });
