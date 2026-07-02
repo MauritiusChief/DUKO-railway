@@ -89,11 +89,16 @@ function isOperatorNode<T>(node: FilterNode<T>): node is OrNode<T> | AndNode<T> 
  *
  * 编辑距离阈值为 ceil(code.length / 2)（"GD"→1, "BLS"→2, "B"→1）。
  * "*" 表示该维度不做限制。
+ * 若叶子节点格式不合法（非 object / 缺少有效的 shapeTypeCode），返回空集。
  */
 function evaluateShapeLeaf(
   leaf: ShapeFilterLeaf,
   records: SkuRecord[],
 ): Set<string> {
+  if (!leaf || typeof leaf !== 'object' || typeof leaf.shapeTypeCode !== 'string') {
+    return new Set();
+  }
+
   const typeThreshold =
     leaf.shapeTypeCode === '*'
       ? 0
@@ -131,11 +136,16 @@ function evaluateShapeLeaf(
  *
  * 调用 searchBm25All 获取全部命中记录（不做颜色过滤和 topK 截断，
  * 颜色过滤由外层统一处理）。同时将得分写入外部累加器供最终排序使用。
+ * 若叶子节点格式不合法（非 object / 缺少有效的 text 字段），返回空集。
  */
 function evaluateDescriptionLeaf(
   leaf: DescriptionFilterLeaf,
   scoreAccumulator: Map<string, number>,
 ): Set<string> {
+  if (!leaf || typeof leaf !== 'object' || typeof leaf.text !== 'string' || !leaf.text.trim()) {
+    return new Set();
+  }
+
   const scores = searchBm25All(leaf.text);
   // 将得分写入累加器（取最大值，因为同一记录可能被多个叶子命中）
   for (const [id, score] of scores) {
@@ -154,6 +164,10 @@ function evaluateDescriptionLeaf(
 /**
  * 对过滤树递归求值，返回通过过滤的记录 ID 集合。
  *
+ * 对所有节点做防御性校验：若叶子节点为 null/非 object，返回空集；
+ * or / and 节点若 conditions 不是数组，返回空集；
+ * not 节点若缺少 condition，返回全集（无排除条件）。
+ *
  * @param node     - 过滤树根节点
  * @param leafEval - 叶子求值函数（返回叶子节点对应的 ID 集合）
  * @param allIds   - 全集 ID（用于 and 的起始集和 not 的补集运算）
@@ -165,11 +179,15 @@ function evaluateFilterTree<T>(
   allIds: Set<string>,
 ): Set<string> {
   if (!isOperatorNode(node)) {
+    if (node === null || node === undefined || typeof node !== 'object') {
+      return new Set();
+    }
     return leafEval(node as T);
   }
 
   switch (node.operator) {
     case 'or': {
+      if (!Array.isArray(node.conditions)) return new Set();
       const result = new Set<string>();
       for (const cond of node.conditions) {
         const condResult = evaluateFilterTree(cond, leafEval, allIds);
@@ -178,6 +196,7 @@ function evaluateFilterTree<T>(
       return result;
     }
     case 'and': {
+      if (!Array.isArray(node.conditions)) return new Set();
       if (node.conditions.length === 0) return new Set(allIds);
       let result = new Set(allIds);
       for (const cond of node.conditions) {
@@ -189,6 +208,7 @@ function evaluateFilterTree<T>(
       return result;
     }
     case 'not': {
+      if (!node.condition) return new Set(allIds);
       const condResult = evaluateFilterTree(node.condition, leafEval, allIds);
       return new Set([...allIds].filter((id) => !condResult.has(id)));
     }
