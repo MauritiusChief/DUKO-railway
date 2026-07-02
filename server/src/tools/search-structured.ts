@@ -1,21 +1,25 @@
 /**
  * searchSkuStructured 工具 —— 结构化多维度精确检索
  *
- * 通过四个独立参数实现顺序集合过滤。shapeFilter 等效 searchSkuShape（编辑距离匹配），
- * descriptionFilter 等效 searchSkuDescription（BM25 文本检索），二者都支持递归 JSON 过滤树
- * 表达的并集/交集/补集操作。向量检索层与前面过滤结果取交集。
+ * 通过三个独立参数实现顺序集合过滤：colorCode → shapeFilter → descriptionFilter，
+ * 所有过滤均为集合交集运算，逐步缩窄候选集。最后按 vectorQuery 语义相似度
+ * 对候选集排序（无 vectorQuery 时回退至 BM25 得分排序）。
+ *
+ * shapeFilter 等效 searchSkuShape（编辑距离模糊匹配），
+ * descriptionFilter 等效 searchSkuDescription（BM25 文本检索），
+ * 二者都支持递归 JSON 过滤树表达的并集/交集/补集操作。
  *
  * 四个参数：
  *   1. shapeFilter       —— 递归 JSON 过滤树，叶子用编辑距离模糊匹配（等效 searchSkuShape）
  *   2. descriptionFilter —— 递归 JSON 过滤树，叶子用 BM25 文本检索（等效 searchSkuDescription）
- *   3. vectorQuery       —— 向量语义检索内容（生成 embedding → LanceDB 相似度搜索）
+ *   3. vectorQuery       —— 向量语义检索内容，仅用于排序（非过滤），未命中记录排在末尾
  *   4. colorCode         —— 颜色限定（* 为通配符）
  *
- * 过滤流程（集合运算）：
+ * 过滤流程：
  *   getAllRecords() → colorCode 过滤 → shapeFilter 集合运算 → descriptionFilter 集合运算
- *   → vectorQuery 集合取交集 → 排序 → topK
+ *   → 向量排序（vectorQuery 距离排序，无则 BM25 得分降序）→ topK
  *
- * 任意参数为空/为 null 则跳过对应过滤步骤。
+ * 任意参数为空/为 null 则跳过对应过滤/排序步骤。
  *
  * 供 PreciseSearchAgent 使用。
  */
@@ -272,7 +276,8 @@ export const SEARCH_SKU_STRUCTURED_TOOL = {
     description:
       '结构化多维度精确检索 DUKO 产品数据库。shapeFilter 等效 searchSkuShape（编辑距离模糊匹配），' +
       'descriptionFilter 等效 searchSkuDescription（BM25 文本检索），均支持递归 JSON 过滤树表达并/交/补集操作。' +
-      '外加向量语义检索与颜色限定。最终结果 = 四个过滤步骤的累进交集。适用于单条条目的精确深度查询。',
+      '外加颜色限定与向量语义排序。过滤链：colorCode → shapeFilter → descriptionFilter（集合交集），' +
+      '最后按 vectorQuery 语义相似度排序（未命中记录排在末尾，无 vectorQuery 时按 BM25 得分降序）。',
     parameters: {
       type: 'object',
       properties: {
@@ -296,8 +301,9 @@ export const SEARCH_SKU_STRUCTURED_TOOL = {
         vectorQuery: {
           type: 'string',
           description:
-            '向量语义查询文本（可选）。生成 embedding 后在 LanceDB 中做相似度搜索，与前面过滤结果取交集。' +
-            '传入空字符串跳过此过滤。',
+            '向量语义查询文本（可选）。生成 embedding 后在 LanceDB 中做相似度搜索，' +
+            '仅用于对过滤结果进行排序（距离近的排前面），不参与过滤——未命中的记录排在末尾。' +
+            '传入空字符串跳过向量排序，回退至 BM25 得分降序。',
         },
         colorCode: {
           type: 'string',

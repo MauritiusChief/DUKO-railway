@@ -231,3 +231,73 @@ export interface PositionedBlock {
   /** 距轨道最左侧距离（英寸），实时计算，不存储 */
   distanceFromLeft: number;
 }
+
+// ==================================================================
+//  Trace —— LLM 对话追踪（仅管理员可见）
+// ==================================================================
+
+/** GET /api/trace 列表项 */
+export interface TraceSessionSummary {
+  conversation_id: string;
+  username: string;
+  user_id: number;
+  main_agent: string;
+  agent_name: string;
+  parent_tool_call_id: string | null;
+  route: string;
+  provider: string;
+  model: string;
+  status: 'running' | 'completed' | 'error';
+  error: string | null;
+  created_at: string;
+  completed_at: string | null;
+}
+
+export interface ClientSentMessage {
+  id: number;
+  conversation_id: string;
+  message_index: number;
+  role: 'system' | 'user' | 'tool' | 'tool_schema';
+  name: string | null;
+  tool_call_id: string | null;
+  parent_tool_call_id: string | null;
+  content_text: string | null;
+  content_json: string | null;
+  content_format: 'text' | 'markdown' | 'json' | 'multimodal_placeholder';
+  created_at: string;
+  completed_at: string | null;
+  error: string | null;
+}
+
+export interface ClientReceivedMessage {
+  id: number;
+  conversation_id: string;
+  message_index: number;
+  finish_reason: string | null;
+  reply: string | null;
+  reasoning: string | null;
+  tool_calls_json: string | null;
+  tool_call_ids_json: string | null;
+  source: 'llm' | 'injected';
+  created_at: string;
+  completed_at: string | null;
+  error: string | null;
+}
+
+export type TraceMessage = ClientSentMessage | ClientReceivedMessage;
+
+export interface TraceSessionDetail {
+  session: TraceSessionSummary;
+  messages: TraceMessage[];
+}
+
+/** 分组后的消息块（前端渲染用） */
+export interface TraceGroup {
+  kind: 'sent' | 'assistant';
+  sent?: ClientSentMessage;
+  assistant?: ClientReceivedMessage;
+  /** 归属于此 assistant 的 tool 结果 */
+  tools: ClientSentMessage[];
+  /** 归属于此 assistant 的 _budget_info（source=injected） */
+  budget?: { received: ClientReceivedMessage; sent: ClientSentMessage };
+}

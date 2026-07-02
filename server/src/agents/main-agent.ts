@@ -191,6 +191,9 @@ export class MainAgent extends BaseAgent<ChatMessage> {
             }
           },
         });
+        if (this.trace) {
+          sub.trace = this.initSubTrace(this.trace, 'BatchSearchAgent', tc.id);
+        }
         return sub.runBatch(batch);
       }
 
@@ -208,6 +211,9 @@ export class MainAgent extends BaseAgent<ChatMessage> {
             }
           },
         });
+        if (this.trace) {
+          sub.trace = this.initSubTrace(this.trace, 'PreciseSearchAgent', tc.id);
+        }
         return sub.runSingle({
           originalName,
           searchGuidance: typeof item.searchGuidance === 'string' ? item.searchGuidance : undefined,
@@ -227,6 +233,9 @@ export class MainAgent extends BaseAgent<ChatMessage> {
             }
           },
         });
+        if (this.trace) {
+          sub.trace = this.initSubTrace(this.trace, 'GlassDoorAgent', tc.id);
+        }
         return sub.runCalc(models);
       }
 

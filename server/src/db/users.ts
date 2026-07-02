@@ -69,7 +69,68 @@ export function initUserDB(dbDir: string): void {
       created_at    TEXT    NOT NULL DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS idx_notes_user ON notes(user_id);
+
+    CREATE TABLE IF NOT EXISTS trace_sessions (
+      id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+      conversation_id     TEXT    NOT NULL UNIQUE,
+      user_id             INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      username            TEXT    NOT NULL,
+      main_agent          TEXT    NOT NULL,
+      agent_name          TEXT    NOT NULL,
+      parent_tool_call_id TEXT,
+      route               TEXT,
+      provider            TEXT,
+      model               TEXT,
+      status              TEXT    NOT NULL DEFAULT 'running',
+      error               TEXT,
+      created_at          TEXT    NOT NULL DEFAULT (datetime('now')),
+      completed_at        TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_trace_sessions_created_at ON trace_sessions(created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_trace_sessions_user_created ON trace_sessions(user_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_trace_sessions_parent_tool_call ON trace_sessions(parent_tool_call_id);
+    CREATE INDEX IF NOT EXISTS idx_trace_sessions_conversation_id ON trace_sessions(conversation_id);
+
+    CREATE TABLE IF NOT EXISTS client_sent (
+      id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+      conversation_id     TEXT    NOT NULL REFERENCES trace_sessions(conversation_id) ON DELETE CASCADE,
+      message_index       INTEGER NOT NULL,
+      role                TEXT    NOT NULL,
+      name                TEXT,
+      tool_call_id        TEXT,
+      parent_tool_call_id TEXT,
+      content_text        TEXT,
+      content_json        TEXT,
+      content_format      TEXT    NOT NULL DEFAULT 'text',
+      created_at          TEXT    NOT NULL DEFAULT (datetime('now')),
+      completed_at        TEXT,
+      error               TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_client_sent_conversation ON client_sent(conversation_id, message_index, id);
+    CREATE INDEX IF NOT EXISTS idx_client_sent_tool_call ON client_sent(tool_call_id);
+
+    CREATE TABLE IF NOT EXISTS client_received (
+      id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+      conversation_id     TEXT    NOT NULL REFERENCES trace_sessions(conversation_id) ON DELETE CASCADE,
+      message_index       INTEGER NOT NULL,
+      finish_reason       TEXT,
+      reply               TEXT,
+      reasoning           TEXT,
+      tool_calls_json     TEXT,
+      tool_call_ids_json  TEXT,
+      source              TEXT    NOT NULL DEFAULT 'llm',
+      created_at          TEXT    NOT NULL DEFAULT (datetime('now')),
+      completed_at        TEXT,
+      error               TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_client_received_conversation ON client_received(conversation_id, message_index, id);
+    CREATE INDEX IF NOT EXISTS idx_client_received_created ON client_received(created_at DESC);
   `);
+}
+
+/** 获取底层 SQLite 数据库连接（供 trace 等服务模块使用） */
+export function getUserDb(): Database.Database {
+  return db;
 }
 
 /** 从环境变量播种管理员账号（已存在则跳过） */
