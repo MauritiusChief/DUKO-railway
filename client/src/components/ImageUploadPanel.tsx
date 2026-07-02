@@ -140,7 +140,7 @@ export function ImageUploadPanel({ layout, onLayoutUpdated }: ImageUploadPanelPr
     setLoading(false);
   }, [imageData, viewType, associatedWallIds, layout, onLayoutUpdated]);
 
-  const allItems = layout ? [...layout.walls, ...layout.islands] : [];
+  const allItems = layout ? layout.walls : [];
 
   return (
     <div className="iup-panel" onPaste={handlePaste}>

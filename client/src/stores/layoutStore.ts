@@ -1,15 +1,14 @@
 /**
  * Layout 状态管理 —— Zustand store
  *
- * 管理布局文档的 CRUD、墙/岛台编辑、物品插入/删除/移动，
- * 以及全高物品（tall_cabinet、tall_appliance）的双轨联动。
- * 通过 localStorage 持久化。
+ * 仅维护当前激活的布局文档，通过 localStorage 自动持久化。
+ * 布局的导入/导出通过 JSON 字符串完成。
+ * 内部统一使用 "wall" 表示墙面/岛台，UI 中显示为组合标签 "墙面/岛台"。
  */
 import { create } from 'zustand';
 import type {
   LayoutDocument,
   LayoutWall,
-  LayoutIsland,
   SectionBlock,
   BlockItem,
   BlockItemCategory,
@@ -50,41 +49,39 @@ function isGroundTrack(category: BlockItemCategory): boolean {
     || isDualTrack(category);
 }
 
-/** 深拷贝一个 LayoutDocument（简单 JSON 序列化） */
-function cloneLayout(layout: LayoutDocument): LayoutDocument {
-  return JSON.parse(JSON.stringify(layout));
-}
-
 // ==================================================================
-//  localStorage 持久化
+//  localStorage 持久化（仅存储当前激活的布局）
 // ==================================================================
 
-const STORAGE_KEY = 'duko_layouts';
+const STORAGE_KEY = 'duko_layout';
 
-interface PersistedData {
-  layouts: LayoutDocument[];
-  activeLayoutId: string | null;
-}
-
-function loadFromStorage(): PersistedData {
+function loadFromStorage(): LayoutDocument | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      return {
-        layouts: Array.isArray(parsed.layouts) ? parsed.layouts : [],
-        activeLayoutId: typeof parsed.activeLayoutId === 'string' ? parsed.activeLayoutId : null,
-      };
+      if (parsed && parsed.id && Array.isArray(parsed.walls)) {
+        // 兼容旧格式：若存在 islands 数组则合并到 walls
+        if (Array.isArray(parsed.islands) && parsed.islands.length > 0) {
+          parsed.walls = [...parsed.walls, ...parsed.islands];
+          delete parsed.islands;
+        }
+        return parsed as LayoutDocument;
+      }
     }
   } catch {
     /* 数据损坏，静默回退 */
   }
-  return { layouts: [], activeLayoutId: null };
+  return null;
 }
 
-function syncToStorage(layouts: LayoutDocument[], activeLayoutId: string | null): void {
+function syncToStorage(layout: LayoutDocument | null): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ layouts, activeLayoutId }));
+    if (layout) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(layout));
+    } else {
+      localStorage.removeItem(STORAGE_KEY);
+    }
   } catch {
     /* localStorage 不可用，静默忽略 */
   }
@@ -105,30 +102,25 @@ export function computePositions(blocks: SectionBlock[]): PositionedBlock[] {
 }
 
 // ==================================================================
-//  辅助：在 activeLayout 中定位墙/岛台
+//  辅助：在 activeLayout 中定位墙
 // ==================================================================
 
 interface WallRef {
   layout: LayoutDocument;
-  wall: LayoutWall | LayoutIsland;
+  wall: LayoutWall;
   index: number;
-  wallList: (LayoutWall | LayoutIsland)[];
 }
 
 function findWallInLayout(layout: LayoutDocument, wallId: string): WallRef | null {
-  const wallIdx = layout.walls.findIndex((w) => w.id === wallId);
-  if (wallIdx !== -1) {
-    return { layout, wall: layout.walls[wallIdx], index: wallIdx, wallList: layout.walls };
-  }
-  const islandIdx = layout.islands.findIndex((i) => i.id === wallId);
-  if (islandIdx !== -1) {
-    return { layout, wall: layout.islands[islandIdx], index: islandIdx, wallList: layout.islands };
+  const idx = layout.walls.findIndex((w) => w.id === wallId);
+  if (idx !== -1) {
+    return { layout, wall: layout.walls[idx], index: idx };
   }
   return null;
 }
 
-/** 获取块的 airBlocks / groundBlocks 引用（含 setter） */
-function getTrackBlocks(wall: LayoutWall | LayoutIsland, track: TrackSpan): SectionBlock[] {
+/** 获取块的 airBlocks / groundBlocks 引用 */
+function getTrackBlocks(wall: LayoutWall, track: TrackSpan): SectionBlock[] {
   return track === 'air' ? wall.airBlocks : wall.groundBlocks;
 }
 
@@ -288,7 +280,7 @@ function deleteBlockStatic(blocks: SectionBlock[], blockIndex: number): void {
  *  遍历所有全高物品（tall_cabinet / tall_appliance），
  *  若其在 airBlocks 和 groundBlocks 中的距左位置不一致，
  *  在较短轨的该全高块之前插入一个 gap。 */
-function alignAirGround(wall: LayoutWall | LayoutIsland): void {
+function alignAirGround(wall: LayoutWall): void {
   const dualItemIds: string[] = [];
   for (const block of wall.airBlocks) {
     for (const item of block.items) {
@@ -331,7 +323,7 @@ function alignAirGround(wall: LayoutWall | LayoutIsland): void {
 // ==================================================================
 
 /** 同时在 air 和 ground 轨道插入全高物品 */
-function insertBothTracksImpl(wall: LayoutWall | LayoutIsland, itemTemplate: Omit<BlockItem, 'id'>): {
+function insertBothTracksImpl(wall: LayoutWall, itemTemplate: Omit<BlockItem, 'id'>): {
   airBlock: SectionBlock;
   groundBlock: SectionBlock;
 } {
@@ -354,24 +346,22 @@ function insertBothTracksImpl(wall: LayoutWall | LayoutIsland, itemTemplate: Omi
 // ==================================================================
 
 interface LayoutStoreState {
-  layouts: LayoutDocument[];
-  activeLayoutId: string | null;
+  activeLayout: LayoutDocument | null;
   loading: boolean;
   error: string;
 
-  // ---- Layout CRUD ----
-  createLayout: (name: string) => string;
-  deleteLayout: (id: string) => void;
-  setActiveLayout: (id: string) => void;
-  renameLayout: (id: string, name: string) => void;
-  importLayout: (layout: LayoutDocument) => void;
-  exportActiveLayout: () => LayoutDocument | null;
+  // ---- Layout 生命周期 ----
+  /** 创建全新空布局 */
+  newLayout: (name?: string) => void;
+  /** 从 JSON 字符串加载布局并设为激活 */
+  loadLayout: (json: string) => void;
+  /** 导出当前布局为 JSON 字符串 */
+  getActiveLayoutJson: () => string | null;
 
-  // ---- Wall / Island CRUD ----
+  // ---- Wall CRUD ----
   addWall: (name: string, width: number) => string;
-  addIsland: (name: string, width: number) => string;
   removeWall: (wallId: string) => void;
-  updateWall: (wallId: string, patch: Partial<LayoutWall | LayoutIsland>) => void;
+  updateWall: (wallId: string, patch: Partial<LayoutWall>) => void;
 
   // ---- Block 操作（单轨） ----
   insertBlock: (wallId: string, track: TrackSpan, item: Omit<BlockItem, 'id'>, width: number) => string;
@@ -422,82 +412,47 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => {
   const cached = loadFromStorage();
 
   return {
-    layouts: cached.layouts,
-    activeLayoutId: cached.activeLayoutId,
+    activeLayout: cached,
     loading: false,
     error: '',
 
-    // ---- Layout CRUD ----
+    // ---- Layout 生命周期 ----
 
-    createLayout: (name: string) => {
+    newLayout: (name?: string) => {
       const id = uuid();
       const now = nowISO();
-      const num = get().layouts.length + 1;
       const newLayout: LayoutDocument = {
         id,
-        name: name || `Layout ${num}`,
+        name: name || `Layout 1`,
         walls: [],
-        islands: [],
         createdAt: now,
         updatedAt: now,
       };
-      const layouts = [...get().layouts, newLayout];
-      set({ layouts, activeLayoutId: id });
-      syncToStorage(layouts, id);
-      return id;
+      set({ activeLayout: newLayout });
+      syncToStorage(newLayout);
     },
 
-    deleteLayout: (id: string) => {
-      const { layouts, activeLayoutId } = get();
-      const filtered = layouts.filter((l) => l.id !== id);
-      const nextActive = activeLayoutId === id
-        ? (filtered.length > 0 ? filtered[0].id : null)
-        : activeLayoutId;
-      set({ layouts: filtered, activeLayoutId: nextActive });
-      syncToStorage(filtered, nextActive);
-    },
-
-    setActiveLayout: (id: string) => {
-      const { layouts } = get();
-      if (layouts.some((l) => l.id === id)) {
-        set({ activeLayoutId: id });
-        syncToStorage(layouts, id);
+    loadLayout: (json: string) => {
+      const parsed = JSON.parse(json);
+      if (!parsed || !parsed.id || !Array.isArray(parsed.walls)) {
+        throw new Error('Invalid layout JSON: missing id or walls array');
       }
+      set({ activeLayout: parsed as LayoutDocument });
+      syncToStorage(parsed as LayoutDocument);
     },
 
-    renameLayout: (id: string, name: string) => {
-      const layouts = get().layouts.map((l) =>
-        l.id === id ? { ...l, name, updatedAt: nowISO() } : l,
-      );
-      set({ layouts });
-      syncToStorage(layouts, get().activeLayoutId);
+    getActiveLayoutJson: () => {
+      const { activeLayout } = get();
+      return activeLayout ? JSON.stringify(activeLayout) : null;
     },
 
-    importLayout: (layout: LayoutDocument) => {
-      const layouts = [...get().layouts];
-      const existingIdx = layouts.findIndex((l) => l.id === layout.id);
-      if (existingIdx !== -1) {
-        layouts[existingIdx] = layout;
-      } else {
-        layouts.push(layout);
-      }
-      set({ layouts, activeLayoutId: layout.id });
-      syncToStorage(layouts, layout.id);
-    },
-
-    exportActiveLayout: () => {
-      const { layouts, activeLayoutId } = get();
-      return layouts.find((l) => l.id === activeLayoutId) ?? null;
-    },
-
-    // ---- Wall / Island CRUD ----
+    // ---- Wall CRUD ----
 
     addWall: (name: string, width: number) => {
-      const { layouts, activeLayoutId } = get();
-      const layout = layouts.find((l) => l.id === activeLayoutId);
-      if (!layout) return '';
+      const { activeLayout } = get();
+      if (!activeLayout) return '';
 
-      const num = layout.walls.length + 1;
+      const num = activeLayout.walls.length + 1;
       const newWall: LayoutWall = {
         id: uuid(),
         name: name || `Wall ${num}`,
@@ -508,86 +463,53 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => {
         airBlocks: [],
         groundBlocks: [],
         connectedWallIds: [],
+        backToBackIslandIds: [],
       };
-      const updated = {
-        ...layout,
-        walls: [...layout.walls, newWall],
+      const updated: LayoutDocument = {
+        ...activeLayout,
+        walls: [...activeLayout.walls, newWall],
         updatedAt: nowISO(),
       };
-      const newLayouts = layouts.map((l) => (l.id === activeLayoutId ? updated : l));
-      set({ layouts: newLayouts });
-      syncToStorage(newLayouts, activeLayoutId);
+      set({ activeLayout: updated });
+      syncToStorage(updated);
       return newWall.id;
     },
 
-    addIsland: (name: string, width: number) => {
-      const { layouts, activeLayoutId } = get();
-      const layout = layouts.find((l) => l.id === activeLayoutId);
-      if (!layout) return '';
-
-      const num = layout.islands.length + 1;
-      const newIsland: LayoutIsland = {
-        id: uuid(),
-        name: name || `Island ${num}`,
-        width: width || 0,
-        exposedLeft: false,
-        exposedRight: false,
-        exposedBack: false,
-        airBlocks: [],
-        groundBlocks: [],
-        backToBackIslandIds: [],
-      };
-      const updated = {
-        ...layout,
-        islands: [...layout.islands, newIsland],
-        updatedAt: nowISO(),
-      };
-      const newLayouts = layouts.map((l) => (l.id === activeLayoutId ? updated : l));
-      set({ layouts: newLayouts });
-      syncToStorage(newLayouts, activeLayoutId);
-      return newIsland.id;
-    },
-
     removeWall: (wallId: string) => {
-      const { layouts, activeLayoutId } = get();
-      const layout = layouts.find((l) => l.id === activeLayoutId);
-      if (!layout) return;
+      const { activeLayout } = get();
+      if (!activeLayout) return;
 
-      const updated = {
-        ...layout,
-        walls: layout.walls.filter((w) => w.id !== wallId),
-        islands: layout.islands.filter((i) => i.id !== wallId),
+      const updated: LayoutDocument = {
+        ...activeLayout,
+        walls: activeLayout.walls.filter((w) => w.id !== wallId),
         updatedAt: nowISO(),
       };
-      const newLayouts = layouts.map((l) => (l.id === activeLayoutId ? updated : l));
-      set({ layouts: newLayouts });
-      syncToStorage(newLayouts, activeLayoutId);
+      set({ activeLayout: updated });
+      syncToStorage(updated);
     },
 
-    updateWall: (wallId: string, patch: Partial<LayoutWall | LayoutIsland>) => {
-      const { layouts, activeLayoutId } = get();
-      const layout = layouts.find((l) => l.id === activeLayoutId);
-      if (!layout) return;
+    updateWall: (wallId: string, patch: Partial<LayoutWall>) => {
+      const { activeLayout } = get();
+      if (!activeLayout) return;
 
-      const updated = {
-        ...layout,
-        walls: layout.walls.map((w) => (w.id === wallId ? { ...w, ...patch } as LayoutWall : w)),
-        islands: layout.islands.map((i) => (i.id === wallId ? { ...i, ...patch } as LayoutIsland : i)),
+      const updated: LayoutDocument = {
+        ...activeLayout,
+        walls: activeLayout.walls.map((w) =>
+          w.id === wallId ? { ...w, ...patch } : w,
+        ),
         updatedAt: nowISO(),
       };
-      const newLayouts = layouts.map((l) => (l.id === activeLayoutId ? updated : l));
-      set({ layouts: newLayouts });
-      syncToStorage(newLayouts, activeLayoutId);
+      set({ activeLayout: updated });
+      syncToStorage(updated);
     },
 
     // ---- Block 操作（单轨） ----
 
     insertBlock: (wallId: string, track: TrackSpan, item: Omit<BlockItem, 'id'>, width: number) => {
-      const { layouts, activeLayoutId } = get();
-      const layout = layouts.find((l) => l.id === activeLayoutId);
-      if (!layout) return '';
+      const { activeLayout } = get();
+      if (!activeLayout) return '';
 
-      const ref = findWallInLayout(layout, wallId);
+      const ref = findWallInLayout(activeLayout, wallId);
       if (!ref) return '';
 
       const newItem: BlockItem = { ...item, id: uuid() };
@@ -598,25 +520,21 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => {
       insertBlocksAtEnd(blocks, [newBlock]);
       alignAirGround(updatedWall);
 
-      const updatedLayout = { ...layout, updatedAt: nowISO() };
-      if (ref.wallList === updatedLayout.walls) {
-        updatedLayout.walls = updatedLayout.walls.map((w) => (w.id === wallId ? updatedWall as LayoutWall : w));
-      } else {
-        updatedLayout.islands = updatedLayout.islands.map((i) => (i.id === wallId ? updatedWall as LayoutIsland : i));
-      }
-
-      const newLayouts = layouts.map((l) => (l.id === activeLayoutId ? updatedLayout : l));
-      set({ layouts: newLayouts });
-      syncToStorage(newLayouts, activeLayoutId);
+      const updated: LayoutDocument = {
+        ...activeLayout,
+        walls: activeLayout.walls.map((w) => (w.id === wallId ? updatedWall : w)),
+        updatedAt: nowISO(),
+      };
+      set({ activeLayout: updated });
+      syncToStorage(updated);
       return newBlock.id;
     },
 
     deleteBlock: (wallId: string, track: TrackSpan, blockId: string, mode: 'static' | 'dynamic') => {
-      const { layouts, activeLayoutId } = get();
-      const layout = layouts.find((l) => l.id === activeLayoutId);
-      if (!layout) return;
+      const { activeLayout } = get();
+      if (!activeLayout) return;
 
-      const ref = findWallInLayout(layout, wallId);
+      const ref = findWallInLayout(activeLayout, wallId);
       if (!ref) return;
 
       const updatedWall = { ...ref.wall };
@@ -631,16 +549,13 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => {
       }
       alignAirGround(updatedWall);
 
-      const updatedLayout = { ...layout, updatedAt: nowISO() };
-      if (ref.wallList === updatedLayout.walls) {
-        updatedLayout.walls = updatedLayout.walls.map((w) => (w.id === wallId ? updatedWall as LayoutWall : w));
-      } else {
-        updatedLayout.islands = updatedLayout.islands.map((i) => (i.id === wallId ? updatedWall as LayoutIsland : i));
-      }
-
-      const newLayouts = layouts.map((l) => (l.id === activeLayoutId ? updatedLayout : l));
-      set({ layouts: newLayouts });
-      syncToStorage(newLayouts, activeLayoutId);
+      const updated: LayoutDocument = {
+        ...activeLayout,
+        walls: activeLayout.walls.map((w) => (w.id === wallId ? updatedWall : w)),
+        updatedAt: nowISO(),
+      };
+      set({ activeLayout: updated });
+      syncToStorage(updated);
     },
 
     insertBlockAtPosition: (
@@ -650,11 +565,10 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => {
       width: number,
       distanceFromLeft: number,
     ) => {
-      const { layouts, activeLayoutId } = get();
-      const layout = layouts.find((l) => l.id === activeLayoutId);
-      if (!layout) return '';
+      const { activeLayout } = get();
+      if (!activeLayout) return '';
 
-      const ref = findWallInLayout(layout, wallId);
+      const ref = findWallInLayout(activeLayout, wallId);
       if (!ref) return '';
 
       const newItem: BlockItem = { ...item, id: uuid() };
@@ -665,25 +579,21 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => {
       insertBlockAtPosition(blocks, newBlock, distanceFromLeft);
       alignAirGround(updatedWall);
 
-      const updatedLayout = { ...layout, updatedAt: nowISO() };
-      if (ref.wallList === updatedLayout.walls) {
-        updatedLayout.walls = updatedLayout.walls.map((w) => (w.id === wallId ? updatedWall as LayoutWall : w));
-      } else {
-        updatedLayout.islands = updatedLayout.islands.map((i) => (i.id === wallId ? updatedWall as LayoutIsland : i));
-      }
-
-      const newLayouts = layouts.map((l) => (l.id === activeLayoutId ? updatedLayout : l));
-      set({ layouts: newLayouts });
-      syncToStorage(newLayouts, activeLayoutId);
+      const updated: LayoutDocument = {
+        ...activeLayout,
+        walls: activeLayout.walls.map((w) => (w.id === wallId ? updatedWall : w)),
+        updatedAt: nowISO(),
+      };
+      set({ activeLayout: updated });
+      syncToStorage(updated);
       return newBlock.id;
     },
 
     updateBlockWidth: (wallId: string, track: TrackSpan, blockId: string, newWidth: number) => {
-      const { layouts, activeLayoutId } = get();
-      const layout = layouts.find((l) => l.id === activeLayoutId);
-      if (!layout) return;
+      const { activeLayout } = get();
+      if (!activeLayout) return;
 
-      const ref = findWallInLayout(layout, wallId);
+      const ref = findWallInLayout(activeLayout, wallId);
       if (!ref) return;
 
       const updatedWall = { ...ref.wall };
@@ -694,26 +604,22 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => {
       }
       alignAirGround(updatedWall);
 
-      const updatedLayout = { ...layout, updatedAt: nowISO() };
-      if (ref.wallList === updatedLayout.walls) {
-        updatedLayout.walls = updatedLayout.walls.map((w) => (w.id === wallId ? updatedWall as LayoutWall : w));
-      } else {
-        updatedLayout.islands = updatedLayout.islands.map((i) => (i.id === wallId ? updatedWall as LayoutIsland : i));
-      }
-
-      const newLayouts = layouts.map((l) => (l.id === activeLayoutId ? updatedLayout : l));
-      set({ layouts: newLayouts });
-      syncToStorage(newLayouts, activeLayoutId);
+      const updated: LayoutDocument = {
+        ...activeLayout,
+        walls: activeLayout.walls.map((w) => (w.id === wallId ? updatedWall : w)),
+        updatedAt: nowISO(),
+      };
+      set({ activeLayout: updated });
+      syncToStorage(updated);
     },
 
     // ---- Block 操作（全高物品双轨联动） ----
 
     insertBothTracks: (wallId: string, item: Omit<BlockItem, 'id'>, width: number) => {
-      const { layouts, activeLayoutId } = get();
-      const layout = layouts.find((l) => l.id === activeLayoutId);
-      if (!layout) return { airBlockId: '', groundBlockId: '' };
+      const { activeLayout } = get();
+      if (!activeLayout) return { airBlockId: '', groundBlockId: '' };
 
-      const ref = findWallInLayout(layout, wallId);
+      const ref = findWallInLayout(activeLayout, wallId);
       if (!ref) return { airBlockId: '', groundBlockId: '' };
 
       const sharedItem: BlockItem = { ...item, id: uuid() };
@@ -725,25 +631,21 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => {
       insertBlocksAtEnd(updatedWall.groundBlocks, [groundBlock]);
       alignAirGround(updatedWall);
 
-      const updatedLayout = { ...layout, updatedAt: nowISO() };
-      if (ref.wallList === updatedLayout.walls) {
-        updatedLayout.walls = updatedLayout.walls.map((w) => (w.id === wallId ? updatedWall as LayoutWall : w));
-      } else {
-        updatedLayout.islands = updatedLayout.islands.map((i) => (i.id === wallId ? updatedWall as LayoutIsland : i));
-      }
-
-      const newLayouts = layouts.map((l) => (l.id === activeLayoutId ? updatedLayout : l));
-      set({ layouts: newLayouts });
-      syncToStorage(newLayouts, activeLayoutId);
+      const updated: LayoutDocument = {
+        ...activeLayout,
+        walls: activeLayout.walls.map((w) => (w.id === wallId ? updatedWall : w)),
+        updatedAt: nowISO(),
+      };
+      set({ activeLayout: updated });
+      syncToStorage(updated);
       return { airBlockId: airBlock.id, groundBlockId: groundBlock.id };
     },
 
     deleteBothTracks: (wallId: string, itemId: string, mode: 'static' | 'dynamic') => {
-      const { layouts, activeLayoutId } = get();
-      const layout = layouts.find((l) => l.id === activeLayoutId);
-      if (!layout) return;
+      const { activeLayout } = get();
+      if (!activeLayout) return;
 
-      const ref = findWallInLayout(layout, wallId);
+      const ref = findWallInLayout(activeLayout, wallId);
       if (!ref) return;
 
       const updatedWall = { ...ref.wall };
@@ -751,7 +653,6 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => {
       const airMatches = findBlocksByItemId(updatedWall.airBlocks, itemId);
       const groundMatches = findBlocksByItemId(updatedWall.groundBlocks, itemId);
 
-      // 从后往前删（索引不变形）
       const allAirIndices = airMatches.map((m) => m.index).sort((a, b) => b - a);
       const allGroundIndices = groundMatches.map((m) => m.index).sort((a, b) => b - a);
 
@@ -771,16 +672,13 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => {
       }
       alignAirGround(updatedWall);
 
-      const updatedLayout = { ...layout, updatedAt: nowISO() };
-      if (ref.wallList === updatedLayout.walls) {
-        updatedLayout.walls = updatedLayout.walls.map((w) => (w.id === wallId ? updatedWall as LayoutWall : w));
-      } else {
-        updatedLayout.islands = updatedLayout.islands.map((i) => (i.id === wallId ? updatedWall as LayoutIsland : i));
-      }
-
-      const newLayouts = layouts.map((l) => (l.id === activeLayoutId ? updatedLayout : l));
-      set({ layouts: newLayouts });
-      syncToStorage(newLayouts, activeLayoutId);
+      const updated: LayoutDocument = {
+        ...activeLayout,
+        walls: activeLayout.walls.map((w) => (w.id === wallId ? updatedWall : w)),
+        updatedAt: nowISO(),
+      };
+      set({ activeLayout: updated });
+      syncToStorage(updated);
     },
 
     insertBothTracksAtPosition: (
@@ -789,11 +687,10 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => {
       width: number,
       distanceFromLeft: number,
     ) => {
-      const { layouts, activeLayoutId } = get();
-      const layout = layouts.find((l) => l.id === activeLayoutId);
-      if (!layout) return { airBlockId: '', groundBlockId: '' };
+      const { activeLayout } = get();
+      if (!activeLayout) return { airBlockId: '', groundBlockId: '' };
 
-      const ref = findWallInLayout(layout, wallId);
+      const ref = findWallInLayout(activeLayout, wallId);
       if (!ref) return { airBlockId: '', groundBlockId: '' };
 
       const sharedItem: BlockItem = { ...item, id: uuid() };
@@ -805,25 +702,21 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => {
       insertBlockAtPosition(updatedWall.groundBlocks, groundBlock, distanceFromLeft);
       alignAirGround(updatedWall);
 
-      const updatedLayout = { ...layout, updatedAt: nowISO() };
-      if (ref.wallList === updatedLayout.walls) {
-        updatedLayout.walls = updatedLayout.walls.map((w) => (w.id === wallId ? updatedWall as LayoutWall : w));
-      } else {
-        updatedLayout.islands = updatedLayout.islands.map((i) => (i.id === wallId ? updatedWall as LayoutIsland : i));
-      }
-
-      const newLayouts = layouts.map((l) => (l.id === activeLayoutId ? updatedLayout : l));
-      set({ layouts: newLayouts });
-      syncToStorage(newLayouts, activeLayoutId);
+      const updated: LayoutDocument = {
+        ...activeLayout,
+        walls: activeLayout.walls.map((w) => (w.id === wallId ? updatedWall : w)),
+        updatedAt: nowISO(),
+      };
+      set({ activeLayout: updated });
+      syncToStorage(updated);
       return { airBlockId: airBlock.id, groundBlockId: groundBlock.id };
     },
 
     updateBlockWidthBothTracks: (wallId: string, itemId: string, newWidth: number) => {
-      const { layouts, activeLayoutId } = get();
-      const layout = layouts.find((l) => l.id === activeLayoutId);
-      if (!layout) return;
+      const { activeLayout } = get();
+      if (!activeLayout) return;
 
-      const ref = findWallInLayout(layout, wallId);
+      const ref = findWallInLayout(activeLayout, wallId);
       if (!ref) return;
 
       const updatedWall = { ...ref.wall };
@@ -840,16 +733,13 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => {
       }
       alignAirGround(updatedWall);
 
-      const updatedLayout = { ...layout, updatedAt: nowISO() };
-      if (ref.wallList === updatedLayout.walls) {
-        updatedLayout.walls = updatedLayout.walls.map((w) => (w.id === wallId ? updatedWall as LayoutWall : w));
-      } else {
-        updatedLayout.islands = updatedLayout.islands.map((i) => (i.id === wallId ? updatedWall as LayoutIsland : i));
-      }
-
-      const newLayouts = layouts.map((l) => (l.id === activeLayoutId ? updatedLayout : l));
-      set({ layouts: newLayouts });
-      syncToStorage(newLayouts, activeLayoutId);
+      const updated: LayoutDocument = {
+        ...activeLayout,
+        walls: activeLayout.walls.map((w) => (w.id === wallId ? updatedWall : w)),
+        updatedAt: nowISO(),
+      };
+      set({ activeLayout: updated });
+      syncToStorage(updated);
     },
 
     // ---- Block 操作（多 item 叠放） ----
@@ -860,11 +750,10 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => {
       items: Omit<BlockItem, 'id'>[],
       width: number,
     ) => {
-      const { layouts, activeLayoutId } = get();
-      const layout = layouts.find((l) => l.id === activeLayoutId);
-      if (!layout) return '';
+      const { activeLayout } = get();
+      if (!activeLayout) return '';
 
-      const ref = findWallInLayout(layout, wallId);
+      const ref = findWallInLayout(activeLayout, wallId);
       if (!ref) return '';
 
       const newItems: BlockItem[] = items.map((it) => ({ ...it, id: uuid() }));
@@ -875,16 +764,13 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => {
       insertBlocksAtEnd(blocks, [newBlock]);
       alignAirGround(updatedWall);
 
-      const updatedLayout = { ...layout, updatedAt: nowISO() };
-      if (ref.wallList === updatedLayout.walls) {
-        updatedLayout.walls = updatedLayout.walls.map((w) => (w.id === wallId ? updatedWall as LayoutWall : w));
-      } else {
-        updatedLayout.islands = updatedLayout.islands.map((i) => (i.id === wallId ? updatedWall as LayoutIsland : i));
-      }
-
-      const newLayouts = layouts.map((l) => (l.id === activeLayoutId ? updatedLayout : l));
-      set({ layouts: newLayouts });
-      syncToStorage(newLayouts, activeLayoutId);
+      const updated: LayoutDocument = {
+        ...activeLayout,
+        walls: activeLayout.walls.map((w) => (w.id === wallId ? updatedWall : w)),
+        updatedAt: nowISO(),
+      };
+      set({ activeLayout: updated });
+      syncToStorage(updated);
       return newBlock.id;
     },
 
@@ -894,11 +780,10 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => {
       stackedItems: Omit<BlockItem, 'id'>[],
       width: number,
     ) => {
-      const { layouts, activeLayoutId } = get();
-      const layout = layouts.find((l) => l.id === activeLayoutId);
-      if (!layout) return { airBlockId: '', groundBlockId: '' };
+      const { activeLayout } = get();
+      if (!activeLayout) return { airBlockId: '', groundBlockId: '' };
 
-      const ref = findWallInLayout(layout, wallId);
+      const ref = findWallInLayout(activeLayout, wallId);
       if (!ref) return { airBlockId: '', groundBlockId: '' };
 
       const sharedMainItem: BlockItem = { ...mainItem, id: uuid() };
@@ -920,30 +805,25 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => {
       insertBlocksAtEnd(updatedWall.groundBlocks, [groundBlock]);
       alignAirGround(updatedWall);
 
-      const updatedLayout = { ...layout, updatedAt: nowISO() };
-      if (ref.wallList === updatedLayout.walls) {
-        updatedLayout.walls = updatedLayout.walls.map((w) => (w.id === wallId ? updatedWall as LayoutWall : w));
-      } else {
-        updatedLayout.islands = updatedLayout.islands.map((i) => (i.id === wallId ? updatedWall as LayoutIsland : i));
-      }
-
-      const newLayouts = layouts.map((l) => (l.id === activeLayoutId ? updatedLayout : l));
-      set({ layouts: newLayouts });
-      syncToStorage(newLayouts, activeLayoutId);
+      const updated: LayoutDocument = {
+        ...activeLayout,
+        walls: activeLayout.walls.map((w) => (w.id === wallId ? updatedWall : w)),
+        updatedAt: nowISO(),
+      };
+      set({ activeLayout: updated });
+      syncToStorage(updated);
       return { airBlockId: airBlock.id, groundBlockId: groundBlock.id };
     },
 
     removeStackedItem: (wallId: string, blockId: string, itemId: string) => {
-      const { layouts, activeLayoutId } = get();
-      const layout = layouts.find((l) => l.id === activeLayoutId);
-      if (!layout) return;
+      const { activeLayout } = get();
+      if (!activeLayout) return;
 
-      const ref = findWallInLayout(layout, wallId);
+      const ref = findWallInLayout(activeLayout, wallId);
       if (!ref) return;
 
       const updatedWall = { ...ref.wall };
 
-      // 在 air 和 ground 轨道中查找含此 blockId 的块
       const airIdx = updatedWall.airBlocks.findIndex((b) => b.id === blockId);
       const groundIdx = updatedWall.groundBlocks.findIndex((b) => b.id === blockId);
       const blocks = airIdx !== -1 ? updatedWall.airBlocks : updatedWall.groundBlocks;
@@ -951,32 +831,28 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => {
       if (idx === -1) return;
 
       const block = blocks[idx];
-      if (block.items.length <= 1) return; // 至少保留一个主品
+      if (block.items.length <= 1) return;
 
       const filtered = block.items.filter((item) => item.id !== itemId);
       if (filtered.length === 0) return;
       block.items = filtered;
 
-      const updatedLayout = { ...layout, updatedAt: nowISO() };
-      if (ref.wallList === updatedLayout.walls) {
-        updatedLayout.walls = updatedLayout.walls.map((w) => (w.id === wallId ? updatedWall as LayoutWall : w));
-      } else {
-        updatedLayout.islands = updatedLayout.islands.map((i) => (i.id === wallId ? updatedWall as LayoutIsland : i));
-      }
-
-      const newLayouts = layouts.map((l) => (l.id === activeLayoutId ? updatedLayout : l));
-      set({ layouts: newLayouts });
-      syncToStorage(newLayouts, activeLayoutId);
+      const updated: LayoutDocument = {
+        ...activeLayout,
+        walls: activeLayout.walls.map((w) => (w.id === wallId ? updatedWall : w)),
+        updatedAt: nowISO(),
+      };
+      set({ activeLayout: updated });
+      syncToStorage(updated);
     },
 
     // ---- Block 移动（拖拽用） ----
 
     moveBlock: (wallId: string, track: TrackSpan, blockId: string, newDistanceFromLeft: number) => {
-      const { layouts, activeLayoutId } = get();
-      const layout = layouts.find((l) => l.id === activeLayoutId);
-      if (!layout) return;
+      const { activeLayout } = get();
+      if (!activeLayout) return;
 
-      const ref = findWallInLayout(layout, wallId);
+      const ref = findWallInLayout(activeLayout, wallId);
       if (!ref) return;
 
       const updatedWall = { ...ref.wall };
@@ -988,7 +864,6 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => {
       const movingIsDual = block.items.some((item) => isDualTrack(item.category));
 
       if (movingIsDual) {
-        // 全高物品：先从 air 和 ground 删除，再在指定位置插入
         const itemId = block.items[0].id;
         const airRemoved = updatedWall.airBlocks.splice(
           updatedWall.airBlocks.findIndex((b) => b.items.some((it) => it.id === itemId)),
@@ -1006,22 +881,18 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => {
           insertBlockAtPosition(updatedWall.groundBlocks, groundRemoved, newDistanceFromLeft);
         }
       } else {
-        // 单轨物品：动态删除 + 精确插入
         const removed = blocks.splice(idx, 1)[0];
         insertBlockAtPosition(blocks, removed, newDistanceFromLeft);
       }
       alignAirGround(updatedWall);
 
-      const updatedLayout = { ...layout, updatedAt: nowISO() };
-      if (ref.wallList === updatedLayout.walls) {
-        updatedLayout.walls = updatedLayout.walls.map((w) => (w.id === wallId ? updatedWall as LayoutWall : w));
-      } else {
-        updatedLayout.islands = updatedLayout.islands.map((i) => (i.id === wallId ? updatedWall as LayoutIsland : i));
-      }
-
-      const newLayouts = layouts.map((l) => (l.id === activeLayoutId ? updatedLayout : l));
-      set({ layouts: newLayouts });
-      syncToStorage(newLayouts, activeLayoutId);
+      const updated: LayoutDocument = {
+        ...activeLayout,
+        walls: activeLayout.walls.map((w) => (w.id === wallId ? updatedWall : w)),
+        updatedAt: nowISO(),
+      };
+      set({ activeLayout: updated });
+      syncToStorage(updated);
     },
 
     // ---- 位置计算 ----
@@ -1031,8 +902,7 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => {
     // ---- 辅助 ----
 
     getActiveLayout: () => {
-      const { layouts, activeLayoutId } = get();
-      return layouts.find((l) => l.id === activeLayoutId) ?? null;
+      return get().activeLayout;
     },
 
     isDualTrack,

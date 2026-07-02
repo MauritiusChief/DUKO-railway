@@ -16,7 +16,6 @@ import type {
   BlockItem,
   SectionBlock,
   LayoutWall,
-  LayoutIsland,
   LayoutDocument,
   PositionedBlock,
   MutableLayout,
@@ -28,7 +27,6 @@ export type {
   BlockItem,
   SectionBlock,
   LayoutWall,
-  LayoutIsland,
   LayoutDocument,
   PositionedBlock,
   MutableLayout,
@@ -86,15 +84,13 @@ export function computePositions(blocks: SectionBlock[]): PositionedBlock[] {
 function findWallInLayout(
   layout: LayoutDocument,
   wallId: string,
-): { wall: LayoutWall | LayoutIsland; index: number; isIsland: boolean } | null {
-  const wIdx = layout.walls.findIndex((w) => w.id === wallId);
-  if (wIdx !== -1) return { wall: layout.walls[wIdx], index: wIdx, isIsland: false };
-  const iIdx = layout.islands.findIndex((i) => i.id === wallId);
-  if (iIdx !== -1) return { wall: layout.islands[iIdx], index: iIdx, isIsland: true };
+): { wall: LayoutWall; index: number } | null {
+  const idx = layout.walls.findIndex((w) => w.id === wallId);
+  if (idx !== -1) return { wall: layout.walls[idx], index: idx };
   return null;
 }
 
-function getTrackBlocks(wall: LayoutWall | LayoutIsland, track: TrackSpan): SectionBlock[] {
+function getTrackBlocks(wall: LayoutWall, track: TrackSpan): SectionBlock[] {
   return track === 'air' ? wall.airBlocks : wall.groundBlocks;
 }
 
@@ -109,7 +105,7 @@ function findBlocksByItemId(blocks: SectionBlock[], itemId: string): { block: Se
 }
 
 function findAllBlocksByItemId(
-  wall: LayoutWall | LayoutIsland,
+  wall: LayoutWall,
   itemId: string,
 ): { track: TrackSpan; block: SectionBlock; index: number }[] {
   const result: { track: TrackSpan; block: SectionBlock; index: number }[] = [];
@@ -243,7 +239,7 @@ function deleteBlockStatic(blocks: SectionBlock[], blockIndex: number): void {
 //  空挡对齐
 // ==================================================================
 
-function alignAirGround(wall: LayoutWall | LayoutIsland): void {
+function alignAirGround(wall: LayoutWall): void {
   const dualItemIds: string[] = [];
   for (const block of wall.airBlocks) {
     for (const item of block.items) {
@@ -283,16 +279,14 @@ function alignAirGround(wall: LayoutWall | LayoutIsland): void {
 //  序列化（布局 → Markdown 表格）
 // ==================================================================
 
-function serializeWall(wall: LayoutWall | LayoutIsland, isIsland: boolean): string {
-  const label = isIsland ? '岛台' : '墙';
-  const connected = isIsland
-    ? (wall as LayoutIsland).backToBackIslandIds
-    : (wall as LayoutWall).connectedWallIds;
-
-  let text = `### ${label}: "${wall.name}" (ID: ${wall.id})\n`;
+function serializeWall(wall: LayoutWall): string {
+  let text = `### 墙: "${wall.name}" (ID: ${wall.id})\n`;
   text += `- 总宽度: ${wall.width}" | 左侧暴露: ${wall.exposedLeft ? '是' : '否'} | 右侧暴露: ${wall.exposedRight ? '是' : '否'} | 后侧暴露: ${wall.exposedBack ? '是' : '否'}\n`;
-  if (connected.length > 0) {
-    text += `- 连接: ${connected.join(', ')}\n`;
+  if (wall.connectedWallIds.length > 0) {
+    text += `- L 形连接: ${wall.connectedWallIds.join(', ')}\n`;
+  }
+  if (wall.backToBackIslandIds.length > 0) {
+    text += `- 背靠背: ${wall.backToBackIslandIds.join(', ')}\n`;
   }
   text += '\n';
 
@@ -326,16 +320,13 @@ function serializeWall(wall: LayoutWall | LayoutIsland, isIsland: boolean): stri
 }
 
 function serializeLayout(layout: LayoutDocument): string {
-  if (layout.walls.length === 0 && layout.islands.length === 0) {
-    return '当前布局中没有墙或岛台。请使用 createWall 工具添加。';
+  if (layout.walls.length === 0) {
+    return '当前布局中没有任何墙。请使用 createWall 工具添加。';
   }
 
   let text = `## 布局: "${layout.name}" (ID: ${layout.id})\n\n`;
   for (const wall of layout.walls) {
-    text += serializeWall(wall, false) + '\n';
-  }
-  for (const island of layout.islands) {
-    text += serializeWall(island, true) + '\n';
+    text += serializeWall(wall) + '\n';
   }
   return text;
 }
@@ -367,57 +358,40 @@ export const CREATE_WALL_TOOL = {
   function: {
     name: 'createWall',
     description:
-      '在布局中创建一面新墙或一个新岛台。name 若不提供则自动编号。width 为总宽度（英寸）。',
+      '在布局中创建一面新墙/岛台。name 若不提供则自动编号。width 为总宽度（英寸）。',
     parameters: {
       type: 'object',
       properties: {
-        type: { type: 'string', description: '创建类型："wall"（墙）或 "island"（岛台）', enum: ['wall', 'island'] },
-        name: { type: 'string', description: '墙/岛台的名称（可选，不填则自动编号）' },
+        name: { type: 'string', description: '墙的名称（可选，不填则自动编号）' },
         width: { type: 'number', description: '总宽度（英寸）' },
       },
-      required: ['type', 'width'],
+      required: ['width'],
     },
   },
 } as const satisfies ToolDefinition;
 
 export function executeCreateWall(state: MutableLayout, args: Record<string, unknown>): string {
-  const type = String(args.type ?? 'wall') as 'wall' | 'island';
   const providedName = typeof args.name === 'string' && args.name.trim() ? args.name.trim() : '';
   const width = typeof args.width === 'number' && args.width > 0 ? args.width : 0;
   if (width <= 0) return '错误: width 必须为正数。';
 
-  const num = (type === 'wall' ? state.layout.walls.length : state.layout.islands.length) + 1;
-  const name = providedName || (type === 'wall' ? `Wall ${num}` : `Island ${num}`);
+  const num = state.layout.walls.length + 1;
+  const name = providedName || `Wall ${num}`;
 
-  if (type === 'wall') {
-    const wall: LayoutWall = {
-      id: uuid(),
-      name,
-      width,
-      exposedLeft: false,
-      exposedRight: false,
-      exposedBack: false,
-      airBlocks: [],
-      groundBlocks: [],
-      connectedWallIds: [],
-    };
-    state.layout.walls.push(wall);
-    return `已创建墙 "${name}" (ID: ${wall.id})，宽度 ${width}"。`;
-  } else {
-    const island: LayoutIsland = {
-      id: uuid(),
-      name,
-      width,
-      exposedLeft: false,
-      exposedRight: false,
-      exposedBack: false,
-      airBlocks: [],
-      groundBlocks: [],
-      backToBackIslandIds: [],
-    };
-    state.layout.islands.push(island);
-    return `已创建岛台 "${name}" (ID: ${island.id})，宽度 ${width}"。`;
-  }
+  const wall: LayoutWall = {
+    id: uuid(),
+    name,
+    width,
+    exposedLeft: false,
+    exposedRight: false,
+    exposedBack: false,
+    airBlocks: [],
+    groundBlocks: [],
+    connectedWallIds: [],
+    backToBackIslandIds: [],
+  };
+  state.layout.walls.push(wall);
+  return `已创建墙 "${name}" (ID: ${wall.id})，宽度 ${width}"}。`;
 }
 
 // ==================================================================
@@ -443,13 +417,11 @@ export function executeDeleteWall(state: MutableLayout, args: Record<string, unk
   const wallId = String(args.wallId ?? '').trim();
   if (!wallId) return '错误: wallId 为必填项。';
 
-  const wallFound = state.layout.walls.some((w) => w.id === wallId);
-  const islandFound = state.layout.islands.some((i) => i.id === wallId);
-  if (!wallFound && !islandFound) return `错误: 未找到 ID 为 "${wallId}" 的墙或岛台。`;
+  const found = state.layout.walls.some((w) => w.id === wallId);
+  if (!found) return `错误: 未找到 ID 为 "${wallId}" 的墙。`;
 
   state.layout.walls = state.layout.walls.filter((w) => w.id !== wallId);
-  state.layout.islands = state.layout.islands.filter((i) => i.id !== wallId);
-  return `已删除 ID 为 "${wallId}" 的墙/岛台。`;
+  return `已删除 ID 为 "${wallId}" 的墙。`;
 }
 
 // ==================================================================
@@ -839,14 +811,14 @@ export function executeConnectIslands(state: MutableLayout, args: Record<string,
   const id1 = String(args.islandId1 ?? '').trim();
   const id2 = String(args.islandId2 ?? '').trim();
 
-  const i1 = state.layout.islands.find((i) => i.id === id1);
-  const i2 = state.layout.islands.find((i) => i.id === id2);
-  if (!i1) return `错误: 未找到 ID "${id1}" 的岛台。`;
-  if (!i2) return `错误: 未找到 ID "${id2}" 的岛台。`;
+  const w1 = state.layout.walls.find((w) => w.id === id1);
+  const w2 = state.layout.walls.find((w) => w.id === id2);
+  if (!w1) return `错误: 未找到 ID "${id1}" 的墙。`;
+  if (!w2) return `错误: 未找到 ID "${id2}" 的墙。`;
 
-  if (!i1.backToBackIslandIds.includes(id2)) i1.backToBackIslandIds.push(id2);
-  if (!i2.backToBackIslandIds.includes(id1)) i2.backToBackIslandIds.push(id1);
-  return `已建立岛台 "${i1.name}" ↔ "${i2.name}" 的相背关系。`;
+  if (!w1.backToBackIslandIds.includes(id2)) w1.backToBackIslandIds.push(id2);
+  if (!w2.backToBackIslandIds.includes(id1)) w2.backToBackIslandIds.push(id1);
+  return `已建立墙 "${w1.name}" ↔ "${w2.name}" 的背靠背关系。`;
 }
 
 export const DISCONNECT_ISLANDS_TOOL = {
@@ -869,12 +841,12 @@ export function executeDisconnectIslands(state: MutableLayout, args: Record<stri
   const id1 = String(args.islandId1 ?? '').trim();
   const id2 = String(args.islandId2 ?? '').trim();
 
-  const i1 = state.layout.islands.find((i) => i.id === id1);
-  const i2 = state.layout.islands.find((i) => i.id === id2);
+  const w1 = state.layout.walls.find((w) => w.id === id1);
+  const w2 = state.layout.walls.find((w) => w.id === id2);
 
-  if (i1) i1.backToBackIslandIds = i1.backToBackIslandIds.filter((id) => id !== id2);
-  if (i2) i2.backToBackIslandIds = i2.backToBackIslandIds.filter((id) => id !== id1);
-  return `已解除相背关系。`;
+  if (w1) w1.backToBackIslandIds = w1.backToBackIslandIds.filter((id) => id !== id2);
+  if (w2) w2.backToBackIslandIds = w2.backToBackIslandIds.filter((id) => id !== id1);
+  return `已解除背靠背关系。`;
 }
 
 // ==================================================================

@@ -186,7 +186,7 @@ export interface SectionBlock {
   items: BlockItem[];
 }
 
-/** 墙 */
+/** 墙（统一定义，岛台视为特殊墙面） */
 export interface LayoutWall {
   id: string;
   name: string;
@@ -199,19 +199,7 @@ export interface LayoutWall {
   groundBlocks: SectionBlock[];
   /** L 形连接的其他墙 id（仅 Agent 可编辑） */
   connectedWallIds: string[];
-}
-
-/** 岛台 */
-export interface LayoutIsland {
-  id: string;
-  name: string;
-  width: number;
-  exposedLeft: boolean;
-  exposedRight: boolean;
-  exposedBack: boolean;
-  airBlocks: SectionBlock[];
-  groundBlocks: SectionBlock[];
-  /** 相背关系的其他岛台 id（仅 Agent 可编辑） */
+  /** 背靠背岛台关系（仅 Agent 可编辑） */
   backToBackIslandIds: string[];
 }
 
@@ -220,7 +208,6 @@ export interface LayoutDocument {
   id: string;
   name: string;
   walls: LayoutWall[];
-  islands: LayoutIsland[];
   createdAt: string;
   updatedAt: string;
 }

@@ -40,7 +40,6 @@ export type {
   BlockItem,
   SectionBlock,
   LayoutWall,
-  LayoutIsland,
   LayoutDocument,
   PositionedBlock,
   LayoutInstruction,

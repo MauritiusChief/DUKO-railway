@@ -1,5 +1,5 @@
 /**
- * WallPanel —— 单面墙/岛台的可折叠面板
+ * WallPanel —— 单面墙的可折叠面板（统一定义，岛台视为特殊墙面）
  *
  * 展示墙头信息（名称、总宽、暴露面）、空中 + 地面两个轨道。
  * 每轨渲染 BlockCard 列表，支持拖拽移动、添加物品。
@@ -12,7 +12,6 @@ import type { TranslationKey } from '../i18n/translations';
 import { BlockCard } from './BlockCard';
 import type {
   LayoutWall,
-  LayoutIsland,
   SectionBlock,
   BlockItem,
   BlockItemCategory,
@@ -21,8 +20,7 @@ import type {
 import './WallPanel.css';
 
 interface WallPanelProps {
-  wall: LayoutWall | LayoutIsland;
-  isIsland: boolean;
+  wall: LayoutWall;
 }
 
 /** 每英寸对应的像素参考值 */
@@ -51,7 +49,7 @@ const CATEGORY_T_KEY: Record<BlockItemCategory, string> = {
   base_appliance_without_top: '免台面电器',
 };
 
-export function WallPanel({ wall, isIsland }: WallPanelProps) {
+export function WallPanel({ wall }: WallPanelProps) {
   const { t } = useI18n();
   const store = useLayoutStore();
 
@@ -231,11 +229,10 @@ export function WallPanel({ wall, isIsland }: WallPanelProps) {
   );
 
   const handleRemoveWall = useCallback(() => {
-    const label = isIsland ? 'island' : 'wall';
-    if (confirm(`Delete ${label} "${wall.name}"?`)) {
+    if (confirm(`Delete wall "${wall.name}"?`)) {
       store.removeWall(wall.id);
     }
-  }, [wall, store, isIsland]);
+  }, [wall, store]);
 
   // ---- 识别双轨物品（在当前位置有对应块的） ----
   const dualItemIds = new Set<string>();
@@ -399,8 +396,8 @@ export function WallPanel({ wall, isIsland }: WallPanelProps) {
         >
           {collapsed ? '▸' : '▾'}
         </button>
-        <span className={`wp-type-badge ${isIsland ? 'wp-island' : 'wp-wall'}`}>
-          {isIsland ? t('添加岛台') : t('添加墙面')}
+        <span className="wp-type-badge wp-wall">
+          墙面/岛台
         </span>
         <input
           className="wp-name-input"
@@ -421,7 +418,7 @@ export function WallPanel({ wall, isIsland }: WallPanelProps) {
         <label className="wp-check">
           <input
             type="checkbox"
-            checked={(wall as LayoutWall).exposedLeft ?? false}
+            checked={wall.exposedLeft}
             onChange={() => handleExposedChange('exposedLeft')}
           />
           {t('左侧暴露')}
@@ -429,7 +426,7 @@ export function WallPanel({ wall, isIsland }: WallPanelProps) {
         <label className="wp-check">
           <input
             type="checkbox"
-            checked={(wall as LayoutWall).exposedRight ?? false}
+            checked={wall.exposedRight}
             onChange={() => handleExposedChange('exposedRight')}
           />
           {t('右侧暴露')}
@@ -437,20 +434,20 @@ export function WallPanel({ wall, isIsland }: WallPanelProps) {
         <label className="wp-check">
           <input
             type="checkbox"
-            checked={(wall as LayoutWall).exposedBack ?? false}
+            checked={wall.exposedBack}
             onChange={() => handleExposedChange('exposedBack')}
           />
           {t('后侧暴露')}
         </label>
-        {/* 连接信息（只读） */}
-        {!isIsland && (wall as LayoutWall).connectedWallIds.length > 0 && (
-          <span className="wp-connected" title="L-shaped connection (Agent-managed)">
-            {t('连接墙面')}: {(wall as LayoutWall).connectedWallIds.length}
+        {/* 连接信息（只读，由 Agent 管理） */}
+        {wall.connectedWallIds.length > 0 && (
+          <span className="wp-connected" title="L-shaped connection">
+            {t('连接墙面')}: {wall.connectedWallIds.length}
           </span>
         )}
-        {isIsland && (wall as LayoutIsland).backToBackIslandIds.length > 0 && (
-          <span className="wp-connected" title="Back-to-back (Agent-managed)">
-            Back-to-back: {(wall as LayoutIsland).backToBackIslandIds.length}
+        {wall.backToBackIslandIds.length > 0 && (
+          <span className="wp-connected" title="Back-to-back connection">
+            Back-to-back: {wall.backToBackIslandIds.length}
           </span>
         )}
         <button className="wp-remove-btn" onClick={handleRemoveWall}>

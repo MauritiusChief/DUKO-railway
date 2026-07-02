@@ -283,7 +283,7 @@ export const messages = {
   },
   布局识别说明: {
     zh: '通过图片或手工编辑橱柜布局，识别墙/岛台上柜体之间的关系',
-    en: 'Recognize cabinet layout relationships on walls/islands via images or manual editing',
+    en: 'Recognize cabinet layout relationships on walls via images or manual editing',
   },
   新建布局: {
     zh: '新建布局',

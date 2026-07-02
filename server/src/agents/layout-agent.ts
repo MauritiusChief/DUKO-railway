@@ -118,9 +118,7 @@ export class LayoutAgent extends BaseAgent<MultimodalChatMessage> {
     const associatedNames: string[] = [];
     for (const id of associatedWallIds) {
       const w = args.layout.walls.find((w) => w.id === id);
-      if (w) { associatedNames.push(w.name); continue; }
-      const i = args.layout.islands.find((i) => i.id === id);
-      if (i) associatedNames.push(i.name);
+      if (w) associatedNames.push(w.name);
     }
 
     const mutableLayout: MutableLayout = { layout: args.layout };
@@ -160,7 +158,7 @@ export class LayoutAgent extends BaseAgent<MultimodalChatMessage> {
 
   private buildPrompt(viewType: string, associatedNames: string[]): string {
     const wallHint = associatedNames.length > 0
-      ? `此图描述以下墙/岛台: ${associatedNames.join(', ')}。`
+      ? `此图描述以下墙: ${associatedNames.join(', ')}。`
       : '';
 
     return `你是一个厨房橱柜布局识别助手。你正在分析一张 ${viewType} 视图的图片。
@@ -168,13 +166,15 @@ ${wallHint}
 
 ## 布局数据模型
 
-一个布局包含若干墙（wall）和岛台（island）。
-每面墙/岛台有两个轨道：
+一个布局包含若干墙（wall）。每面墙有两个轨道：
 - **airBlocks**（空中轨道）：吊柜(wall_cabinet)、高柜(tall_cabinet)、空挡(gap)、抽油烟机(range_hood)、窗户(window)、通天电器(tall_appliance)及其叠放吊柜
 - **groundBlocks**（地面轨道）：地柜(base_cabinet)、高柜(tall_cabinet)、空挡(gap)、通天电器(tall_appliance)、需台面电器(base_appliance_need_top)、免台面电器(base_appliance_without_top)
 
 全高物品（tall_cabinet/tall_appliance）同时在 air 和 ground 两轨各有一个 block，共享同一个 item ID。
 墙吊柜（wall_cabinet）和全高物品的 air 块支持多个物品堆叠（stackedSkus）。
+
+岛台是一种特殊的墙。通过 backToBackIslandIds 表示背靠背关系。
+connectedWallIds 表示 L 形转角连接关系。connectIslands 用于设置背靠背关系，connectWalls 用于设置转角连接。
 
 ## 物品分类说明
 
@@ -194,11 +194,12 @@ ${wallHint}
 
 1. **首先**调用 readLayout 了解当前布局状态
 2. 对照图片中的橱柜排列，使用 insertItem 添加图片中看到但布局中缺失的物品
-3. **仅对关联墙上的物品进行修改**。图片可能只展示了部分区域，未关联的墙/岛台上的物品**保持不变**
+3. **仅对关联墙上的物品进行修改**。图片可能只展示了部分区域，未关联的墙上的物品**保持不变**
 4. 对于关联墙上的已有物品：**优先保留**，仅当你能 100% 确定图片中的排列与之明确矛盾时才使用 deleteItem 删除
 5. 使用 updateWallProperties 修正关联墙的宽度、暴露面属性
-6. 使用 connectWalls 建立 L 形墙连接关系
- 7. 使用 searchSkuShape、searchSkuDescription 验证产品代码是否存在于 DUKO 数据库中
+6. 使用 connectWalls 建立 L 形墙连接关系，使用 connectIslands 建立岛台背靠背关系
+7. 使用 createWall 添加新墙/岛台
+8. 使用 searchSkuShape、searchSkuDescription 验证产品代码是否存在于 DUKO 数据库中
 
 ## 重要规则
 
@@ -208,7 +209,7 @@ ${wallHint}
 - **宽度单位为英寸**。根据图片中物品的相对比例估算宽度。
 - **位置由系统自动管理**。使用 insertItem 时物品自动排到最左侧，
   不需要手动指定距离。仅在需要精确定位时使用 insertItemAtPosition。
-- **此图片仅展示关联墙的部分视角**。关联墙之外的其他墙/岛台上的物品，不要新增也不要删除。
+- **此图片仅展示关联墙的部分视角**。关联墙之外的其他墙上的物品，不要新增也不要删除。
 - **同一布局可能由多张不同视角/区域的图片逐步完善**。本次请求仅处理当前图片呈现的信息。
 - **readLayout 会显示当前所有物品及其位置**，便于你判断哪些需要增删。
 - **修改后不需要再次 readLayout**，直接基于已知信息继续修改即可。
