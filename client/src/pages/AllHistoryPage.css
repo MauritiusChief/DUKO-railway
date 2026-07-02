@@ -1,0 +1,13 @@
+/* AllHistoryPage —— 管理员全量历史记录页面 */
+
+/* 左侧列表：略宽以容纳归属用户信息 */
+.all-history-left {
+  width: 300px;
+}
+
+/* 归属用户文本样式 */
+.history-item-user {
+  font-size: 12px;
+  color: #4a6fa5;
+  font-weight: 500;
+}

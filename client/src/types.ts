@@ -105,6 +105,15 @@ export interface HistoryRecordSummary {
   created_at: string;
 }
 
+/** 管理员全量历史记录摘要（含归属用户信息） */
+export interface AllHistoryRecordSummary {
+  id: number;
+  itemCount: number;
+  created_at: string;
+  user_id: number;
+  username: string;
+}
+
 /** 历史记录完整详情 */
 export interface HistoryRecordFull {
   id: number;

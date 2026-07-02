@@ -546,4 +546,64 @@ export const messages = {
     zh: '选择左侧记录查看详情',
     en: 'Select a record on the left',
   },
+
+  /* ---- AllHistoryPage ---- */
+  全部历史记录: {
+    zh: '全部历史记录',
+    en: 'All History',
+  },
+  归属用户: {
+    zh: '归属用户',
+    en: 'Owner',
+  },
+
+  /* ---- Admin User Management ---- */
+  用户管理: {
+    zh: '用户管理',
+    en: 'User Management',
+  },
+  管理员密码: {
+    zh: '管理员密码',
+    en: 'Admin Password',
+  },
+  确认删除: {
+    zh: '确认删除',
+    en: 'Confirm Delete',
+  },
+  修改用户名: {
+    zh: '修改用户名',
+    en: 'Change Username',
+  },
+  修改密码: {
+    zh: '修改密码',
+    en: 'Change Password',
+  },
+  新用户名: {
+    zh: '新用户名',
+    en: 'New Username',
+  },
+  新密码: {
+    zh: '新密码',
+    en: 'New Password',
+  },
+  保存: {
+    zh: '保存',
+    en: 'Save',
+  },
+  取消: {
+    zh: '取消',
+    en: 'Cancel',
+  },
+  删除成功: {
+    zh: '删除成功',
+    en: 'Delete successful',
+  },
+  修改成功: {
+    zh: '修改成功',
+    en: 'Update successful',
+  },
+  种子管理员保护: {
+    zh: '种子管理员账户不允许此操作',
+    en: 'Seed admin account is protected',
+  },
 } as const;

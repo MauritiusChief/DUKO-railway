@@ -305,3 +305,69 @@ export function replaceNotesForUser(
 
   tx();
 }
+
+// ==================================================================
+//  管理员功能 —— 全历史浏览 + 用户管理
+// ==================================================================
+
+/** 管理员专用：获取所有用户的全部历史记录摘要（按时间倒序，含归属用户信息） */
+export function getAllRecords(): {
+  id: number;
+  itemCount: number;
+  created_at: string;
+  user_id: number;
+  username: string;
+}[] {
+  const rows = db.prepare(`
+    SELECT pr.id, pr.items, pr.created_at, pr.user_id, u.username
+    FROM parse_records pr
+    JOIN users u ON pr.user_id = u.id
+    ORDER BY pr.created_at DESC
+  `).all() as { id: number; items: string; created_at: string; user_id: number; username: string }[];
+
+  return rows.map((r) => ({
+    id: r.id,
+    itemCount: JSON.parse(r.items).length,
+    created_at: r.created_at,
+    user_id: r.user_id,
+    username: r.username,
+  }));
+}
+
+/** 管理员专用：根据 ID 获取任意记录完整详情（不限用户） */
+export function getRecordByIdForAdmin(recordId: number): RecordFullRow | undefined {
+  return db.prepare(`
+    SELECT id, input, color_hints, items, conversation, lang, created_at
+    FROM parse_records
+    WHERE id = ?
+  `).get(recordId) as RecordFullRow | undefined;
+}
+
+/** 管理员专用：获取所有用户列表（不含密码哈希） */
+export function listUsers(): SafeUser[] {
+  return db.prepare(
+    'SELECT id, username, role, created_at FROM users ORDER BY id ASC',
+  ).all() as SafeUser[];
+}
+
+/** 管理员专用：按 ID 删除用户（外键级联删除其 parse_records / notes / trace_sessions） */
+export function deleteUserById(userId: number): boolean {
+  const result = db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+  return result.changes > 0;
+}
+
+/** 管理员专用：更新用户名 */
+export function updateUsername(userId: number, username: string): boolean {
+  const result = db.prepare(
+    'UPDATE users SET username = ? WHERE id = ?',
+  ).run(username, userId);
+  return result.changes > 0;
+}
+
+/** 管理员专用：更新用户密码哈希 */
+export function updateUserPassword(userId: number, passwordHash: string): boolean {
+  const result = db.prepare(
+    'UPDATE users SET password_hash = ? WHERE id = ?',
+  ).run(passwordHash, userId);
+  return result.changes > 0;
+}
