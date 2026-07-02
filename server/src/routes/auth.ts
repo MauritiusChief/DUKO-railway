@@ -26,8 +26,9 @@ import {
   type JwtPayload,
 } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
-import { loginSchema, registerSchema } from '../validation/schemas.js';
-import { findUserByUsername, findUserById, createUser } from '../db/users.js';
+import { loginSchema, registerSchema, adminUpdateUsernameSchema, adminUpdatePasswordSchema, adminDeleteUserSchema } from '../validation/schemas.js';
+import { findUserByUsername, findUserById, createUser, listUsers, deleteUserById, updateUsername, updateUserPassword } from '../db/users.js';
+import { config } from '../config/env.js';
 
 export const authRouter = Router();
 
@@ -161,6 +162,154 @@ authRouter.post('/auth/logout', (req: Request, res: Response) => {
   clearRefreshCookie(res);
   res.json({ message: '已登出' });
 });
+
+// ==================================================================
+//  管理员用户管理端点
+// ==================================================================
+
+/** 辅助函数：校验管理员密码是否匹配当前登录的管理员 */
+function verifyAdminPassword(req: Request, adminPassword: string): boolean {
+  const admin = findUserById(req.user!.userId);
+  if (!admin) return false;
+  return bcrypt.compareSync(adminPassword, findUserByUsername(admin.username)!.password_hash);
+}
+
+/** 辅助函数：判断指定用户是否为种子管理员（环境变量中配置的管理员） */
+function isSeedAdmin(userId: number): boolean {
+  const user = findUserById(userId);
+  if (!user) return false;
+  return user.username === config.adminUsername;
+}
+
+/** GET /api/auth/users —— 管理员浏览所有用户列表 */
+authRouter.get(
+  '/auth/users',
+  authenticateToken,
+  requireAdmin,
+  (_req: Request, res: Response) => {
+    const users = listUsers();
+    res.json({ users });
+  },
+);
+
+/** PATCH /api/auth/users/:id/username —— 管理员修改用户名 */
+authRouter.patch(
+  '/auth/users/:id/username',
+  authenticateToken,
+  requireAdmin,
+  validate(adminUpdateUsernameSchema),
+  (req: Request, res: Response) => {
+    const targetUserId = Number(req.params.id);
+    if (Number.isNaN(targetUserId)) {
+      res.status(400).json({ error: '无效的用户 ID' });
+      return;
+    }
+
+    if (isSeedAdmin(targetUserId)) {
+      res.status(403).json({ error: '种子管理员账户不允许修改用户名' });
+      return;
+    }
+
+    const { username, adminPassword } = req.body as { username: string; adminPassword: string };
+
+    if (!verifyAdminPassword(req, adminPassword)) {
+      res.status(403).json({ error: '管理员密码错误' });
+      return;
+    }
+
+    const existing = findUserByUsername(username);
+    if (existing && existing.id !== targetUserId) {
+      res.status(409).json({ error: '用户名已存在' });
+      return;
+    }
+
+    const ok = updateUsername(targetUserId, username);
+    if (!ok) {
+      res.status(404).json({ error: '用户不存在' });
+      return;
+    }
+
+    const updated = findUserById(targetUserId);
+    res.json({ user: updated });
+  },
+);
+
+/** PATCH /api/auth/users/:id/password —— 管理员修改密码 */
+authRouter.patch(
+  '/auth/users/:id/password',
+  authenticateToken,
+  requireAdmin,
+  validate(adminUpdatePasswordSchema),
+  (req: Request, res: Response) => {
+    const targetUserId = Number(req.params.id);
+    if (Number.isNaN(targetUserId)) {
+      res.status(400).json({ error: '无效的用户 ID' });
+      return;
+    }
+
+    if (isSeedAdmin(targetUserId)) {
+      res.status(403).json({ error: '种子管理员账户不允许修改密码' });
+      return;
+    }
+
+    const { password, adminPassword } = req.body as { password: string; adminPassword: string };
+
+    if (!verifyAdminPassword(req, adminPassword)) {
+      res.status(403).json({ error: '管理员密码错误' });
+      return;
+    }
+
+    const passwordHash = bcrypt.hashSync(password, SALT_ROUNDS);
+    const ok = updateUserPassword(targetUserId, passwordHash);
+    if (!ok) {
+      res.status(404).json({ error: '用户不存在' });
+      return;
+    }
+
+    res.json({ message: '密码已修改' });
+  },
+);
+
+/** DELETE /api/auth/users/:id —— 管理员删除用户 */
+authRouter.delete(
+  '/auth/users/:id',
+  authenticateToken,
+  requireAdmin,
+  validate(adminDeleteUserSchema),
+  (req: Request, res: Response) => {
+    const targetUserId = Number(req.params.id);
+    if (Number.isNaN(targetUserId)) {
+      res.status(400).json({ error: '无效的用户 ID' });
+      return;
+    }
+
+    if (isSeedAdmin(targetUserId)) {
+      res.status(403).json({ error: '种子管理员账户不允许删除' });
+      return;
+    }
+
+    const { adminPassword } = req.body as { adminPassword: string };
+
+    if (!verifyAdminPassword(req, adminPassword)) {
+      res.status(403).json({ error: '管理员密码错误' });
+      return;
+    }
+
+    // 防止管理员删除自己（即便是非种子管理员）
+    if (targetUserId === req.user!.userId) {
+      res.status(403).json({ error: '不能删除当前登录的管理员账户' });
+      return;
+    }
+
+    const ok = deleteUserById(targetUserId);
+    if (!ok) {
+      res.status(404).json({ error: '用户不存在' });
+      return;
+    }
+
+    res.json({ message: '用户已删除' });
+  },
+);
 
 /** GET /api/me handler —— 导出供 index.ts 单独挂载 */
 export function meHandler(req: Request, res: Response): void {

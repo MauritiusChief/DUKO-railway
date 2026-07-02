@@ -27,7 +27,7 @@ import { imageParseRouter } from './routes/imageParse.js';
 import { layoutParseImageRouter } from './routes/layoutParseImage.js';
 import { debugRouter } from './routes/debug.js';
 import { authRouter, meHandler } from './routes/auth.js';
-import { historyRouter } from './routes/history.js';
+import { historyRouter, adminHistoryRouter } from './routes/history.js';
 import { notesRouter } from './routes/notes.js';
 import { traceRouter } from './routes/trace.js';
 import { authenticateToken } from './middleware/auth.js';
@@ -92,6 +92,9 @@ app.use('/api/layout/parse-image', llmLimiter, authenticateToken, layoutParseIma
 
 // ---- Trace 路由（管理员只读，使用 apiLimiter）----
 app.use('/api/trace', apiLimiter, authenticateToken, traceRouter);                          // GET /api/trace[/:conversationId]
+
+// ---- 管理员历史路由（管理员只读浏览所有用户历史）----
+app.use('/api/admin', apiLimiter, authenticateToken, adminHistoryRouter);                    // GET /api/admin/history[/:id]
 
 // ---- ScriptCat 脚本下载端点（无需登录）----
 // 供前端小按钮下载，文件名带构建时间戳以便用户确认是否为最新版本

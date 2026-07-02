@@ -5,6 +5,10 @@
  * GET    /api/history/:id   —— 获取单条记录完整详情
  * POST   /api/history       —— 保存新记录（auto-save 触发）
  * DELETE /api/history/:id   —— 删除记录
+ *
+ * 管理员路由（单独挂载在 /api/admin/history，需要 AdminGuard）
+ * GET    /api/admin/history       —— 获取所有用户的记录摘要列表
+ * GET    /api/admin/history/:id   —— 获取任意记录完整详情
  */
 import { Router } from 'express';
 import {
@@ -12,11 +16,17 @@ import {
   getRecordsByUser,
   getRecordById,
   deleteRecord,
+  getAllRecords,
+  getRecordByIdForAdmin,
 } from '../db/users.js';
 import { validate } from '../middleware/validate.js';
+import { requireAdmin } from '../middleware/auth.js';
 import { z } from 'zod';
 
 export const historyRouter = Router();
+
+/** 管理员历史记录路由 —— 供 index.ts 单独挂载，施加 requireAdmin */
+export const adminHistoryRouter = Router();
 
 const saveHistorySchema = z.object({
   input: z.string(),
@@ -98,4 +108,39 @@ historyRouter.delete('/history/:id', (req, res) => {
   }
 
   res.json({ message: '已删除' });
+});
+
+// ==================================================================
+//  管理员路由：全量历史记录浏览
+// ==================================================================
+
+// GET /api/admin/history —— 所有用户的记录摘要列表（含归属用户信息）
+adminHistoryRouter.get('/history', requireAdmin, (_req, res) => {
+  const records = getAllRecords();
+  res.json(records);
+});
+
+// GET /api/admin/history/:id —— 管理员查看任意记录完整详情
+adminHistoryRouter.get('/history/:id', requireAdmin, (req, res) => {
+  const recordId = Number(req.params.id);
+  if (Number.isNaN(recordId)) {
+    res.status(400).json({ error: '无效的记录 ID' });
+    return;
+  }
+
+  const row = getRecordByIdForAdmin(recordId);
+  if (!row) {
+    res.status(404).json({ error: '记录不存在' });
+    return;
+  }
+
+  res.json({
+    id: row.id,
+    input: row.input,
+    colorHints: JSON.parse(row.color_hints),
+    items: JSON.parse(row.items),
+    conversation: JSON.parse(row.conversation),
+    lang: row.lang,
+    created_at: row.created_at,
+  });
 });
