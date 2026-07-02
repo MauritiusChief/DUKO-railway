@@ -24,8 +24,12 @@
 
 ## 未完成
 
+- 日志发现 evaluateShapeLeaf 函数出错，Cannot read properties of undefined (reading 'length')，和 search-structured 与 executeSearchSkuStructured 有关
+  - 因为缺少 trace，不知道为何触发。可以添加大量 test case 来测试。
+- searchSkuStructured 工具的描述过时，现在 vector query 仅用来排序了，不再过滤
+- ScriptCat 覆写模式不会检查数量
+
 - 发现 railway web 的 console 可以管理 `/data` 目录，应该不需要用到 railway cli 来管理 volume 了。
   - 但疑似缺少新建目录功能，需要调整 refresh cli 来配合
   - console 可以管理 `/data` 的话，那整个 wsl 都变成可选了
 - 还有个指挥者 agent，看怎么处理
-- ScriptCat 覆写模式不会检查数量
