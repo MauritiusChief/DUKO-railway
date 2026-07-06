@@ -114,7 +114,7 @@ export function BlockInfoBar({
 
   return (
     <div className="pf-bar">
-      {/* 第1行：信息字段（分类 / SKU / 宽度 / 距左） */}
+      {/* 第1行：信息字段（分类 / 宽度 / SKU / 距左） */}
       <div className="pf-row">
         <span className="pf-category">
           {categoryLabel}
@@ -122,18 +122,6 @@ export function BlockInfoBar({
         </span>
 
         <label className="pf-field">
-          {t('请输入SKU')}
-          <input
-            className="pf-input pf-sku-input"
-            value={sku}
-            onChange={(e) => setSku(e.target.value)}
-            onBlur={commitSku}
-            onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-          />
-        </label>
-
-        <label className="pf-field">
-          {t('宽度')}
           <input
             className="pf-input pf-width-input"
             type="number"
@@ -144,7 +132,16 @@ export function BlockInfoBar({
             onBlur={commitWidth}
             onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
           />
-          {t('英寸')}
+        </label>
+
+        <label className="pf-field">
+          <input
+            className="pf-input pf-sku-input"
+            value={sku}
+            onChange={(e) => setSku(e.target.value)}
+            onBlur={commitSku}
+            onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+          />
         </label>
 
         {/* 距左（只读，编辑推迟到 Feature 3） */}

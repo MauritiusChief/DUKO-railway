@@ -157,13 +157,14 @@
 /* ---- 第3行：操作按钮 ---- */
 
 .pf-btn-ok {
-  font-size: 11px;
   background: #4a90d9;
-  color: #fff;
   border: 1px solid #3a7bc8;
-  border-radius: 3px;
   cursor: pointer;
-  padding: 2px 8px;
+  color: #fff;
+  font-size: 12px;
+  padding: 2px 6px;
+  line-height: 1;
+  border-radius: 3px;
 }
 
 .pf-btn-ok:hover {
