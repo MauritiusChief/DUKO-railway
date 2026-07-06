@@ -29,6 +29,9 @@
 
 ## 未完成
 
+- 改用 deepseek 解析图片
+- 不要每次都传输图片，改为只能调用 sub agent 看图
+
 - 每次去 layout-recognize 或 debug, 以及再回到主页面时都需要重新登录，很烦人
 - ScriptCat 覆写模式不会检查数量
 - 前端和后端各自有一份 layout 用的推挤逻辑，看看如何统一
