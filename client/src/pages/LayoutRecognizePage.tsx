@@ -148,8 +148,8 @@ export default function LayoutRecognizePage() {
                 onChange={(e) => setWallWidth(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') handleAddWall(); }}
               />
-              <button className="lr-btn lr-btn-primary lr-btn-sm" onClick={handleAddWall}>{t('确定')}</button>
-              <button className="lr-btn lr-btn-sm" onClick={() => { setShowAddWall(false); setWallName(''); setWallWidth(''); }}>X</button>
+              <button className="lr-btn lr-btn-primary lr-btn-sm" onClick={handleAddWall}>✓</button>
+              <button className="lr-btn lr-btn-sm" onClick={() => { setShowAddWall(false); setWallName(''); setWallWidth(''); }}>✕</button>
             </div>
           ) : (
             <button className="lr-btn lr-btn-sm lr-btn-primary" onClick={openAddWallForm}>
