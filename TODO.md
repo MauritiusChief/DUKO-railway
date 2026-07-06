@@ -24,11 +24,12 @@
 - searchSkuStructured 工具的描述过时，现在 vector query 仅用来排序了，不再过滤
 - 日志发现 evaluateShapeLeaf 函数出错，Cannot read properties of undefined (reading 'length')，和 search-structured 与 executeSearchSkuStructured 有关
   - 因为缺少 trace，不知道为何触发。可以添加大量 test case 来测试。
+- 管理员总览全员历史记录功能
+- 管理员修改密码功能
 
 ## 未完成
 
-- 管理员总览全员历史记录功能
-- 管理员修改密码功能
+- 每次去 layout-recognize 或 debug, 以及再回到主页面时都需要重新登录，很烦人
 - ScriptCat 覆写模式不会检查数量
 
 - 发现 railway web 的 console 可以管理 `/data` 目录，应该不需要用到 railway cli 来管理 volume 了。
