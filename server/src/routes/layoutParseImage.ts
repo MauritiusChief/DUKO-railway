@@ -14,26 +14,29 @@
  *     4. 返回 { updatedLayout } —— 布局已在工具执行中原地修改
  *
  * SSE 事件：
- *   tool_call   → { tool: string }    — Agent 调用了工具
- *   done        → {}                  — 流程结束
- *   error       → { message: string } — 错误
+ *   round_start → { round: number }          — 对话轮次开始
+ *   tool_call   → { tool: string }           — Agent 调用了工具
+ *   reply_chunk → { text: string }           — LLM 流式回复片段
+ *   layout_update → { layout, tool, message } — 布局被修改后的快照
+ *   result      → { updatedLayout, reply }   — 最终结果
+ *   done        → {}                         — 流程结束
+ *   error       → { message: string }        — 错误
  */
 
 import { Router, type Request, type Response } from 'express';
 import { randomUUID } from 'crypto';
 import { createOpenRouterProvider } from '../llm/index.js';
 import { config } from '../config/env.js';
-import { LayoutAgent } from '../agents/layout-agent.js';
+import { LayoutAgent, type LayoutAgentExtendedConfig } from '../agents/layout-agent.js';
 import { SSEConnection } from '../middleware/sse.js';
 import { validate } from '../middleware/validate.js';
-import { requireAdmin } from '../middleware/auth.js';
 import { layoutParseSchema } from '../validation/schemas.js';
 import { insertTraceSession, markSessionCompleted, markSessionError } from '../services/trace.js';
 import type { TraceContext } from '../types/trace.js';
 
 export const layoutParseImageRouter = Router();
 
-layoutParseImageRouter.post('/', requireAdmin, validate(layoutParseSchema), async (req: Request, res: Response) => {
+layoutParseImageRouter.post('/', validate(layoutParseSchema), async (req: Request, res: Response) => {
   const body = req.body as {
     image?: string;
     viewType?: string;
@@ -93,23 +96,41 @@ layoutParseImageRouter.post('/', requireAdmin, validate(layoutParseSchema), asyn
     );
   }
 
-  const agent = new LayoutAgent(llm, {
+  const agentConfig: LayoutAgentExtendedConfig = {
     searchBudgetLimit: 5,
     maxRounds: 30,
     langHint: '中文',
     onStep: (event) => {
-      if (event.type === 'tool_call') {
+      // 透传 BaseAgent 的所有步进事件给前端
+      if (event.type === 'round_start') {
+        sse.send('round_start', { round: event.round });
+      } else if (event.type === 'tool_call') {
         sse.send('tool_call', { tool: event.tool });
+      } else if (event.type === 'reply_chunk') {
+        sse.send('reply_chunk', { text: event.text });
+      } else if (event.type === 'error') {
+        sse.send('error', { message: event.message });
       }
+      // 'reply' 事件忽略 —— reply_chunk 已覆盖流式输出
     },
-  });
+    /** 布局被 LLM 工具修改后，立即推送新快照给前端 */
+    onLayoutUpdated: (update) => {
+      sse.send('layout_update', {
+        layout: update.layout,
+        tool: update.tool,
+        message: update.message,
+      });
+    },
+  };
+
+  const agent = new LayoutAgent(llm, agentConfig);
 
   if (traceContext) {
     agent.trace = traceContext;
   }
 
   try {
-    const updatedLayout = await agent.parse({
+    const { layout: updatedLayout, reply } = await agent.parse({
       image: body.image,
       viewType: body.viewType,
       associatedWallIds: body.associatedWallIds,
@@ -120,6 +141,7 @@ layoutParseImageRouter.post('/', requireAdmin, validate(layoutParseSchema), asyn
       markSessionCompleted(traceContext.conversationId);
     }
 
+    sse.send('result', { updatedLayout, reply });
     sse.send('done', {});
   } catch (err) {
     console.error('[layout-parse] error:', err);

@@ -15,6 +15,7 @@ import type {
   TrackSpan,
   PositionedBlock,
 } from '../types';
+import type { SSEEvent } from '../lib/sse';
 
 // ==================================================================
 //  工具函数
@@ -482,6 +483,14 @@ interface LayoutStoreState {
   loading: boolean;
   error: string;
 
+  // ---- SSE 识别事件回调（供 LayoutChatPanel / ImageUploadPanel 通信） ----
+  /** 布局识别过程中产生的事件回调 */
+  recognitionEventCallback: ((event: SSEEvent) => void) | null;
+  /** 注册/取消注册事件回调 */
+  setRecognitionEventCallback: (cb: ((event: SSEEvent) => void) | null) => void;
+  /** 向当前注册的回调发送识别事件 */
+  emitRecognitionEvent: (event: SSEEvent) => void;
+
   // ---- Layout 生命周期 ----
   /** 创建全新空布局 */
   newLayout: () => void;
@@ -569,6 +578,14 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => {
     activeLayout: initial,
     loading: false,
     error: '',
+
+    // ---- SSE 识别事件回调 ----
+    recognitionEventCallback: null,
+    setRecognitionEventCallback: (cb) => set({ recognitionEventCallback: cb }),
+    emitRecognitionEvent: (event) => {
+      const { recognitionEventCallback } = get();
+      recognitionEventCallback?.(event);
+    },
 
     // ---- Layout 生命周期 ----
 

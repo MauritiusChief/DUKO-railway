@@ -285,6 +285,10 @@ export const messages = {
     zh: '通过图片或手工编辑橱柜布局，识别墙/岛台上柜体之间的关系',
     en: 'Recognize cabinet layout relationships on walls via images or manual editing',
   },
+  布局识别对话提示: {
+    zh: '上传 layout 图片后，我会实时显示识别过程和工具调用。',
+    en: 'After uploading a layout image, I will show the recognition process and tool calls in real time.',
+  },
   新建布局: {
     zh: '新建布局',
     en: 'New Layout',

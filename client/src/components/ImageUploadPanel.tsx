@@ -3,13 +3,17 @@
  *
  * 用户在此粘贴/拖入橱柜布局图片，选择视图类型和关联的墙/岛台，
  * 点击识别后发送到后端 OpenRouter 视觉模型进行布局识别。
+ * 通过 SSE 流式接收 tool_call / reply_chunk / layout_update / result 事件，
+ * 实时更新左侧画布和右侧对话面板。
  * 图片不持久化，仅作为 LayoutInstruction 的临时载体。
  */
 import { useState, useCallback, useRef } from 'react';
 import { useI18n } from '../i18n/context';
-import type { LayoutDocument, LayoutInstruction } from '../types';
-import './ImageUploadPanel.css';
+import { useLayoutStore } from '../stores/layoutStore';
+import type { LayoutDocument } from '../types';
 import { fetchWithAuth } from '../lib/fetchWithAuth';
+import { parseSSEEvents, type SSEEvent } from '../lib/sse';
+import './ImageUploadPanel.css';
 
 interface ImageUploadPanelProps {
   layout: LayoutDocument | null;
@@ -104,7 +108,7 @@ export function ImageUploadPanel({ layout, onLayoutUpdated }: ImageUploadPanelPr
     );
   }, []);
 
-  /** 提交识别 */
+  /** 提交识别（SSE 流式） */
   const handleRecognize = useCallback(async () => {
     if (!imageData || !layout) return;
     setLoading(true);
@@ -130,14 +134,49 @@ export function ImageUploadPanel({ layout, onLayoutUpdated }: ImageUploadPanelPr
         return;
       }
 
-      const data = await res.json();
-      onLayoutUpdated(data.updatedLayout);
-      setSuccessMsg(t('布局更新成功'));
-      // 不清除图片，用户可以再次识别
+      // SSE 流式读取
+      const reader = res.body!.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      const readLoop = async () => {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const { events, remaining } = parseSSEEvents(buffer);
+          buffer = remaining;
+
+          for (const event of events) {
+            // 转发给 LayoutChatPanel 展示对话过程
+            useLayoutStore.getState().emitRecognitionEvent(event);
+
+            if (event.type === 'layout_update') {
+              const data = event.data as { layout: LayoutDocument; tool?: string };
+              if (data.layout) {
+                onLayoutUpdated(data.layout);
+              }
+            } else if (event.type === 'result') {
+              const data = event.data as { updatedLayout: LayoutDocument; reply?: string };
+              if (data.updatedLayout) {
+                onLayoutUpdated(data.updatedLayout);
+              }
+              setSuccessMsg(t('布局更新成功'));
+            } else if (event.type === 'error') {
+              const data = event.data as { message?: string };
+              setError(data.message || t('识别失败'));
+            }
+          }
+        }
+      };
+
+      await readLoop();
     } catch {
       setError(t('网络请求失败'));
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, [imageData, viewType, associatedWallIds, layout, onLayoutUpdated, t]);
 
   const allItems = layout ? layout.walls : [];

@@ -13,6 +13,30 @@ import type { MutableLayout, LayoutDocument } from '../types/layout.js';
 import { config } from '../config/env.js';
 import { writeChatLog } from '../services/logger.js';
 
+/** 会修改布局的工具名集合 */
+const LAYOUT_MUTATING_TOOLS = new Set([
+  'createWall',
+  'deleteWall',
+  'insertItem',
+  'deleteItem',
+  'insertItemAtPosition',
+  'updateWallProperties',
+  'connectWalls',
+  'disconnectWalls',
+  'connectIslands',
+  'disconnectIslands',
+]);
+
+/** Extended conifg for layout-specific callbacks */
+export interface LayoutAgentExtendedConfig extends BaseAgentConfig {
+  /** 布局被工具修改后调用，推送新的 layout 快照 */
+  onLayoutUpdated?: (event: {
+    layout: LayoutDocument;
+    tool: string;
+    message: string;
+  }) => void;
+}
+
 import {
   SEARCH_SKU_SHAPE_TOOL,
   executeSearchSkuShape,
@@ -61,7 +85,9 @@ export class LayoutAgent extends BaseAgent<MultimodalChatMessage> {
     'searchSkuDescription',
   ];
 
-  constructor(llm: LlmProvider<MultimodalChatMessage>, config: BaseAgentConfig) {
+  declare protected config: LayoutAgentExtendedConfig;
+
+  constructor(llm: LlmProvider<MultimodalChatMessage>, config: LayoutAgentExtendedConfig) {
     super(llm, config);
   }
 
@@ -97,19 +123,31 @@ export class LayoutAgent extends BaseAgent<MultimodalChatMessage> {
 
     // 布局工具
     const ctx = context as LayoutAgentContext;
-    return executeLayoutTool(ctx.mutableLayout, tc.function.name, args);
+    const result = await executeLayoutTool(ctx.mutableLayout, tc.function.name, args);
+
+    // 修改了布局 → 推送 layout_update 快照
+    if (LAYOUT_MUTATING_TOOLS.has(tc.function.name)) {
+      this.config.onLayoutUpdated?.({
+        layout: ctx.mutableLayout.layout,
+        tool: tc.function.name,
+        message: result,
+      });
+    }
+
+    return result;
   }
 
   // ================================================================
   //  Public API
   // ================================================================
 
+  /** 解析图片并返回最终布局和 LLM 回复 */
   async parse(args: {
     image: string;
     viewType?: string;
     associatedWallIds?: string[];
     layout: LayoutDocument;
-  }): Promise<LayoutDocument> {
+  }): Promise<{ layout: LayoutDocument; reply: string }> {
     const viewType = args.viewType || 'top';
     const associatedWallIds: string[] = Array.isArray(args.associatedWallIds)
       ? args.associatedWallIds
@@ -149,7 +187,7 @@ export class LayoutAgent extends BaseAgent<MultimodalChatMessage> {
       writeChatLog(result.messages);
     }
 
-    return mutableLayout.layout;
+    return { layout: mutableLayout.layout, reply: result.reply };
   }
 
   // ================================================================
