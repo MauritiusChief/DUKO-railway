@@ -390,6 +390,10 @@ interface LayoutStoreState {
   insertBlockWithItems: (wallId: string, track: TrackSpan, items: Omit<BlockItem, 'id'>[], width: number) => string;
   insertBothTracksWithItems: (wallId: string, mainItem: Omit<BlockItem, 'id'>, stackedItems: Omit<BlockItem, 'id'>[], width: number) => { airBlockId: string; groundBlockId: string };
   removeStackedItem: (wallId: string, blockId: string, itemId: string) => void;
+  /** 向已有 block 追加一个叠放吊柜 item（仅 air 轨有意义） */
+  addStackedItem: (wallId: string, blockId: string, sku: string) => void;
+  /** 修改某个 item 的 SKU（按 itemId 查找，双轨块共享 id 会同步两轨） */
+  updateItemSku: (wallId: string, itemId: string, newSku: string) => void;
 
   // ---- Block 移动（拖拽用） ----
   moveBlock: (wallId: string, track: TrackSpan, blockId: string, newDistanceFromLeft: number) => void;
@@ -843,6 +847,66 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => {
       const filtered = block.items.filter((item) => item.id !== itemId);
       if (filtered.length === 0) return;
       block.items = filtered;
+
+      const updated: LayoutDocument = {
+        ...activeLayout,
+        walls: activeLayout.walls.map((w) => (w.id === wallId ? updatedWall : w)),
+        updatedAt: nowISO(),
+      };
+      set({ activeLayout: updated });
+      syncToStorage(updated);
+    },
+
+    addStackedItem: (wallId: string, blockId: string, sku: string) => {
+      const { activeLayout } = get();
+      if (!activeLayout) return;
+
+      const ref = findWallInLayout(activeLayout, wallId);
+      if (!ref) return;
+
+      const updatedWall = { ...ref.wall };
+
+      // 在 air / ground 中查找目标 block（叠放概念上仅 air 轨使用）
+      const airIdx = updatedWall.airBlocks.findIndex((b) => b.id === blockId);
+      const groundIdx = updatedWall.groundBlocks.findIndex((b) => b.id === blockId);
+      const blocks = airIdx !== -1 ? updatedWall.airBlocks : updatedWall.groundBlocks;
+      const idx = airIdx !== -1 ? airIdx : groundIdx;
+      if (idx === -1) return;
+
+      const block = blocks[idx];
+      const trimmed = sku.trim();
+      if (!trimmed) return;
+
+      block.items = [...block.items, { id: uuid(), category: 'wall_cabinet', sku: trimmed }];
+
+      const updated: LayoutDocument = {
+        ...activeLayout,
+        walls: activeLayout.walls.map((w) => (w.id === wallId ? updatedWall : w)),
+        updatedAt: nowISO(),
+      };
+      set({ activeLayout: updated });
+      syncToStorage(updated);
+    },
+
+    updateItemSku: (wallId: string, itemId: string, newSku: string) => {
+      const { activeLayout } = get();
+      if (!activeLayout) return;
+
+      const ref = findWallInLayout(activeLayout, wallId);
+      if (!ref) return;
+
+      const updatedWall = { ...ref.wall };
+      const trimmed = newSku.trim();
+
+      // 双轨块共享 itemId，遍历两轨统一更新
+      for (const block of updatedWall.airBlocks) {
+        const item = block.items.find((it) => it.id === itemId);
+        if (item) item.sku = trimmed;
+      }
+      for (const block of updatedWall.groundBlocks) {
+        const item = block.items.find((it) => it.id === itemId);
+        if (item) item.sku = trimmed;
+      }
 
       const updated: LayoutDocument = {
         ...activeLayout,

@@ -487,6 +487,28 @@ export const messages = {
     en: 'Appliance w/o Countertop',
   },
 
+  /* ---- BlockInfoBar ---- */
+  双轨联动: {
+    zh: '双轨联动（空中+地面）',
+    en: 'Dual-track (Air + Ground)',
+  },
+  叠放提示: {
+    zh: '叠放 {n} 个吊柜',
+    en: '{n} stacked cabinet(s)',
+  },
+  物品信息: {
+    zh: '物品信息',
+    en: 'Item Info',
+  },
+  关闭: {
+    zh: '关闭',
+    en: 'Close',
+  },
+  添加叠放: {
+    zh: '+ 叠放',
+    en: '+ Stack',
+  },
+
   /* ---- ImageUploadPanel ---- */
   图片识别: {
     zh: '图片识别',

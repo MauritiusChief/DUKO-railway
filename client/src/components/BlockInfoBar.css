@@ -1,0 +1,172 @@
+/* BlockInfoBar —— 选中块信息栏样式（与 wp-add-form 平级） */
+
+.bib-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 4px 6px;
+  border: 1px solid #d0e3f7;
+  border-radius: 3px;
+  background: #f5f9ff;
+}
+
+.bib-category {
+  font-size: 11px;
+  font-weight: 600;
+  color: #333;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
+}
+
+.bib-dual-badge {
+  font-size: 10px;
+  color: #4a90d9;
+}
+
+.bib-field {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  color: #666;
+  white-space: nowrap;
+}
+
+.bib-input {
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  padding: 2px 5px;
+  font-size: 11px;
+  font-family: inherit;
+  background: #fff;
+}
+
+.bib-sku-input {
+  width: 90px;
+  font-family: monospace;
+}
+
+.bib-width-input {
+  width: 48px;
+  text-align: right;
+}
+
+.bib-readonly {
+  font-size: 11px;
+  color: #999;
+  white-space: nowrap;
+}
+
+/* 叠放物品列表 */
+
+.bib-stacked {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  width: 100%;
+  padding-left: 4px;
+  border-left: 2px solid #d0e3f7;
+}
+
+.bib-stacked-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 10px;
+  color: #777;
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 2px;
+  padding: 1px 4px;
+  font-family: monospace;
+}
+
+.bib-stacked-remove {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #ccc;
+  font-size: 11px;
+  padding: 0 1px;
+  line-height: 1;
+  border-radius: 2px;
+}
+
+.bib-stacked-remove:hover {
+  color: #c00;
+  background: #fee;
+}
+
+.bib-stacked-add-row {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  width: 100%;
+  padding-left: 4px;
+}
+
+.bib-stacked-add-input {
+  width: 90px;
+  font-family: monospace;
+}
+
+.bib-stacked-add-btn {
+  font-size: 10px;
+  background: none;
+  border: 1px dashed #aaa;
+  border-radius: 2px;
+  cursor: pointer;
+  color: #888;
+  padding: 1px 6px;
+}
+
+.bib-stacked-add-btn:hover {
+  border-color: #4a90d9;
+  color: #4a90d9;
+}
+
+/* 删除 & 关闭按钮 */
+
+.bib-delete {
+  background: none;
+  border: 1px solid #ddd;
+  cursor: pointer;
+  color: #aaa;
+  font-size: 12px;
+  padding: 2px 6px;
+  line-height: 1;
+  border-radius: 3px;
+}
+
+.bib-delete-dynamic:hover {
+  color: #c00;
+  background: #fee;
+  border-color: #e0b4b4;
+}
+
+.bib-delete-static:hover {
+  color: #e67e22;
+  background: #fff3e0;
+  border-color: #e0c4a0;
+}
+
+.bib-close {
+  margin-left: auto;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #999;
+  font-size: 13px;
+  padding: 2px 4px;
+  line-height: 1;
+  border-radius: 2px;
+}
+
+.bib-close:hover {
+  color: #333;
+  background: #e8e8e8;
+}

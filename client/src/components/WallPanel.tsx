@@ -2,14 +2,16 @@
  * WallPanel —— 单面墙的可折叠面板（统一定义，岛台视为特殊墙面）
  *
  * 展示墙头信息（名称、总宽、暴露面）、空中 + 地面两个轨道。
- * 每轨渲染 BlockCard 列表，支持拖拽移动、添加物品。
- * 拖拽时通过 mouse 事件计算距左距离，调用 store.moveBlock。
+ * 每轨渲染 BlockCard 列表（仅显示 SKU），点击块后在 wp-add-form 平级位置
+ * 展示 BlockInfoBar 信息栏（编辑 SKU/宽度/叠放、删除），与添加表单互斥。
+ * 支持拖拽移动、添加物品。拖拽时通过 mouse 事件计算距左距离，调用 store.moveBlock。
  */
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useLayoutStore } from '../stores/layoutStore';
 import { useI18n } from '../i18n/context';
 import type { TranslationKey } from '../i18n/translations';
 import { BlockCard } from './BlockCard';
+import { BlockInfoBar } from './BlockInfoBar';
 import type {
   LayoutWall,
   SectionBlock,
@@ -63,12 +65,32 @@ export function WallPanel({ wall }: WallPanelProps) {
   const [newSku, setNewSku] = useState('');
   const [stackedSkus, setStackedSkus] = useState<string[]>([]);
 
+  // ---- 选中块（信息栏）---- 与 addingTrack 互斥
+  const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
+  const [selectedTrack, setSelectedTrack] = useState<TrackSpan | null>(null);
+
   /** 是否需要叠放吊柜的行 */
   const isStackableCategory =
     newCategory === 'wall_cabinet' || newCategory === 'tall_cabinet' || newCategory === 'tall_appliance';
 
+  /** 选中某个块：显示信息栏，同时取消添加表单 */
+  const handleSelectBlock = useCallback((blockId: string, track: TrackSpan) => {
+    setSelectedBlockId(blockId);
+    setSelectedTrack(track);
+    setAddingTrack(null);
+  }, []);
+
+  /** 关闭信息栏 */
+  const handleCloseInfoBar = useCallback(() => {
+    setSelectedBlockId(null);
+    setSelectedTrack(null);
+  }, []);
+
   const startAdd = useCallback((track: TrackSpan) => {
     setAddingTrack(track);
+    // 显示添加表单时自动取消信息栏
+    setSelectedBlockId(null);
+    setSelectedTrack(null);
     const categories = track === 'air' ? AIR_CATEGORIES : GROUND_CATEGORIES;
     setNewCategory(categories[0]);
     setNewWidth('');
@@ -126,6 +148,9 @@ export function WallPanel({ wall }: WallPanelProps) {
       } else {
         store.deleteBlock(wall.id, track, blockId, mode);
       }
+      // 删除后关闭信息栏
+      setSelectedBlockId(null);
+      setSelectedTrack(null);
     },
     [wall, store],
   );
@@ -290,11 +315,11 @@ export function WallPanel({ wall }: WallPanelProps) {
               >
                 <BlockCard
                   block={block}
-                  distanceFromLeft={distanceFromLeft}
+                  track={track}
                   isDual={isDualBlock(block)}
+                  isSelected={selectedBlockId === block.id}
                   onDragStart={handleDragStart}
-                  onDelete={handleDelete}
-                  onRemoveStackedItem={handleRemoveStackedItem}
+                  onSelect={handleSelectBlock}
                 />
               </div>
             );
@@ -382,6 +407,25 @@ export function WallPanel({ wall }: WallPanelProps) {
             </button>
           </div>
         )}
+
+        {/* 选中块信息栏（与添加表单互斥） */}
+        {selectedTrack === track && selectedBlockId && (() => {
+          const selected = positioned.find((p) => p.block.id === selectedBlockId);
+          if (!selected) return null;
+          return (
+            <BlockInfoBar
+              key={selected.block.id}
+              wall={wall}
+              track={track}
+              block={selected.block}
+              distanceFromLeft={selected.distanceFromLeft}
+              isDual={isDualBlock(selected.block)}
+              onDelete={handleDelete}
+              onRemoveStackedItem={handleRemoveStackedItem}
+              onClose={handleCloseInfoBar}
+            />
+          );
+        })()}
       </div>
     );
   };
