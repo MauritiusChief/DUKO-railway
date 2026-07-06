@@ -168,116 +168,7 @@ setBlockPosition: (wallId: string, track: TrackSpan, blockId: string, newDistanc
 
 设 A = 被移动块，X = 目标距左位置，oldX = A 当前距左。
 
-#### 步骤
-
-1. **记录方向**：`direction = X < oldX ? 'left' : (X > oldX ? 'right' : 'none')`。若 `none` 直接返回。
-
-2. **移除 A**：`blocks.splice(idx, 1)` → `remaining`，重算 remaining 的累积位置。
-
-3. **定位插入点**：遍历 `remaining`，累积 `cursor`（每块的 start/end）：
-   - **X 落在 gap 块内**（`gapStart <= X < gapEnd`）：在该 gap 处插入 A。拆分 gap：
-     - `leftGapWidth = X - gapStart`
-     - `rightGapWidth = gapEnd - X - A.width`
-     - 若 `rightGapWidth >= 0`：替换 gap 为 `[左gap?, A, 右gap?]`
-     - 若 `rightGapWidth < 0`（A 比 gap 宽）：A 溢出部分把右侧块整体右移
-   - **X 落在非 gap 块 B 内**（`bStart <= X < bEnd`）：A 越过 B。
-     - 左移 → A 插在 B 之前
-     - 右移 → A 保持在 B 之前，B以及其他右侧块整体右移动
-   - **X 落在边界/首/尾**：直接插入，必要时补 gap。
-
-4. **调整 A 左侧 gap**：插入 A 后，确保 A 起点恰好 = X：
-   - A 前面有 gap → 改其宽度 = `X - 该 gap 之前的累积宽度`（缩或扩）
-   - A 前面无 gap → 在 A 前插入 gap
-
-5. **`alignAirGround(updatedWall)`** — 保证双轨物品对齐。
-
-#### 行为对应
-
-**左移侵蚀 gap**（A 左侧有 gap）：
-- gap 缩小，A 及右侧块左移，总占用宽度缩小。
-
-**左移越过 B**（A 左侧无 gap，紧邻 B）：
-- A 与 B 互换顺序，B 原位变 gap 供 A 侵蚀。
-- 若 A 右侧原有 C，则 B 插入 A 与 C 之间。
-- **C 及更右侧块整体右移，总宽增长。**
-
-**右移**：
-- A 左侧创建/扩大 gap，右侧块右移，总宽增长。
-
-#### 示例验证
-
-**Case 1：侵蚀 gap**
-```
-初始: [gap(5), A(10), B(10)]  A 在位置 5
-设 X=2（左移 3）
-→ gap 缩为 2，A 在 2-12，B 在 12-22
-结果: [gap(2), A(10), B(10)]  总宽 22（原 25，缩 3）
-```
-
-**Case 2：越过 B（有 C）**
-```
-初始: [B(10), A(10), C(10)]  A 在位置 10
-设 X=5（左移 5，越过 B）
-→ 移除 A → [B(10), C(10)]
-→ X=5 落在 B(0-10) 内，非 gap，左移 → A 插在 B 前
-→ 插入 A → [A(10), B(10), C(10)]
-→ 调整 A 左侧 gap：Start=0, X=5 → 插入 gap(5)
-结果: [gap(5), A(10), B(10), C(10)]  总宽 35（原 30，增 5）
-```
-
-**Case 3：右移创建 gap**
-```
-初始: [gap(5), A(10), B(10)]  A 在位置 5
-设 X=8（右移 3）
-→ X=8 落在 A(5-15) 内
-→ A 没有越过任何块（仍在自己原位附近）
-→ 实际上：移除 A → [gap(5), B(10)]，X=8 落在 B(5-15) 内
-→ 右移 → A 插在 B 后 → [gap(5), B(10), A(10)]
-→ 调整 A 左侧 gap：Start=15, X=8 < 15...
-```
-> 此 case 需注意：右移时若 X 仍落在 A 原有范围内或紧邻，不应触发越过。算法需判断 X 是否真的越过了相邻块。若 X 在 A 原有范围内（`oldX <= X < oldX + A.width`），则为 no-op 或仅扩大左侧 gap。
-
-**修正 Case 3**：
-```
-初始: [gap(5), A(10), B(10)]  A 在位置 5
-设 X=8（右移 3，但仍 A 范围内 5-15）
-→ 移除 A → [gap(5), B(10)]，重算位置：gap(0-5), B(5-15)
-→ X=8 落在 B(5-15) 内，非 gap，右移 → A 插在 B 后
-→ [gap(5), B(10), A(10)]
-→ A 的 naturalStart = 15, X=8 < 15
-→ 这不对！A 应该在 8，但 B 在 5-15 挡住了
-```
-> **问题**：右移 3 应该只是把 A 的起点从 5 改到 8，即扩大左侧 gap 从 5 到 8，而不是越过 B。
->
-> **修正**：在移除 A 之前，先判断 X 是否在 A 的"势力范围"内（即 X 落在 A 的左侧 gap 区域或 A 自身区域内，且没有越过其他非 gap 块）。如果是，只需调整左侧 gap，不需要 reorder。
->
-> 更简洁的处理：移除 A 后，若 X 落在 remaining 中 A 原位置附近的 gap 内，直接调整 gap。若 X 越过了非 gap 块，才 reorder。
-
-**算法修正版**：
-
-移除 A 后，遍历 remaining 找 X 落点时，需考虑 A 原位置的 gap：
-
-```
-初始: [gap(5), A(10), B(10)]
-移除 A → [gap(5), B(10)]  位置: gap(0-5), B(5-15)
-X=8 落在 B(5-15) 内 → 但 A 原本就在 5-15
-
-问题核心：移除 A 后 B 左移了，X=8 变成落在 B 内
-```
-
-> 这说明不能简单移除后查找。需要保留 A 的原始位置信息。
->
-> **更好的方法**：不移除 A，而是直接在原数组上操作：
-> 1. 找到 A 的当前 index 和 oldX。
-> 2. 若 `direction === 'left'`：
->    a. 检查 A 左侧的 gap（A 前一个块是否是 gap）。
->    b. 若有 gap 且 `X >= oldX - gapWidth`（即左移量 ≤ gap 宽度）：直接缩小 gap，A 位置自然左移。Done。
->    c. 若无 gap 或左移量 > gapWidth：需要越过左侧块 B。将 B 移到 A 右侧（swap），在 A 左侧创建新 gap。
-> 3. 若 `direction === 'right'`：
->    a. 在 A 左侧创建/扩大 gap，使 A 起点变为 X。A 右侧的块自然右移。
->    b. 若 A 右侧有块 C 且 A 扩大后与 C 重叠：C 及更右块整体右移（总宽增长）。
-
-**最终算法（直接操作数组，不移除 A）**：
+**最终算法**：
 
 ```
 function setBlockPosition(blocks, blockId, X):
@@ -303,7 +194,7 @@ function setBlockPosition(blocks, blockId, X):
       // 2. 将 B 移到 A 右侧
       // 3. B 原位变为 gap（或与已有 gap 合并）
       // 4. A 左侧 gap = X - (B 之前的累积宽度)
-      // 5. 若 A 右侧有 C，B 插入 A 和 C 之间（自然结果 of array reorder）
+      // 5. 若 A 右侧有 C，B 插入 A 和 C 之间
 
       // 具体操作：
       // 移除 B（splice）
@@ -323,7 +214,51 @@ function setBlockPosition(blocks, blockId, X):
     // 注意：如果右侧有块且总宽超过墙宽，块会溢出——这是预期行为（用户可通过其他操作修正）
 ```
 
-> **此算法更直观且正确**。左移时先尝试侵蚀 gap，不够才越过；右移时直接扩大/创建 gap。越过操作是 array reorder（B 从 A 左侧移到 A 右侧）。
+> **算法说明**：左移时先尝试侵蚀左侧 gap，不够才越过相邻块；右移时直接在左侧扩大/创建 gap。越过操作本质是数组元素重排序（B 从 A 左侧移到 A 右侧）。
+
+#### 示例验证
+
+**Case 1：左移侵蚀 gap**
+```
+初始: [gap(5), A(10), B(10)]
+设 X=2（左移 3，oldX=5）
+→ A 在 idx=1, leftGap=gap(5), delta=3, availableGap=5
+→ delta ≤ availableGap → 侵蚀 gap: 5-3=2
+→ A 位置自然左移（累积宽度减少）
+结果: [gap(2), A(10), B(10)]  总宽 22（原 25，缩 3）
+```
+
+**Case 2：左移越过 B**
+```
+初始: [B(10), A(10), C(10)]
+设 X=5（左移 5，oldX=10）
+→ A 在 idx=1, leftGap 为 null（左侧是 B，非 gap）, availableGap=0
+→ delta=5 > 0 → 越过左侧块
+→ 找到左侧最近的非 gap 块 B(idx=0)，将 B 移到 A 右侧
+→ [A(10), B(10), C(10)]
+→ A 在 idx=0，累积前无内容 → 插入 gap(X-0)=gap(5)
+结果: [gap(5), A(10), B(10), C(10)]  总宽 35（原 30，增 5）
+```
+
+**Case 3：右移扩大 gap**
+```
+初始: [gap(5), A(10), B(10)]
+设 X=8（右移 3，oldX=5）
+→ A 在 idx=1, leftGap=gap(5), delta=3
+→ 右移 → 扩大 gap: gap(5+3)=gap(8)
+→ B 自然右移: 原在 15-25，现在 18-28
+结果: [gap(8), A(10), B(10)]  总宽 28（原 25，增 3）
+```
+
+**Case 4：右移创建 gap**
+```
+初始: [A(10), B(10)]
+设 X=5（右移 5，oldX=0）
+→ A 在 idx=0, leftGap 不存在
+→ 右移 → 在 A 前插入 gap(5)
+→ A 索引变为 1, B 自然右移
+结果: [gap(5), A(10), B(10)]  总宽 25（原 20，增 5）
+```
 
 ### 双轨块处理
 
