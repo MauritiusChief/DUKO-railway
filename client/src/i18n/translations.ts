@@ -433,10 +433,6 @@ export const messages = {
     zh: '叠放吊柜',
     en: 'Stack Wall Cabinet',
   },
-  无激活布局: {
-    zh: '暂无激活布局',
-    en: 'No active layout',
-  },
   无墙面提示: {
     zh: '暂无墙面。点击 "+ 墙面/岛台" 添加一面。',
     en: 'No walls yet. Click "+ Wall/Island" to add one.',

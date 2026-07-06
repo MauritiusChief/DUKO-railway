@@ -408,25 +408,33 @@ interface LayoutStoreState {
 //  Store 创建
 // ==================================================================
 
+/** 构造一个空白布局文档（供初始化与 newLayout 复用） */
+function createEmptyLayout(): LayoutDocument {
+  const id = uuid();
+  const now = nowISO();
+  return {
+    id,
+    walls: [],
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
 export const useLayoutStore = create<LayoutStoreState>((set, get) => {
   const cached = loadFromStorage();
+  // 初次进入若无缓存，自动创建空白布局并持久化，保证 activeLayout 永不为 null
+  const initial = cached ?? createEmptyLayout();
+  if (!cached) syncToStorage(initial);
 
   return {
-    activeLayout: cached,
+    activeLayout: initial,
     loading: false,
     error: '',
 
     // ---- Layout 生命周期 ----
 
     newLayout: () => {
-      const id = uuid();
-      const now = nowISO();
-      const newLayout: LayoutDocument = {
-        id,
-        walls: [],
-        createdAt: now,
-        updatedAt: now,
-      };
+      const newLayout = createEmptyLayout();
       set({ activeLayout: newLayout });
       syncToStorage(newLayout);
     },

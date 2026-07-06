@@ -67,10 +67,10 @@ export default function LayoutRecognizePage() {
 
   // ---- 新建 ----
   const handleNew = useCallback(() => {
-    if (!activeLayout || confirm(t('新建空白布局确认'))) {
+    if (confirm(t('新建空白布局确认'))) {
       store.newLayout();
     }
-  }, [activeLayout, store, t]);
+  }, [store, t]);
 
   // ---- 添加墙面/岛台 ----
   const [showAddWall, setShowAddWall] = useState(false);
@@ -94,33 +94,6 @@ export default function LayoutRecognizePage() {
     setWallWidth('');
     setShowAddWall(false);
   }, [wallName, wallWidth, store]);
-
-  // ---- 空状态 ----
-  if (!activeLayout) {
-    return (
-      <div className="lr-container">
-        <div className="lr-empty">
-          <h2 className="lr-empty-title">{t('布局识别')}</h2>
-          <p className="lr-empty-desc">{t('布局识别说明')}</p>
-          <div className="lr-empty-actions">
-            <button className="lr-btn lr-btn-primary" onClick={() => store.newLayout()}>
-              {t('新建布局')}
-            </button>
-            <button className="lr-btn" onClick={handleLoadClick}>
-              {t('导入布局')}
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".json"
-              style={{ display: 'none' }}
-              onChange={handleFileChange}
-            />
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   // ---- 正常页面 ----
   return (

@@ -14,11 +14,8 @@ export function LayoutCanvas() {
   const { t } = useI18n();
   const layout = store.getActiveLayout();
 
-  if (!layout) {
-    return <div className="lc-empty">{t('无激活布局')}</div>;
-  }
-
-  if (layout.walls.length === 0) {
+  // layout 由 store 初始化时保证非空；此处仅处理"无墙面"的空布局引导
+  if (!layout || layout.walls.length === 0) {
     return (
       <div className="lc-empty">
         <p>{t('无墙面提示')}</p>
