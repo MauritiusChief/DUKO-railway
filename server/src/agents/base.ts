@@ -53,7 +53,7 @@ export interface AgentContext {
 // ==================================================================
 
 export interface BaseAgentConfig {
-  /** 搜索工具预算上限（如 5 轮） */
+  /** 受限工具预算上限（限制搜索和 dispatch 等耗时工具的总调用次数） */
   searchBudgetLimit: number;
   /** 最大总对话轮数（兜底） */
   maxRounds: number;
@@ -97,11 +97,17 @@ export abstract class BaseAgent<
   /**
    * 为子 agent 创建并注册 trace session。
    * 从父级 trace 上下文克隆，生成新的 conversation_id，设置 agent_name 和 parent_tool_call_id。
+   *
+   * @param parentTrace 父级 trace 上下文
+   * @param agentName 子 agent 类名（如 'BatchSearchAgent'）
+   * @param parentToolCallId 触发此子 agent 的父级工具调用 ID
+   * @param providerOverride 可选，覆盖父级 trace 的 provider/model（如 OCR 子 agent 使用 OpenRouter 而非 DeepSeek）
    */
   protected initSubTrace(
     parentTrace: TraceContext,
     agentName: string,
     parentToolCallId: string,
+    providerOverride?: { provider: string; model: string },
   ): TraceContext | undefined {
     if (!parentTrace.enabled) return undefined;
     const conversationId = randomUUID();
@@ -113,8 +119,8 @@ export abstract class BaseAgent<
       agentName,
       parentToolCallId,
       route: parentTrace.route,
-      provider: parentTrace.provider,
-      model: parentTrace.model,
+      provider: providerOverride?.provider ?? parentTrace.provider,
+      model: providerOverride?.model ?? parentTrace.model,
       enabled: true,
     };
     insertTraceSession(
@@ -182,7 +188,7 @@ export abstract class BaseAgent<
 
   /**
    * 子类可覆盖此方法，返回 true 的工具可在同一轮 LLM 响应中与其他可并发工具并行执行。
-   * 默认所有工具串行执行。典型用法：MainAgent 将 dispatchBatchSearch / dispatchPreciseSearch /
+   * 默认所有工具串行执行。典型用法：TableParseAgent 将 dispatchBatchSearch / dispatchPreciseSearch /
    * dispatchGlassDoorCalc 标记为可并发，使多个委派子 agent 的调用并行执行，显著缩短总耗时。
    * 
    * 注意：不要将存在共享可变状态依赖的工具标记为可并发（如 manifest 编辑工具）。

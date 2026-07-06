@@ -2,16 +2,14 @@
  * Layout 图片解析路由 —— 厨房布局识别（SSE 流式）
  *
  * POST /api/layout/parse-image
- *   接收 base64 图片 + 当前布局，交由 LayoutAgent（OpenRouter 多模态模型）处理。
- *   LLM 通过 function calling 自主调用布局工具（readLayout, createWall,
- *   insertItem, deleteItem 等）和搜索工具（searchSkuShape, searchSkuDescription）
- *   对布局进行增量修改。
+ *   接收 base64 图片 + 当前布局，分两阶段处理：
+ *     1. LayoutOcrAgent（OpenRouter 视觉模型）→ 图片 OCR 转文本双轨列表
+ *     2. LayoutAgent（DeepSeek 文本模型）→ 根据 OCR 结果编排布局修改
  *
- *   流程：
- *     1. 构建系统提示词（含布局上下文 + 数据模型说明 + 工具使用指导）
- *     2. 将图片以多模态格式 + 当前布局摘要发给视觉模型
- *     3. 对话循环：LLM 调用布局工具 + 搜索工具
- *     4. 返回 { updatedLayout } —— 布局已在工具执行中原地修改
+ *   LayoutAgent 通过 function calling 自主调用布局工具（readLayout, createWall,
+ *   insertItem, deleteItem 等）、搜索工具（searchSkuShape, searchSkuDescription）
+ *   和委派工具（dispatchLayoutOcr, dispatchBatchSearch, dispatchPreciseSearch）
+ *   对布局进行增量修改。
  *
  * SSE 事件：
  *   round_start → { round: number }          — 对话轮次开始
@@ -25,9 +23,10 @@
 
 import { Router, type Request, type Response } from 'express';
 import { randomUUID } from 'crypto';
-import { createOpenRouterProvider } from '../llm/index.js';
+import { createDeepSeekProvider, createOpenRouterProvider } from '../llm/index.js';
 import { config } from '../config/env.js';
 import { LayoutAgent, type LayoutAgentExtendedConfig } from '../agents/layout-agent.js';
+import { LayoutOcrAgent } from '../agents/layout-ocr-agent.js';
 import { SSEConnection } from '../middleware/sse.js';
 import { validate } from '../middleware/validate.js';
 import { layoutParseSchema } from '../validation/schemas.js';
@@ -53,6 +52,7 @@ layoutParseImageRouter.post('/', validate(layoutParseSchema), async (req: Reques
     return;
   }
 
+  // 检查两个 API key 均配置完成
   if (!config.openrouterApiKey) {
     res.status(500).json({
       error: '多模态 LLM 未配置',
@@ -60,14 +60,25 @@ layoutParseImageRouter.post('/', validate(layoutParseSchema), async (req: Reques
     });
     return;
   }
+  if (!config.deepseekApiKey) {
+    res.status(500).json({
+      error: '文本 LLM 未配置',
+      detail: '请设置环境变量 DEEPSEEK_API_KEY',
+    });
+    return;
+  }
 
   const sse = new SSEConnection(res);
 
-  const llm = createOpenRouterProvider({
+  // 创建两个 provider：视觉 OCR 走 OpenRouter，文本编排走 DeepSeek
+  const visionLlm = createOpenRouterProvider({
     apiKey: config.openrouterApiKey,
   });
+  const textLlm = createDeepSeekProvider({
+    apiKey: config.deepseekApiKey,
+  });
 
-  // ---- Trace：创建 session ----
+  // ---- Trace：创建顶层 session（LayoutAgent = DeepSeek） ----
   const traceEnabled = config.traceLog;
   let traceContext: TraceContext | undefined;
   if (traceEnabled) {
@@ -79,8 +90,8 @@ layoutParseImageRouter.post('/', validate(layoutParseSchema), async (req: Reques
       mainAgent: 'LayoutAgent',
       agentName: 'LayoutAgent',
       route: '/api/layout/parse-image',
-      provider: llm.providerName,
-      model: llm.model,
+      provider: textLlm.providerName,
+      model: textLlm.model,
       enabled: true,
     };
     insertTraceSession(
@@ -97,8 +108,8 @@ layoutParseImageRouter.post('/', validate(layoutParseSchema), async (req: Reques
   }
 
   const agentConfig: LayoutAgentExtendedConfig = {
-    searchBudgetLimit: 5,
-    maxRounds: 30,
+    searchBudgetLimit: 30,
+    maxRounds: 40,
     langHint: '中文',
     onStep: (event) => {
       // 透传 BaseAgent 的所有步进事件给前端
@@ -111,7 +122,6 @@ layoutParseImageRouter.post('/', validate(layoutParseSchema), async (req: Reques
       } else if (event.type === 'error') {
         sse.send('error', { message: event.message });
       }
-      // 'reply' 事件忽略 —— reply_chunk 已覆盖流式输出
     },
     /** 布局被 LLM 工具修改后，立即推送新快照给前端 */
     onLayoutUpdated: (update) => {
@@ -123,18 +133,45 @@ layoutParseImageRouter.post('/', validate(layoutParseSchema), async (req: Reques
     },
   };
 
-  const agent = new LayoutAgent(llm, agentConfig);
-
-  if (traceContext) {
-    agent.trace = traceContext;
-  }
-
   try {
-    const { layout: updatedLayout, reply } = await agent.parse({
+    // 阶段 1：OCR 预处理 —— OpenRouter 视觉模型识别图片中的橱柜结构
+    const ocrAgent = new LayoutOcrAgent(visionLlm, {
+      searchBudgetLimit: 0,
+      maxRounds: 0,
+      langHint: '中文',
+    });
+
+    // 可选：发送 OCR 开始事件供前端调试
+    sse.send('tool_call', { tool: 'layout-ocr-preprocess' });
+
+    const associatedWallIds: string[] = Array.isArray(body.associatedWallIds)
+      ? body.associatedWallIds
+      : [];
+    const associatedNames: string[] = [];
+    for (const id of associatedWallIds) {
+      const w = body.layout!.walls.find((w) => w.id === id);
+      if (w) associatedNames.push(w.name);
+    }
+
+    const initialOcrText = await ocrAgent.runOcr({
       image: body.image,
+      viewType: body.viewType || 'top',
+      associatedWallNames: associatedNames,
+    });
+
+    // 阶段 2：Layout 编排 —— DeepSeek 文本模型根据 OCR 结果修改布局
+    const agent = new LayoutAgent(textLlm, visionLlm, agentConfig);
+
+    if (traceContext) {
+      agent.trace = traceContext;
+    }
+
+    const { layout: updatedLayout, reply } = await agent.parse({
+      initialOcrText,
       viewType: body.viewType,
       associatedWallIds: body.associatedWallIds,
-      layout: body.layout,
+      layout: body.layout!,
+      image: body.image,
     });
 
     if (traceContext) {

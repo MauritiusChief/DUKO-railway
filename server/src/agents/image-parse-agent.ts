@@ -3,7 +3,7 @@
  *
  * 接收 base64 编码的图片，调用 OpenRouter 视觉模型解析橱柜清单，
  * 使用 searchSkuShape / searchSkuDescription 工具验证产品。
- * 返回纯文本，供后续 MainAgent 解析为结构化 JSON 表格。
+ * 返回纯文本，供后续 TableParseAgent 解析为结构化 JSON 表格。
  */
 
 import { BaseAgent, type AgentContext, type BaseAgentConfig } from './base.js';

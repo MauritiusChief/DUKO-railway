@@ -80,7 +80,7 @@ export interface ChatAgentContext extends AgentContext {
   noteAccumulator: NoteAccumulator;
   requestHistory?: ChatHistoryEntry[];
   requestNotes?: ChatNote[];
-  mainAgentReply?: string;
+  tableParseAgentReply?: string;
   initialInput?: string;
   colorHints?: string[];
 }
@@ -240,7 +240,7 @@ export class ChatAgent extends BaseAgent<ChatMessage> {
     products?: ProductEntry[];
     history?: ChatHistoryEntry[];
     notes?: ChatNote[];
-    mainAgentReply?: string;
+    tableParseAgentReply?: string;
     initialInput?: string;
     colorHints?: string[];
   }): Promise<{
@@ -266,7 +266,7 @@ export class ChatAgent extends BaseAgent<ChatMessage> {
       noteAccumulator,
       requestHistory: args.history,
       requestNotes: args.notes,
-      mainAgentReply: args.mainAgentReply,
+      tableParseAgentReply: args.tableParseAgentReply,
       initialInput: args.initialInput,
       colorHints: args.colorHints,
     };
@@ -278,7 +278,7 @@ export class ChatAgent extends BaseAgent<ChatMessage> {
         content: this.buildSystemPrompt(
           langHint,
           args.notes || [],
-          args.mainAgentReply,
+          args.tableParseAgentReply,
           args.initialInput,
           args.colorHints,
         ),
@@ -335,7 +335,7 @@ export class ChatAgent extends BaseAgent<ChatMessage> {
   private buildSystemPrompt(
     langHint: string = '中文',
     notes: Array<{ originalName: string; content: string }> = [],
-    mainAgentReply?: string,
+    tableParseAgentReply?: string,
     initialInput?: string,
     colorHints?: string[],
   ): string {
@@ -353,21 +353,21 @@ ${notesList}
 `;
     }
 
-    let mainAgentSection = '';
-    if (mainAgentReply || initialInput || (colorHints && colorHints.length > 0)) {
-      mainAgentSection = '\n## 上一轮解析上下文\n\n';
-      if (mainAgentReply) {
-        mainAgentSection += `解析 agent 的总结：${mainAgentReply}\n\n`;
+    let tableParseAgentSection = '';
+    if (tableParseAgentReply || initialInput || (colorHints && colorHints.length > 0)) {
+      tableParseAgentSection = '\n## 上一轮解析上下文\n\n';
+      if (tableParseAgentReply) {
+        tableParseAgentSection += `解析 agent 的总结：${tableParseAgentReply}\n\n`;
       }
       if (initialInput) {
-        mainAgentSection += `用户提交的原始清单文本：\n\`\`\`\n${initialInput}\n\`\`\`\n\n`;
+        tableParseAgentSection += `用户提交的原始清单文本：\n\`\`\`\n${initialInput}\n\`\`\`\n\n`;
       }
       if (colorHints && colorHints.length > 0) {
-        mainAgentSection += `用户点击的颜色提示：${colorHints.join(', ')}\n\n`;
+        tableParseAgentSection += `用户点击的颜色提示：${colorHints.join(', ')}\n\n`;
       }
     }
 
-    return `你是一个 DUKO 橱柜产品查询与清单编辑助手。你可以帮助用户查询产品信息、编辑已解析的客户清单、以及查询产品库存。${mainAgentSection}
+    return `你是一个 DUKO 橱柜产品查询与清单编辑助手。你可以帮助用户查询产品信息、编辑已解析的客户清单、以及查询产品库存。${tableParseAgentSection}
 ## 产品代码规则
 
 - itemName 格式为 {颜色代码}{形状代码}{尺寸代码}，如 "02B15" = 颜色02 + B型 + 15寸
@@ -393,7 +393,7 @@ ${this.colorTable}
 - **searchSkuDescription**：按自然语言描述 BM25 全文检索。在 mainDescription、mainAlias、sizeDescription、otherDescription 字段中搜索英文词语。query 用英文，colorCode 必填（"*" 匹配任意颜色）。适用只有描述没有代码的场景。
 - **searchSkuStructured**：结构化多维度精确检索。支持三个过滤维度：shapeFilter（JSON 过滤树，编辑距离匹配形状）、descriptionFilter（JSON 过滤树，BM25 匹配描述）、vectorFilter（向量语义搜索），外加 color 限定。适合复杂多条件查询。
 
-搜索预算会在每轮工具调用后自动通知你。预算耗尽后搜索工具不可用，但你仍可随意使用清单编辑工具和产品查询工具。
+工具预算会在每轮工具调用后自动通知你。预算耗尽后受限工具不可用，但你仍可随意使用清单编辑工具和产品查询工具。
 
 ## 笔记工具（可随意使用，无次数限制）
 

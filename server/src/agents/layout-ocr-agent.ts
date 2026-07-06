@@ -1,0 +1,172 @@
+/**
+ * LayoutOcrAgent —— 厨房布局图片 OCR 预处理 Agent
+ *
+ * 接收 base64 图片，调用 OpenRouter 多模态视觉模型识别图片中的橱柜结构，
+ * 输出一个或多个双轨列表（每面墙/岛台一个列表），供后续 LayoutAgent 使用。
+ *
+ * 职责边界：
+ *  - 只做图像文本/宽度/双轨属性识别，不做型号解释或 SKU 查询
+ *  - 不访问当前 layout（通过 dispatchLayoutOcr 的 note 获取额外信息）
+ *  - 不检查双轨物体是否真实对齐
+ *  - 不访问 exposed_types 或产品数据库
+ *  - 不开放任何工具（0 tools），直接返回 OCR 文本
+ */
+
+import { BaseAgent, type AgentContext, type BaseAgentConfig } from './base.js';
+import type { ToolCall } from '../types/tool.js';
+import type { MultimodalChatMessage } from '../types/message.js';
+import type { LlmProvider } from '../llm/provider.js';
+import { config } from '../config/env.js';
+import { writeChatLog } from '../services/logger.js';
+
+// ==================================================================
+//  LayoutOcrAgent 输入
+// ==================================================================
+
+export interface LayoutOcrInput {
+  /** base64 data URL 格式图片 */
+  image: string;
+  /** 视图类型：top / elevation / 3d */
+  viewType?: string;
+  /** 关联的墙名列表（用于提示 LLM 这张图对应哪些墙） */
+  associatedWallNames?: string[];
+  /** 复查备注（由 dispatchLayoutOcr 传来，用于二次 OCR） */
+  note?: string;
+}
+
+// ==================================================================
+//  LayoutOcrAgent
+// ==================================================================
+
+export class LayoutOcrAgent extends BaseAgent<MultimodalChatMessage> {
+  /** 不开放任何工具 */
+  static override ownedToolNames: string[] = [];
+
+  constructor(llm: LlmProvider<MultimodalChatMessage>, agentConfig?: BaseAgentConfig) {
+    super(llm, agentConfig ?? {
+      searchBudgetLimit: 0,
+      maxRounds: 0,
+      langHint: '中文',
+    });
+  }
+
+  getSystemPrompt(): string {
+    return '';
+  }
+
+  getTools(): [] {
+    return [];
+  }
+
+  protected async executeTool(
+    _tc: ToolCall,
+    _context: AgentContext,
+  ): Promise<string> {
+    // LayoutOcrAgent 不开放任何工具，此方法不应被调用
+    return 'LayoutOcrAgent 未注册任何工具';
+  }
+
+  // ================================================================
+  //  Public API
+  // ================================================================
+
+  /**
+   * 对图片进行 OCR，返回双轨列表文本。
+   * 由于没有任何工具，LLM 仅返回自然语言回复。
+   */
+  async runOcr(input: LayoutOcrInput): Promise<string> {
+    const viewType = input.viewType || 'top';
+    const note = input.note;
+
+    const wallHint = input.associatedWallNames && input.associatedWallNames.length > 0
+      ? `此图描述以下墙: ${input.associatedWallNames.join(', ')}。`
+      : '';
+
+    const noteText = note
+      ? `\n\n## 复查备注\n\n${note}`
+      : '';
+
+    const messages: MultimodalChatMessage[] = [
+      {
+        role: 'system',
+        content: this.buildOcrPrompt(viewType, wallHint),
+      },
+      {
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text: `请识别这张图片中的橱柜布局，将每个物品标注名称、宽度和所在轨道。${noteText}`,
+          },
+          { type: 'image_url', image_url: { url: input.image, detail: 'high' } },
+        ],
+      },
+    ];
+
+    const result = await this.run(messages, {});
+
+    if (config.chatLog) {
+      writeChatLog(result.messages);
+    }
+
+    return result.reply || '';
+  }
+
+  // ================================================================
+  //  Private helpers
+  // ================================================================
+
+  private buildOcrPrompt(viewType: string, wallHint: string): string {
+    return `你是一个厨房橱柜布局 OCR 识别助手。你正在分析一张 ${viewType} 视图的图片。
+${wallHint}
+
+## 任务
+
+请仔细阅读图片，将每个墙面上的橱柜和电器逐项列出。**你的唯一任务是识别图片中可见的物品及其属性——不要做任何 SKU 查询、型号解释、数据库验证或布局对齐检查。**
+
+## 物品分类
+
+| 分类 | 含义 | 轨道 |
+|------|------|------|
+| wall_cabinet | 吊柜 | air |
+| base_cabinet | 地柜 | ground |
+| tall_cabinet | 通天高柜 | air + ground |
+| gap | 空挡 | air 或 ground |
+| range_hood | 抽油烟机 | air |
+| window | 窗户 | air |
+| tall_appliance | 通天电器（冰箱等） | air + ground |
+| base_appliance_need_top | 需台面电器（洗碗机等） | ground |
+| base_appliance_without_top | 免台面电器（灶台等） | ground |
+
+## 输出格式
+
+对图片中的每面墙（或独立连续段）输出一个 OCR 列表，格式如下：
+
+\`\`\`md
+## OCR List 1
+
+* air
+  * {物品名称或分类标签} - {宽度} in  [also in ground]
+  * {物品名称或分类标签} - {宽度} in
+* ground
+  * {物品名称或分类标签} - {宽度} in  [also in air]
+
+## OCR List 2
+...
+\`\`\`
+
+**标记说明**：
+- 物品名直接使用图片中看到的标注文字（如 "W3024"、"REF"）
+- 若物品在 air 和 ground 两轨都存在（tall_cabinet / tall_appliance），在对应条目后标注 \`[also in ground]\` 或 \`[also in air]\`
+- 宽度单位为英寸，根据图片中的标注数字提取；若无明确标注则根据比例估算并标注 \`(est.)\`
+- 图片中可见但未标注宽度的 gap，标为 \`(gap)\`
+
+## 重要规则
+
+- **仅输出图片中能看到的信息**，不要推测看不见的区域
+- 如果图片中的文字不清晰，标注 \`(?)\` 表示不确定
+- 如果一面墙上多个柜子看起来尺寸相同但标注模糊，请标注你的最佳猜测并附加 \`(?)\`
+- 不要做任何 SKU 查询或型号匹配
+- 用中文输出简短说明后，输出 OCR 列表`;
+  }
+}

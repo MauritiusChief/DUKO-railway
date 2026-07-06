@@ -8,7 +8,7 @@
  * 适用场景：客户选购的橱柜本身不包含玻璃门，但想额外定制玻璃门时，
  * 通过此 Agent 计算出总共需要切割多少扇玻璃门。
  *
- * 由 MainAgent 通过 dispatchGlassDoorCalc 工具委派调用。
+ * 由 TableParseAgent 通过 dispatchGlassDoorCalc 工具委派调用。
  * 预算 2 轮搜索。
  */
 

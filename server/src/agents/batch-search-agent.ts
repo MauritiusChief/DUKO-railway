@@ -5,7 +5,7 @@
  * searchSkuOverlap 在数据库中搜索匹配产品。LLM 可在同一轮中并发发起多个搜索，
  * 返回结构化的批量匹配结果。
  *
- * 由 MainAgent 通过 dispatchBatchSearch 工具委派调用。
+ * 由 TableParseAgent 通过 dispatchBatchSearch 工具委派调用。
  */
 
 import { BaseAgent, type AgentContext, type BaseAgentConfig } from './base.js';

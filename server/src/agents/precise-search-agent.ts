@@ -5,7 +5,7 @@
  * searchSkuStructured 支持 JSON 过滤树表达并/交/补集操作，叶子节点分别用
  * 编辑距离（形状匹配）和 BM25（描述匹配）求值，外加向量语义检索。
  *
- * 由 MainAgent 通过 dispatchPreciseSearch 工具委派调用。
+ * 由 TableParseAgent 通过 dispatchPreciseSearch 工具委派调用。
  * 每次处理 1 条物品，预算 5 轮搜索。
  */
 

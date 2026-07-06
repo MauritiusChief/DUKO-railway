@@ -52,13 +52,13 @@ interface ChatRequest {
   products?: ProductEntry[];
   history?: ChatHistoryEntry[];
   notes?: ChatNote[];
-  mainAgentReply?: string;
+  tableParseAgentReply?: string;
   initialInput?: string;
   colorHints?: string[];
 }
 
 chatRouter.post('/', validate(chatSchema), async (req: Request, res: Response) => {
-  const { message, lang, items, products, history, notes, mainAgentReply, initialInput, colorHints } = req.body as ChatRequest;
+  const { message, lang, items, products, history, notes, tableParseAgentReply, initialInput, colorHints } = req.body as ChatRequest;
 
   if (!message || typeof message !== 'string') {
     res.status(400).json({ error: 'message is required' });
@@ -136,7 +136,7 @@ chatRouter.post('/', validate(chatSchema), async (req: Request, res: Response) =
       products,
       history,
       notes,
-      mainAgentReply,
+      tableParseAgentReply,
       initialInput,
       colorHints,
     });

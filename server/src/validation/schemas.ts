@@ -74,7 +74,7 @@ export const chatSchema = z.object({
   products: z.array(z.unknown()).optional(),
   history: z.array(z.unknown()).optional(),
   notes: z.array(z.unknown()).optional(),
-  mainAgentReply: z.string().optional(),
+  tableParseAgentReply: z.string().optional(),
   initialInput: z.string().optional(),
   colorHints: z.array(z.string()).optional(),
 });

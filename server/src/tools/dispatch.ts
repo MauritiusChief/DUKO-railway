@@ -1,14 +1,15 @@
 /**
- * Dispatch 工具定义 —— MainAgent 向子 agent 委派工作的桥梁工具
+ * Dispatch 工具定义 —— TableParseAgent 向子 agent 委派工作的桥梁工具
  *
- * 三个 dispatch 工具均由 MainAgent 注册。LLM 决定何时调用、如何分批。
- * 实际执行逻辑在 MainAgent.executeTool() 中（创建子 agent 实例并运行），
+ * 三个 dispatch 工具均由 TableParseAgent 注册。LLM 决定何时调用、如何分批。
+ * 实际执行逻辑在 TableParseAgent.executeTool() 中（创建子 agent 实例并运行），
  * 此文件仅定义 JSON schema。
  *
  * 工具列表：
  *  - dispatchBatchSearch    批量查 SKU（每批 ≤10 条）
  *  - dispatchPreciseSearch  单条深度查询
  *  - dispatchGlassDoorCalc  普通橱柜 → 玻璃门切割总数
+ *  - dispatchLayoutOcr      委派 LayoutOcrAgent 对原图进行 OCR 复查
  */
 
 import type { ToolDefinition } from '../types/tool.js';
@@ -149,6 +150,38 @@ export const DISPATCH_GLASS_DOOR_CALC_TOOL = {
         },
       },
       required: ['cabinetModels'],
+    },
+  },
+} as const satisfies ToolDefinition;
+
+// ==================================================================
+//  dispatchLayoutOcr
+// ==================================================================
+
+export const DISPATCH_LAYOUT_OCR_TOOL = {
+  type: 'function',
+  function: {
+    name: 'dispatchLayoutOcr',
+    description:
+      '当发现初始 OCR 可能漏识别、局部文字不清、宽度冲突、双轨物体无法对齐时，' +
+      '调用此工具要求 OCR agent 带备注重新检查原图特定区域。',
+    parameters: {
+      type: 'object',
+      properties: {
+        note: {
+          type: 'string',
+          description: '给 OCR agent 的复查说明（如 "请重新检查左起第三段区域，似乎有遗漏的吊柜"）',
+        },
+        targetArea: {
+          type: 'string',
+          description: '图片区域描述，如 left/right/top/bottom/center 或自然语言区域',
+        },
+        expectedIssue: {
+          type: 'string',
+          description: '怀疑的问题，如 missing item、unclear width、dual-track alignment mismatch',
+        },
+      },
+      required: ['note'],
     },
   },
 } as const satisfies ToolDefinition;

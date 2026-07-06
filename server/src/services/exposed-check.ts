@@ -6,7 +6,7 @@
  * 只要形状型号在 SHAPE_TYPES_COLOR_NA 中，该行就完全忽略颜色比对；
  * 只要形状型号在 SHAPE_TYPES_SIZE_NA 中，该行就完全忽略尺寸比对。
  *
- * 供 main-agent 和 chat-agent 共享使用。
+ * 供 table-parse-agent 和 chat-agent 共享使用。
  */
 
 import { findComboExists } from '../db/sku.js';

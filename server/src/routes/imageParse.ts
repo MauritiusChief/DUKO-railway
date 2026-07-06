@@ -5,7 +5,7 @@
  *   接收 base64 编码的图片，调用 ImageParseAgent（OpenRouter 视觉模型）
  *   解析图片中的橱柜清单，使用 searchSkuShape / searchSkuDescription 工具验证产品。
  *   返回纯文本（每行一项物品），前端将其预填入文本输入框，
- *   供后续 MainAgent 解析为结构化 JSON 表格。
+ *   供后续 TableParseAgent 解析为结构化 JSON 表格。
  *
  *   与 table-parse 的分工：
  *     - 图片 agent 负责视觉识别 + 检索验证 → 输出文本
