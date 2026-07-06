@@ -321,10 +321,6 @@ export const messages = {
     zh: '新建一个空白布局？未保存的更改将丢失。',
     en: 'Create a new blank layout? Unsaved changes will be lost.',
   },
-  确定: {
-    zh: '确定',
-    en: 'OK',
-  },
   墙面岛台: {
     zh: '墙面/岛台',
     en: 'Wall/Island',

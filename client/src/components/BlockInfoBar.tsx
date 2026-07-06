@@ -2,15 +2,17 @@
  * BlockInfoBar —— 选中块的信息栏（wp-add-form 的平级兄弟）
  *
  * 点击 BlockCard 后在此展示完整信息：分类（只读）、距左（只读，编辑推迟到 Feature 3）、
- * SKU（可编辑）、宽度（可编辑）、叠放物品（增删）。
+ * SKU（可编辑）、宽度（可编辑）、叠放物品（增删，通过 StackedItemsEditor）。
  * 提供静态/动态删除与关闭按钮。与 wp-add-form 通过状态互斥显示。
+ * 样式复用 panelForm.css（pf- 前缀），与 wp-add-form 视觉一致。
  */
 import { useState, useCallback } from 'react';
 import { useLayoutStore } from '../stores/layoutStore';
 import { useI18n } from '../i18n/context';
 import type { TranslationKey } from '../i18n/translations';
 import type { LayoutWall, SectionBlock, BlockItemCategory, TrackSpan } from '../types';
-import './BlockInfoBar.css';
+import { StackedItemsEditor } from './StackedItemsEditor';
+import './panelForm.css';
 
 const CATEGORY_T_KEY: Record<BlockItemCategory, string> = {
   wall_cabinet: '吊柜',
@@ -32,7 +34,6 @@ interface BlockInfoBarProps {
   distanceFromLeft: number;
   isDual: boolean;
   onDelete: (blockId: string, mode: 'static' | 'dynamic') => void;
-  onRemoveStackedItem: (blockId: string, itemId: string) => void;
   onClose: () => void;
 }
 
@@ -43,7 +44,6 @@ export function BlockInfoBar({
   distanceFromLeft,
   isDual,
   onDelete,
-  onRemoveStackedItem,
   onClose,
 }: BlockInfoBarProps) {
   const { t } = useI18n();
@@ -64,7 +64,6 @@ export function BlockInfoBar({
   // ---- 本地输入态（commit on blur / Enter） ----
   const [sku, setSku] = useState(mainItem?.sku || '');
   const [width, setWidth] = useState(String(block.width));
-  const [newStackedSku, setNewStackedSku] = useState('');
 
   // ---- SKU 提交 ----
   const commitSku = useCallback(() => {
@@ -93,13 +92,14 @@ export function BlockInfoBar({
     }
   }, [width, block.width, block.id, isDual, mainItem, wall.id, track, store]);
 
-  // ---- 追加叠放 ----
-  const handleAddStacked = useCallback(() => {
-    const trimmed = newStackedSku.trim();
-    if (!trimmed) return;
-    store.addStackedItem(wall.id, block.id, trimmed);
-    setNewStackedSku('');
-  }, [newStackedSku, wall.id, block.id, store]);
+  // ---- 叠放物品增删（交由 StackedItemsEditor 回调） ----
+  const handleAddStacked = useCallback((skuVal: string) => {
+    store.addStackedItem(wall.id, block.id, skuVal);
+  }, [wall.id, block.id, store]);
+
+  const handleRemoveStacked = useCallback((itemId: string) => {
+    store.removeStackedItem(wall.id, block.id, itemId);
+  }, [wall.id, block.id, store]);
 
   const handleDeleteDynamic = useCallback(() => {
     onDelete(block.id, 'dynamic');
@@ -109,101 +109,80 @@ export function BlockInfoBar({
     onDelete(block.id, 'static');
   }, [block.id, onDelete]);
 
+  // 叠放物品映射为 StackedItemRef
+  const stackedItems = block.items.slice(1).map((it) => ({ id: it.id, sku: it.sku }));
+
   return (
-    <div className="bib-bar">
-      {/* 分类（只读） */}
-      <span className="bib-category">
-        {categoryLabel}
-        {isDual && <span className="bib-dual-badge" title={t('双轨联动')}>⇅</span>}
-      </span>
+    <div className="pf-bar">
+      {/* 第1行：信息字段（分类 / SKU / 宽度 / 距左） */}
+      <div className="pf-row">
+        <span className="pf-category">
+          {categoryLabel}
+          {isDual && <span className="pf-dual-badge" title={t('双轨联动')}>⇅</span>}
+        </span>
 
-      {/* SKU（可编辑） */}
-      <label className="bib-field">
-        {t('请输入SKU')}
-        <input
-          className="bib-input bib-sku-input"
-          value={sku}
-          onChange={(e) => setSku(e.target.value)}
-          onBlur={commitSku}
-          onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-        />
-      </label>
-
-      {/* 宽度（可编辑） */}
-      <label className="bib-field">
-        {t('宽度')}
-        <input
-          className="bib-input bib-width-input"
-          type="number"
-          min="0.5"
-          step="0.5"
-          value={width}
-          onChange={(e) => setWidth(e.target.value)}
-          onBlur={commitWidth}
-          onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-        />
-        {t('英寸')}
-      </label>
-
-      {/* 距左（只读，编辑推迟到 Feature 3） */}
-      <span className="bib-readonly">
-        {t('距左')}: {distanceFromLeft}{t('英寸')}
-      </span>
-
-      {/* 叠放物品管理 */}
-      {block.items.length > 1 && (
-        <div className="bib-stacked">
-          {block.items.slice(1).map((si) => (
-            <span key={si.id} className="bib-stacked-item">
-              ↑ {si.sku}
-              <button
-                className="bib-stacked-remove"
-                title={t('移除叠放物品')}
-                onClick={() => onRemoveStackedItem(block.id, si.id)}
-              >
-                ×
-              </button>
-            </span>
-          ))}
-        </div>
-      )}
-      {isStackable && (
-        <div className="bib-stacked-add-row">
+        <label className="pf-field">
+          {t('请输入SKU')}
           <input
-            className="bib-input bib-stacked-add-input"
-            placeholder={t('请输入SKU')}
-            value={newStackedSku}
-            onChange={(e) => setNewStackedSku(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') handleAddStacked(); }}
+            className="pf-input pf-sku-input"
+            value={sku}
+            onChange={(e) => setSku(e.target.value)}
+            onBlur={commitSku}
+            onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
           />
-          <button className="bib-stacked-add-btn" onClick={handleAddStacked}>
-            {t('添加叠放')}
-          </button>
-        </div>
-      )}
+        </label>
 
-      {/* 删除 */}
-      <button
-        className="bib-delete bib-delete-dynamic"
-        title={t('动态删除')}
-        onClick={handleDeleteDynamic}
-      >
-        ✕
-      </button>
-      {!isGap && (
+        <label className="pf-field">
+          {t('宽度')}
+          <input
+            className="pf-input pf-width-input"
+            type="number"
+            min="0.5"
+            step="0.5"
+            value={width}
+            onChange={(e) => setWidth(e.target.value)}
+            onBlur={commitWidth}
+            onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+          />
+          {t('英寸')}
+        </label>
+
+        {/* 距左（只读，编辑推迟到 Feature 3） */}
+        <span className="pf-readonly">
+          {t('距左')}: {distanceFromLeft}{t('英寸')}
+        </span>
+      </div>
+
+      {/* 第2行：叠放物品管理（无叠放且不可叠放时 StackedItemsEditor 返回 null） */}
+      <StackedItemsEditor
+        items={stackedItems}
+        onAdd={handleAddStacked}
+        onRemove={handleRemoveStacked}
+        canAdd={isStackable}
+      />
+
+      {/* 第3行：操作按钮（删除 + 关闭） */}
+      <div className="pf-row">
         <button
-          className="bib-delete bib-delete-static"
-          title={t('静态删除')}
-          onClick={handleDeleteStatic}
+          className="pf-btn-delete pf-btn-delete-dynamic"
+          title={t('动态删除')}
+          onClick={handleDeleteDynamic}
         >
-          ⊘
+          ✕
         </button>
-      )}
-
-      {/* 关闭信息栏 */}
-      <button className="bib-close" title={t('关闭')} onClick={onClose}>
-        ✕
-      </button>
+        {!isGap && (
+          <button
+            className="pf-btn-delete pf-btn-delete-static"
+            title={t('静态删除')}
+            onClick={handleDeleteStatic}
+          >
+            ⊘
+          </button>
+        )}
+        <button className="pf-btn-close" title={t('关闭')} onClick={onClose}>
+          ✕
+        </button>
+      </div>
     </div>
   );
 }

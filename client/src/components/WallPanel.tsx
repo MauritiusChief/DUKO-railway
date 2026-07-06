@@ -12,6 +12,7 @@ import { useI18n } from '../i18n/context';
 import type { TranslationKey } from '../i18n/translations';
 import { BlockCard } from './BlockCard';
 import { BlockInfoBar } from './BlockInfoBar';
+import { StackedItemsEditor, type StackedItemRef } from './StackedItemsEditor';
 import type {
   LayoutWall,
   SectionBlock,
@@ -20,6 +21,7 @@ import type {
   TrackSpan,
 } from '../types';
 import './WallPanel.css';
+import './panelForm.css';
 
 interface WallPanelProps {
   wall: LayoutWall;
@@ -63,7 +65,7 @@ export function WallPanel({ wall }: WallPanelProps) {
   const [newCategory, setNewCategory] = useState<BlockItemCategory>('wall_cabinet');
   const [newWidth, setNewWidth] = useState('');
   const [newSku, setNewSku] = useState('');
-  const [stackedSkus, setStackedSkus] = useState<string[]>([]);
+  const [stackedItems, setStackedItems] = useState<StackedItemRef[]>([]);
 
   // ---- 选中块（信息栏）---- 与 addingTrack 互斥
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
@@ -95,7 +97,7 @@ export function WallPanel({ wall }: WallPanelProps) {
     setNewCategory(categories[0]);
     setNewWidth('');
     setNewSku('');
-    setStackedSkus([]);
+    setStackedItems([]);
   }, []);
 
   const confirmAdd = useCallback(() => {
@@ -103,9 +105,9 @@ export function WallPanel({ wall }: WallPanelProps) {
     const width = parseFloat(newWidth);
     if (isNaN(width) || width <= 0) return;
     const primarySku = newSku.trim() || newCategory;
-    const stacked: Omit<BlockItem, 'id'>[] = stackedSkus
-      .filter((s) => s.trim())
-      .map((s) => ({ category: 'wall_cabinet' as const, sku: s.trim() }));
+    const stacked: Omit<BlockItem, 'id'>[] = stackedItems
+      .filter((it) => it.sku.trim())
+      .map((it) => ({ category: 'wall_cabinet' as const, sku: it.sku.trim() }));
 
     if (newCategory === 'tall_cabinet' || newCategory === 'tall_appliance') {
       store.insertBothTracksWithItems(
@@ -118,16 +120,16 @@ export function WallPanel({ wall }: WallPanelProps) {
       const items: Omit<BlockItem, 'id'>[] = [
         { category: newCategory, sku: primarySku },
       ];
-      for (const s of stackedSkus) {
-        if (s.trim()) {
-          items.push({ category: 'wall_cabinet', sku: s.trim() });
+      for (const it of stackedItems) {
+        if (it.sku.trim()) {
+          items.push({ category: 'wall_cabinet', sku: it.sku.trim() });
         }
       }
       store.insertBlockWithItems(wall.id, addingTrack, items, width);
     }
     setAddingTrack(null);
-    setStackedSkus([]);
-  }, [addingTrack, newCategory, newWidth, newSku, stackedSkus, wall.id, store]);
+    setStackedItems([]);
+  }, [addingTrack, newCategory, newWidth, newSku, stackedItems, wall.id, store]);
 
   // ---- 删除 block ----
   const handleDelete = useCallback(
@@ -153,14 +155,6 @@ export function WallPanel({ wall }: WallPanelProps) {
       setSelectedTrack(null);
     },
     [wall, store],
-  );
-
-  // ---- 移除叠放物品 ----
-  const handleRemoveStackedItem = useCallback(
-    (blockId: string, itemId: string) => {
-      store.removeStackedItem(wall.id, blockId, itemId);
-    },
-    [wall.id, store],
   );
 
   // ---- 拖拽 ----
@@ -335,76 +329,60 @@ export function WallPanel({ wall }: WallPanelProps) {
 
         {/* 添加表单 */}
         {addingTrack === track && (
-          <div className="wp-add-form">
-            <select
-              className="wp-add-select"
-              value={newCategory}
-              onChange={(e) => setNewCategory(e.target.value as BlockItemCategory)}
-            >
-              {(track === 'air' ? AIR_CATEGORIES : GROUND_CATEGORIES).map((cat) => (
-                <option key={cat} value={cat}>
-                  {t(CATEGORY_T_KEY[cat] as TranslationKey)}
-                </option>
-              ))}
-            </select>
-            <input
-              className="wp-add-input"
-              type="number"
-              min="0.5"
-              step="0.5"
-              placeholder={t('宽度')}
-              value={newWidth}
-              onChange={(e) => setNewWidth(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') confirmAdd(); }}
-              autoFocus
-            />
-            <input
-              className="wp-add-input wp-add-sku"
-              placeholder={t('请输入SKU')}
-              value={newSku}
-              onChange={(e) => setNewSku(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') confirmAdd(); }}
-            />
-            {/* 叠放吊柜行 */}
-            {isStackableCategory && (
-              <div className="wp-stacked-form">
-                {stackedSkus.map((sku, i) => (
-                  <div key={i} className="wp-stacked-row">
-                    <span className="wp-stacked-label">↑</span>
-                    <input
-                      className="wp-add-input wp-add-sku"
-                      placeholder={t('请输入SKU')}
-                      value={sku}
-                      onChange={(e) => {
-                        const next = [...stackedSkus];
-                        next[i] = e.target.value;
-                        setStackedSkus(next);
-                      }}
-                      onKeyDown={(e) => { if (e.key === 'Enter') confirmAdd(); }}
-                    />
-                    <button
-                      className="wp-add-cancel"
-                      onClick={() => setStackedSkus(stackedSkus.filter((_, j) => j !== i))}
-                    >
-                      ×
-                    </button>
-                  </div>
+          <div className="pf-bar">
+            {/* 第1行：分类 / 宽度 / SKU */}
+            <div className="pf-row">
+              <select
+                className="pf-select"
+                value={newCategory}
+                onChange={(e) => setNewCategory(e.target.value as BlockItemCategory)}
+              >
+                {(track === 'air' ? AIR_CATEGORIES : GROUND_CATEGORIES).map((cat) => (
+                  <option key={cat} value={cat}>
+                    {t(CATEGORY_T_KEY[cat] as TranslationKey)}
+                  </option>
                 ))}
-                <button
-                  className="wp-stacked-add"
-                  onClick={() => setStackedSkus([...stackedSkus, ''])}
-                >
-                  + {t('叠放吊柜')}
-                </button>
-              </div>
+              </select>
+              <input
+                className="pf-input pf-width-input"
+                type="number"
+                min="0.5"
+                step="0.5"
+                placeholder={t('宽度')}
+                value={newWidth}
+                onChange={(e) => setNewWidth(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') confirmAdd(); }}
+                autoFocus
+              />
+              <input
+                className="pf-input pf-sku-input"
+                placeholder={t('请输入SKU')}
+                value={newSku}
+                onChange={(e) => setNewSku(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') confirmAdd(); }}
+              />
+            </div>
+
+            {/* 第2行：叠放吊柜（条件渲染，chips + 添加输入框） */}
+            {isStackableCategory && (
+              <StackedItemsEditor
+                items={stackedItems}
+                onAdd={(sku) => setStackedItems([...stackedItems, { id: crypto.randomUUID(), sku }])}
+                onRemove={(id) => setStackedItems(stackedItems.filter((it) => it.id !== id))}
+                canAdd
+              />
             )}
-            <button className="wp-add-ok" onClick={confirmAdd}>{t('确定')}</button>
-            <button
-              className="wp-add-cancel"
-              onClick={() => setAddingTrack(null)}
-            >
-              X
-            </button>
+
+            {/* 第3行：确定 / 取消 */}
+            <div className="pf-row">
+              <button className="pf-btn-ok" onClick={confirmAdd}>✓</button>
+              <button
+                className="pf-btn-close"
+                onClick={() => setAddingTrack(null)}
+              >
+                ✕
+              </button>
+            </div>
           </div>
         )}
 
@@ -421,7 +399,6 @@ export function WallPanel({ wall }: WallPanelProps) {
               distanceFromLeft={selected.distanceFromLeft}
               isDual={isDualBlock(selected.block)}
               onDelete={handleDelete}
-              onRemoveStackedItem={handleRemoveStackedItem}
               onClose={handleCloseInfoBar}
             />
           );
