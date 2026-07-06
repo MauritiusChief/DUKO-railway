@@ -52,24 +52,24 @@ export function LayoutChatPanel() {
     }
   }, []);
 
+  // 用 ref 持有最新的 handler，避免 useLayoutStore 订阅循环
+  const handlerRef = useRef<(event: SSEEvent) => void>(() => {});
+  handlerRef.current = (event: SSEEvent) => {
+    handleEvent(event, { onCustomEvent: handleLayoutEvent });
+  };
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // 注册 SSE 事件回调
+  // 注册 SSE 事件回调（仅挂载/卸载一次）
   useEffect(() => {
-    const handler = (event: SSEEvent) => {
-      // 先用通用 hook 处理 (tool_call, reply_chunk, round_start, done, error)
-      handleEvent(event, {
-        onCustomEvent: handleLayoutEvent,
-      });
-    };
-
-    useLayoutStore.getState().setRecognitionEventCallback(handler);
+    const cb = (event: SSEEvent) => handlerRef.current(event);
+    useLayoutStore.getState().setRecognitionEventCallback(cb);
     return () => {
       useLayoutStore.getState().setRecognitionEventCallback(null);
     };
-  }, [handleEvent, handleLayoutEvent]);
+  }, []);
 
   const hasMessages = messages.length > 0;
 

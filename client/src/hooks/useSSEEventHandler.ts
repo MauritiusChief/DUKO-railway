@@ -57,10 +57,16 @@ export function useSSEEventHandler(
   const lastToolNameRef = useRef('');
   const toolDotCountRef = useRef(0);
 
+  // 用 ref 持有翻译，避免 t 对象每次渲染变化导致 handleEvent 引用变化
+  const tRef = useRef(t);
+  tRef.current = t;
+
   const handleEvent = useCallback((
     event: SSEEvent,
     perCall?: PerCallCallbacks,
   ) => {
+    const _t = tRef.current;
+
     switch (event.type) {
 
       case 'parse_start': {
@@ -92,7 +98,7 @@ export function useSSEEventHandler(
         }
         const dots = '.'.repeat(toolDotCountRef.current % 4);
         setMessages((prev) => {
-          const toolMsg = `${t.calling} ${toolName}${dots}`;
+          const toolMsg = `${_t.calling} ${toolName}${dots}`;
           if (prev.length > 0 && prev[prev.length - 1].role === 'tool') {
             return [...prev.slice(0, -1), { role: 'tool' as const, content: toolMsg }];
           }
@@ -165,10 +171,10 @@ export function useSSEEventHandler(
       }
 
       case 'error': {
-        const errMsg = String((event.data as { message?: string }).message || t.failed);
+        const errMsg = String((event.data as { message?: string }).message || _t.failed);
         setMessages((prev) => {
           const clean = prev.filter((m) => m.role !== 'tool' && m.role !== 'streaming');
-          return [...clean, { role: 'assistant' as const, content: `${t.sorry}${errMsg}` }];
+          return [...clean, { role: 'assistant' as const, content: `${_t.sorry}${errMsg}` }];
         });
         perCall?.onError?.(errMsg);
         break;
@@ -180,7 +186,7 @@ export function useSSEEventHandler(
         break;
       }
     }
-  }, [setMessages, t]);
+  }, [setMessages]); // setMessages 是 useState 稳定引用
 
   return { handleEvent, streamingIndexRef };
 }
