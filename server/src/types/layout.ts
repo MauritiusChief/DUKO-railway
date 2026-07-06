@@ -57,7 +57,6 @@ export interface LayoutWall {
 /** 布局文档顶层结构 */
 export interface LayoutDocument {
   id: string;
-  name: string;
   walls: LayoutWall[];
   createdAt: string;
   updatedAt: string;

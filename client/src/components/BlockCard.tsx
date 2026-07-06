@@ -51,7 +51,7 @@ export function BlockCard({ block, distanceFromLeft, isDual, onDragStart, onDele
       {/* 拖拽手柄 */}
       <div
         className="bc-drag-handle"
-        title="Drag to reposition"
+        title={t('拖拽提示')}
         onMouseDown={(e) => onDragStart(block.id, e)}
       >
         ⠿
@@ -79,7 +79,7 @@ export function BlockCard({ block, distanceFromLeft, isDual, onDragStart, onDele
                   <button
                     className="bc-stacked-remove"
                     onClick={(e) => { e.stopPropagation(); onRemoveStackedItem(block.id, si.id); }}
-                    title="Remove stacked item"
+                    title={t('移除叠放物品')}
                   >
                     ×
                   </button>
@@ -94,7 +94,7 @@ export function BlockCard({ block, distanceFromLeft, isDual, onDragStart, onDele
       <div className="bc-actions">
         <button
           className="bc-delete-btn"
-          title="Dynamic delete (shift left)"
+          title={t('动态删除')}
           onClick={handleDeleteClick}
         >
           ✕
@@ -102,7 +102,7 @@ export function BlockCard({ block, distanceFromLeft, isDual, onDragStart, onDele
         {!isGap && (
           <button
             className="bc-delete-btn bc-delete-static"
-            title="Static delete (leave gap)"
+            title={t('静态删除')}
             onClick={handleDeleteStatic}
           >
             ⊘

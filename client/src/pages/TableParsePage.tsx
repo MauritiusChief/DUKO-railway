@@ -29,6 +29,7 @@ import { useAuthStore } from '../stores/authStore';
 import { useI18n } from '../i18n/context';
 import type { ParsedItem } from '../types';
 import ChatPanel from '../components/ChatPanel';
+import { SegSwitch } from '../components/SegSwitch';
 import './TableParsePage.css';
 
 // =================================================================
@@ -483,21 +484,14 @@ export default function TableParsePage() {
           <div className="tp-header-sub">{t('页面说明')}</div>
         </div>
         <div className="tp-header-right">
-          <span className="tp-seg-switch">
-            <button
-              className={`tp-seg-btn${lang === 'zh' ? ' tp-seg-active' : ''}`}
-              onClick={() => setLang('zh')}
-            >
-              中文
-            </button>
-            <span className="tp-seg-sep">|</span>
-            <button
-              className={`tp-seg-btn${lang === 'en' ? ' tp-seg-active' : ''}`}
-              onClick={() => setLang('en')}
-            >
-              English
-            </button>
-          </span>
+          <SegSwitch
+            options={[
+              { value: 'zh', label: '中文' },
+              { value: 'en', label: 'English' },
+            ]}
+            value={lang}
+            onChange={setLang}
+          />
           <button className="tp-submit-btn tp-download-btn" onClick={handleDownloadScript}>
             {t('下载脚本')}
           </button>
@@ -518,23 +512,15 @@ export default function TableParsePage() {
             <div className="tp-top-left" style={{ width: `${topLeftWidth}%` }}>
 
               {/* ---- 输入模式切换 ---- */}
-          <span className="tp-seg-switch">
-            <button
-              className={`tp-seg-btn${inputMode === 'text' ? ' tp-seg-active' : ''}`}
-              onClick={() => setInputMode('text')}
-              disabled={loading || imageLoading}
-            >
-              {t('文本模式')}
-            </button>
-            <span className="tp-seg-sep">|</span>
-            <button
-              className={`tp-seg-btn${inputMode === 'image' ? ' tp-seg-active' : ''}`}
-              onClick={() => setInputMode('image')}
-              disabled={loading || imageLoading}
-            >
-              {t('图片模式')}
-            </button>
-          </span>
+          <SegSwitch
+            options={[
+              { value: 'text', label: t('文本模式') },
+              { value: 'image', label: t('图片模式') },
+            ]}
+            value={inputMode}
+            onChange={setInputMode}
+            disabled={loading || imageLoading}
+          />
 
           {/* ======== 文本模式：textarea ======== */}
           {inputMode === 'text' && (

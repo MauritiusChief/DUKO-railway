@@ -63,41 +63,6 @@
   gap: 12px;
 }
 
-.tp-seg-switch {
-  display: flex;
-  align-items: center;
-  gap: 0;
-  font-size: 12px;
-}
-
-.tp-seg-btn {
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: #888;
-  font-size: 12px;
-  padding: 2px 4px;
-}
-
-.tp-seg-btn:hover {
-  color: #333;
-}
-
-.tp-seg-active {
-  color: #333;
-  font-weight: bold;
-}
-
-.tp-seg-btn:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-}
-
-.tp-seg-sep {
-  color: #ccc;
-  font-size: 12px;
-}
-
 /* ====== 上二列区（清单输入 | 分割线 | 颜色勾选） ====== */
 
 .tp-top-area {

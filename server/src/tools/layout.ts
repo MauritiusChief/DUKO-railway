@@ -324,7 +324,7 @@ function serializeLayout(layout: LayoutDocument): string {
     return '当前布局中没有任何墙。请使用 createWall 工具添加。';
   }
 
-  let text = `## 布局: "${layout.name}" (ID: ${layout.id})\n\n`;
+  let text = `## 布局 (ID: ${layout.id})\n\n`;
   for (const wall of layout.walls) {
     text += serializeWall(wall) + '\n';
   }

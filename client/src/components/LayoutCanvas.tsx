@@ -5,21 +5,23 @@
  * 若布局为空则显示提示。
  */
 import { useLayoutStore } from '../stores/layoutStore';
+import { useI18n } from '../i18n/context';
 import { WallPanel } from './WallPanel';
 import './LayoutCanvas.css';
 
 export function LayoutCanvas() {
   const store = useLayoutStore();
+  const { t } = useI18n();
   const layout = store.getActiveLayout();
 
   if (!layout) {
-    return <div className="lc-empty">No active layout</div>;
+    return <div className="lc-empty">{t('无激活布局')}</div>;
   }
 
   if (layout.walls.length === 0) {
     return (
       <div className="lc-empty">
-        <p>No walls yet. Click "+ 墙面/岛台" to add one.</p>
+        <p>{t('无墙面提示')}</p>
       </div>
     );
   }

@@ -313,6 +313,22 @@ export const messages = {
     zh: '暂无布局，请新建一个',
     en: 'No layouts yet, create one',
   },
+  无效的布局文件: {
+    zh: '无效的布局 JSON 文件',
+    en: 'Invalid layout JSON file',
+  },
+  新建空白布局确认: {
+    zh: '新建一个空白布局？未保存的更改将丢失。',
+    en: 'Create a new blank layout? Unsaved changes will be lost.',
+  },
+  确定: {
+    zh: '确定',
+    en: 'OK',
+  },
+  墙面岛台: {
+    zh: '墙面/岛台',
+    en: 'Wall/Island',
+  },
   添加墙面: {
     zh: '添加墙面',
     en: 'Add Wall',
@@ -329,6 +345,10 @@ export const messages = {
     zh: '删除岛台',
     en: 'Delete Island',
   },
+  删除墙面确认: {
+    zh: '确认删除墙面 "{name}"？',
+    en: 'Delete wall "{name}"?',
+  },
   总宽度: {
     zh: '总宽度',
     en: 'Total Width',
@@ -338,11 +358,11 @@ export const messages = {
     en: 'Left Exposed',
   },
   右侧暴露: {
-    zh: 'Right Exposed',
+    zh: '右侧暴露',
     en: 'Right Exposed',
   },
   后侧暴露: {
-    zh: 'Back Exposed',
+    zh: '后侧暴露',
     en: 'Back Exposed',
   },
   空中: {
@@ -350,7 +370,7 @@ export const messages = {
     en: 'Air',
   },
   地面: {
-    zh: 'Ground',
+    zh: '地面',
     en: 'Ground',
   },
   距左: {
@@ -388,6 +408,38 @@ export const messages = {
   连接墙面: {
     zh: '连接墙面',
     en: 'Connected Walls',
+  },
+  背靠背: {
+    zh: '背靠背',
+    en: 'Back-to-back',
+  },
+  L形连接提示: {
+    zh: 'L 形连接',
+    en: 'L-shaped connection',
+  },
+  背靠背连接提示: {
+    zh: '背靠背连接',
+    en: 'Back-to-back connection',
+  },
+  拖拽提示: {
+    zh: '拖拽以重新定位',
+    en: 'Drag to reposition',
+  },
+  移除叠放物品: {
+    zh: '移除叠放物品',
+    en: 'Remove stacked item',
+  },
+  叠放吊柜: {
+    zh: '叠放吊柜',
+    en: 'Stack Wall Cabinet',
+  },
+  无激活布局: {
+    zh: '暂无激活布局',
+    en: 'No active layout',
+  },
+  无墙面提示: {
+    zh: '暂无墙面。点击 "+ 墙面/岛台" 添加一面。',
+    en: 'No walls yet. Click "+ Wall/Island" to add one.',
   },
   请输入名称: {
     zh: '请输入名称',
@@ -437,6 +489,56 @@ export const messages = {
   免台面电器: {
     zh: '免台面电器',
     en: 'Appliance w/o Countertop',
+  },
+
+  /* ---- ImageUploadPanel ---- */
+  图片识别: {
+    zh: '图片识别',
+    en: 'Image Recognition',
+  },
+  拖拽图片提示: {
+    zh: '拖拽图片到此处或点击选择',
+    en: 'Drag image here or click to select',
+  },
+  视图类型: {
+    zh: '视图类型',
+    en: 'View Type',
+  },
+  俯视图: {
+    zh: '俯视图',
+    en: 'Top View',
+  },
+  正视图: {
+    zh: '正视图',
+    en: 'Elevation View',
+  },
+  立体图: {
+    zh: '立体图',
+    en: '3D View',
+  },
+  关联墙面岛台: {
+    zh: '关联墙/岛台',
+    en: 'Associated Wall/Island',
+  },
+  识别中: {
+    zh: '识别中...',
+    en: 'Recognizing...',
+  },
+  识别此图片: {
+    zh: '识别此图片',
+    en: 'Recognize This Image',
+  },
+  识别失败: {
+    zh: '识别失败',
+    en: 'Recognition failed',
+  },
+  布局更新成功: {
+    zh: '布局更新成功',
+    en: 'Layout updated successfully',
+  },
+  网络请求失败: {
+    zh: '网络请求失败，请检查连接',
+    en: 'Network request failed, please check connection',
   },
 
   /* ---- Auth ---- */

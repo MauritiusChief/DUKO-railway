@@ -229,10 +229,10 @@ export function WallPanel({ wall }: WallPanelProps) {
   );
 
   const handleRemoveWall = useCallback(() => {
-    if (confirm(`Delete wall "${wall.name}"?`)) {
+    if (confirm(t('删除墙面确认', { name: wall.name }))) {
       store.removeWall(wall.id);
     }
-  }, [wall, store]);
+  }, [wall, store, t]);
 
   // ---- 识别双轨物品（在当前位置有对应块的） ----
   const dualItemIds = new Set<string>();
@@ -369,11 +369,11 @@ export function WallPanel({ wall }: WallPanelProps) {
                   className="wp-stacked-add"
                   onClick={() => setStackedSkus([...stackedSkus, ''])}
                 >
-                  + 叠放吊柜
+                  + {t('叠放吊柜')}
                 </button>
               </div>
             )}
-            <button className="wp-add-ok" onClick={confirmAdd}>OK</button>
+            <button className="wp-add-ok" onClick={confirmAdd}>{t('确定')}</button>
             <button
               className="wp-add-cancel"
               onClick={() => setAddingTrack(null)}
@@ -397,7 +397,7 @@ export function WallPanel({ wall }: WallPanelProps) {
           {collapsed ? '▸' : '▾'}
         </button>
         <span className="wp-type-badge wp-wall">
-          墙面/岛台
+          {t('墙面岛台')}
         </span>
         <input
           className="wp-name-input"
@@ -441,13 +441,13 @@ export function WallPanel({ wall }: WallPanelProps) {
         </label>
         {/* 连接信息（只读，由 Agent 管理） */}
         {wall.connectedWallIds.length > 0 && (
-          <span className="wp-connected" title="L-shaped connection">
+          <span className="wp-connected" title={t('L形连接提示')}>
             {t('连接墙面')}: {wall.connectedWallIds.length}
           </span>
         )}
         {wall.backToBackIslandIds.length > 0 && (
-          <span className="wp-connected" title="Back-to-back connection">
-            Back-to-back: {wall.backToBackIslandIds.length}
+          <span className="wp-connected" title={t('背靠背连接提示')}>
+            {t('背靠背')}: {wall.backToBackIslandIds.length}
           </span>
         )}
         <button className="wp-remove-btn" onClick={handleRemoveWall}>

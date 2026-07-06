@@ -10,11 +10,12 @@ import { useI18n } from '../i18n/context';
 import { LayoutCanvas } from '../components/LayoutCanvas';
 import { ImageUploadPanel } from '../components/ImageUploadPanel';
 import { LayoutChatPanel } from '../components/LayoutChatPanel';
+import { SegSwitch } from '../components/SegSwitch';
 import type { LayoutDocument } from '../types';
 import './LayoutRecognizePage.css';
 
 export default function LayoutRecognizePage() {
-  const { t } = useI18n();
+  const { t, lang, setLang } = useI18n();
   const store = useLayoutStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -24,12 +25,17 @@ export default function LayoutRecognizePage() {
   const handleSave = useCallback(() => {
     const json = store.getActiveLayoutJson();
     if (!json) return;
-    const layout = JSON.parse(json);
     const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${(layout.name || 'layout').replace(/\s+/g, '_')}.json`;
+    // 文件名使用固定前缀 + 本地时间戳，格式：duko-layout-2026-06-25_21-53-51.json
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const ts =
+      `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}` +
+      `_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
+    a.download = `duko-layout-${ts}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -50,21 +56,21 @@ export default function LayoutRecognizePage() {
         try {
           store.loadLayout(reader.result as string);
         } catch {
-          alert('Invalid layout JSON file');
+          alert(t('无效的布局文件'));
         }
       };
       reader.readAsText(file);
       e.target.value = '';
     },
-    [store],
+    [store, t],
   );
 
   // ---- 新建 ----
   const handleNew = useCallback(() => {
-    if (!activeLayout || confirm('Create a new blank layout? Unsaved changes will be lost.')) {
+    if (!activeLayout || confirm(t('新建空白布局确认'))) {
       store.newLayout();
     }
-  }, [activeLayout, store]);
+  }, [activeLayout, store, t]);
 
   // ---- 添加墙面/岛台 ----
   const [showAddWall, setShowAddWall] = useState(false);
@@ -126,7 +132,15 @@ export default function LayoutRecognizePage() {
           <p className="lr-sub">{t('布局识别说明')}</p>
         </div>
         <div className="lr-header-right">
-          <span className="lr-layout-name">{activeLayout.name}</span>
+          {/* 语言切换（取代原 layout 名称展示位） */}
+          <SegSwitch
+            options={[
+              { value: 'zh', label: '中文' },
+              { value: 'en', label: 'English' },
+            ]}
+            value={lang}
+            onChange={setLang}
+          />
 
           <button className="lr-btn lr-btn-sm" onClick={handleNew}>
             {t('新建布局')}
@@ -161,12 +175,12 @@ export default function LayoutRecognizePage() {
                 onChange={(e) => setWallWidth(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') handleAddWall(); }}
               />
-              <button className="lr-btn lr-btn-primary lr-btn-sm" onClick={handleAddWall}>OK</button>
+              <button className="lr-btn lr-btn-primary lr-btn-sm" onClick={handleAddWall}>{t('确定')}</button>
               <button className="lr-btn lr-btn-sm" onClick={() => { setShowAddWall(false); setWallName(''); setWallWidth(''); }}>X</button>
             </div>
           ) : (
             <button className="lr-btn lr-btn-sm lr-btn-primary" onClick={openAddWallForm}>
-              + 墙面/岛台
+              + {t('墙面岛台')}
             </button>
           )}
         </div>

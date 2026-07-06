@@ -352,7 +352,7 @@ interface LayoutStoreState {
 
   // ---- Layout 生命周期 ----
   /** 创建全新空布局 */
-  newLayout: (name?: string) => void;
+  newLayout: () => void;
   /** 从 JSON 字符串加载布局并设为激活 */
   loadLayout: (json: string) => void;
   /** 导出当前布局为 JSON 字符串 */
@@ -418,12 +418,11 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => {
 
     // ---- Layout 生命周期 ----
 
-    newLayout: (name?: string) => {
+    newLayout: () => {
       const id = uuid();
       const now = nowISO();
       const newLayout: LayoutDocument = {
         id,
-        name: name || `Layout 1`,
         walls: [],
         createdAt: now,
         updatedAt: now,

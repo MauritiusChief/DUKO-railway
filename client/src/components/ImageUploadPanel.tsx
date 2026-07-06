@@ -124,27 +124,27 @@ export function ImageUploadPanel({ layout, onLayoutUpdated }: ImageUploadPanelPr
       });
 
       if (!res.ok) {
-        const errBody = await res.json().catch(() => ({ error: '识别失败' }));
-        setError(errBody.error || errBody.detail || '识别失败');
+        const errBody = await res.json().catch(() => ({ error: t('识别失败') }));
+        setError(errBody.error || errBody.detail || t('识别失败'));
         setLoading(false);
         return;
       }
 
       const data = await res.json();
       onLayoutUpdated(data.updatedLayout);
-      setSuccessMsg('Layout updated successfully');
+      setSuccessMsg(t('布局更新成功'));
       // 不清除图片，用户可以再次识别
     } catch {
-      setError('网络请求失败，请检查连接');
+      setError(t('网络请求失败'));
     }
     setLoading(false);
-  }, [imageData, viewType, associatedWallIds, layout, onLayoutUpdated]);
+  }, [imageData, viewType, associatedWallIds, layout, onLayoutUpdated, t]);
 
   const allItems = layout ? layout.walls : [];
 
   return (
     <div className="iup-panel" onPaste={handlePaste}>
-      <div className="iup-header">图片识别</div>
+      <div className="iup-header">{t('图片识别')}</div>
 
       {/* 图片区域 */}
       <div
@@ -159,7 +159,7 @@ export function ImageUploadPanel({ layout, onLayoutUpdated }: ImageUploadPanelPr
         ) : (
           <div className="iup-placeholder">
             <span className="iup-placeholder-icon">🖼</span>
-            <span>拖拽图片到此处或点击选择</span>
+            <span>{t('拖拽图片提示')}</span>
           </div>
         )}
         <input
@@ -173,18 +173,18 @@ export function ImageUploadPanel({ layout, onLayoutUpdated }: ImageUploadPanelPr
 
       {/* 类型选择 */}
       <div className="iup-row">
-        <label className="iup-label">视图类型:</label>
+        <label className="iup-label">{t('视图类型')}:</label>
         <select className="iup-select" value={viewType} onChange={(e) => setViewType(e.target.value as 'top' | 'elevation' | '3d')}>
-          <option value="top">俯视图</option>
-          <option value="elevation">正视图</option>
-          <option value="3d">立体图</option>
+          <option value="top">{t('俯视图')}</option>
+          <option value="elevation">{t('正视图')}</option>
+          <option value="3d">{t('立体图')}</option>
         </select>
       </div>
 
       {/* 关联墙/岛台 */}
       {allItems.length > 0 && (
         <div className="iup-row iup-row-col">
-          <label className="iup-label">关联墙/岛台:</label>
+          <label className="iup-label">{t('关联墙面岛台')}:</label>
           <div className="iup-checkboxes">
             {allItems.map((item) => (
               <label key={item.id} className="iup-check">
@@ -206,7 +206,7 @@ export function ImageUploadPanel({ layout, onLayoutUpdated }: ImageUploadPanelPr
         disabled={!imageData || loading}
         onClick={handleRecognize}
       >
-        {loading ? '识别中...' : '识别此图片'}
+        {loading ? t('识别中') : t('识别此图片')}
       </button>
 
       {/* 清空图片 */}
@@ -215,7 +215,7 @@ export function ImageUploadPanel({ layout, onLayoutUpdated }: ImageUploadPanelPr
           className="iup-btn-clear"
           onClick={() => { setImageData(null); setImagePreviewUrl(null); }}
         >
-          清除图片
+          {t('清除图片')}
         </button>
       )}
 
