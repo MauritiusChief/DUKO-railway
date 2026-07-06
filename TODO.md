@@ -3,7 +3,7 @@
 1. addItem 和 editItem 需要允许添加多个选项供用户选择，或者留空提示完全无信息，xxx search agent 允许提供多种选项的提示词
 2. 主 agent search budget 减少，dispatch 也加上预算限制
 3. 形状代码对照表 Exposed-Types 需要清洗，或者先导出 Types 表再人工改出 Exposed-Types
-3.1. 说不定可以改造 sku-exposed, 分区以辅助理解
+3. 1. 说不定可以改造 sku-exposed, 分区以辅助理解
 
 - 玻璃门得提示，用户要求的玻璃门如果在仓库里没有才需要定制
 - main agent 提示词需要科普 PNL 相关概念
@@ -31,6 +31,10 @@
 
 - 每次去 layout-recognize 或 debug, 以及再回到主页面时都需要重新登录，很烦人
 - ScriptCat 覆写模式不会检查数量
+- 前端和后端各自有一份 layout 用的推挤逻辑，看看如何统一
+- layout-recognzie 各个 block 需要允许定义 base 或 vanity
+- layout-recognzie 需要在墙已经建好之后再连接不同的墙
+- layout-recognzie 允许改自动滑动方向
 
 - 发现 railway web 的 console 可以管理 `/data` 目录，应该不需要用到 railway cli 来管理 volume 了。
   - 但疑似缺少新建目录功能，需要调整 refresh cli 来配合
