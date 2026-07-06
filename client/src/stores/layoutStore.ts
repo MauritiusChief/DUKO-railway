@@ -319,6 +319,82 @@ function alignAirGround(wall: LayoutWall): void {
 }
 
 // ==================================================================
+//  推挤算法：在指定数组中按 blockId 找到块 A，将其距左位置推到 X
+// ==================================================================
+
+/** 推挤算法核心：移动 A 到距左 X，右侧块自然跟随。左移优先侵蚀 gap，不够则越过左侧非 gap 块。 */
+function applyPushAlgorithm(blocks: SectionBlock[], blockId: string, X: number): void {
+  const idx = blocks.findIndex((b) => b.id === blockId);
+  if (idx === -1) return;
+
+  const A = blocks[idx];
+  let oldX = 0;
+  for (let i = 0; i < idx; i++) {
+    oldX += blocks[i].width;
+  }
+
+  if (X === oldX) return;
+
+  if (X < oldX) {
+    const delta = oldX - X;
+    const leftIdx = idx - 1;
+    const leftBlock = leftIdx >= 0 ? blocks[leftIdx] : null;
+    const leftIsGap = leftBlock && leftBlock.items[0]?.category === 'gap';
+
+    if (leftIsGap && leftBlock!.width >= delta) {
+      leftBlock!.width -= delta;
+      if (leftBlock!.width === 0) {
+        blocks.splice(leftIdx, 1);
+      }
+    } else if (leftIsGap && leftBlock!.width < delta && leftBlock!.width > 0) {
+      const remaining = delta - leftBlock!.width;
+      blocks.splice(leftIdx, 1);
+      applyPushAlgorithm(blocks, blockId, oldX - leftBlock!.width - remaining);
+    } else {
+      let leftNeighborIdx = idx - 1;
+      while (leftNeighborIdx >= 0 && blocks[leftNeighborIdx].items[0]?.category === 'gap') {
+        leftNeighborIdx--;
+      }
+
+      if (leftNeighborIdx >= 0) {
+        const B = blocks.splice(leftNeighborIdx, 1)[0];
+        const newAIdx = leftNeighborIdx < idx ? idx - 1 : idx;
+        blocks.splice(newAIdx + 1, 0, B);
+
+        let gapStart = newAIdx - 1;
+        while (gapStart >= 0 && blocks[gapStart].items[0]?.category === 'gap') {
+          blocks.splice(gapStart, 1);
+          gapStart--;
+        }
+        const currentAIdx = gapStart + 1;
+
+        if (X > 0) {
+          const gapBlock: SectionBlock = {
+            id: uuid(),
+            width: X,
+            items: [{ id: uuid(), category: 'gap', sku: 'gap' }],
+          };
+          blocks.splice(currentAIdx, 0, gapBlock);
+        }
+      }
+    }
+  } else {
+    const delta = X - oldX;
+    const leftGapIdx = idx - 1;
+    if (leftGapIdx >= 0 && blocks[leftGapIdx].items[0]?.category === 'gap') {
+      blocks[leftGapIdx].width += delta;
+    } else {
+      const gapBlock: SectionBlock = {
+        id: uuid(),
+        width: delta,
+        items: [{ id: uuid(), category: 'gap', sku: 'gap' }],
+      };
+      blocks.splice(idx, 0, gapBlock);
+    }
+  }
+}
+
+// ==================================================================
 //  全高物品双轨联动操作
 // ==================================================================
 
@@ -395,8 +471,11 @@ interface LayoutStoreState {
   /** 修改某个 item 的 SKU（按 itemId 查找，双轨块共享 id 会同步两轨） */
   updateItemSku: (wallId: string, itemId: string, newSku: string) => void;
 
-  // ---- Block 移动（拖拽用） ----
-  moveBlock: (wallId: string, track: TrackSpan, blockId: string, newDistanceFromLeft: number) => void;
+  // ---- Block 排序（拖拽用） ----
+  reorderBlock: (wallId: string, track: TrackSpan, blockId: string, toIndex: number) => void;
+
+  // ---- Block 精确位置编辑（推挤算法） ----
+  setBlockPosition: (wallId: string, track: TrackSpan, blockId: string, newDistanceFromLeft: number) => void;
 
   // ---- 位置计算 ----
   computePositions: (blocks: SectionBlock[]) => PositionedBlock[];
@@ -917,9 +996,9 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => {
       syncToStorage(updated);
     },
 
-    // ---- Block 移动（拖拽用） ----
+    // ---- Block 排序（拖拽用） ----
 
-    moveBlock: (wallId: string, track: TrackSpan, blockId: string, newDistanceFromLeft: number) => {
+    reorderBlock: (wallId: string, track: TrackSpan, blockId: string, toIndex: number) => {
       const { activeLayout } = get();
       if (!activeLayout) return;
 
@@ -934,27 +1013,83 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => {
       const block = blocks[idx];
       const movingIsDual = block.items.some((item) => isDualTrack(item.category));
 
+      if (idx === toIndex) return;
+
       if (movingIsDual) {
         const itemId = block.items[0].id;
-        const airRemoved = updatedWall.airBlocks.splice(
-          updatedWall.airBlocks.findIndex((b) => b.items.some((it) => it.id === itemId)),
-          1,
-        )[0];
-        const groundRemoved = updatedWall.groundBlocks.splice(
-          updatedWall.groundBlocks.findIndex((b) => b.items.some((it) => it.id === itemId)),
-          1,
-        )[0];
 
-        if (airRemoved) {
-          insertBlockAtPosition(updatedWall.airBlocks, airRemoved, newDistanceFromLeft);
+        const airIdx = updatedWall.airBlocks.findIndex((b) => b.items.some((it) => it.id === itemId));
+        const groundIdx = updatedWall.groundBlocks.findIndex((b) => b.items.some((it) => it.id === itemId));
+
+        if (airIdx !== -1) {
+          const removed = updatedWall.airBlocks.splice(airIdx, 1)[0];
+          let target = toIndex;
+          if (target > airIdx) target--;
+          target = Math.max(0, Math.min(target, updatedWall.airBlocks.length));
+          updatedWall.airBlocks.splice(target, 0, removed);
         }
-        if (groundRemoved) {
-          insertBlockAtPosition(updatedWall.groundBlocks, groundRemoved, newDistanceFromLeft);
+
+        if (groundIdx !== -1) {
+          const removed = updatedWall.groundBlocks.splice(groundIdx, 1)[0];
+          let target = toIndex;
+          if (target > groundIdx) target--;
+          target = Math.max(0, Math.min(target, updatedWall.groundBlocks.length));
+          updatedWall.groundBlocks.splice(target, 0, removed);
         }
       } else {
         const removed = blocks.splice(idx, 1)[0];
-        insertBlockAtPosition(blocks, removed, newDistanceFromLeft);
+        let target = toIndex;
+        if (target > idx) target--;
+        target = Math.max(0, Math.min(target, blocks.length));
+        blocks.splice(target, 0, removed);
       }
+
+      alignAirGround(updatedWall);
+
+      const updated: LayoutDocument = {
+        ...activeLayout,
+        walls: activeLayout.walls.map((w) => (w.id === wallId ? updatedWall : w)),
+        updatedAt: nowISO(),
+      };
+      set({ activeLayout: updated });
+      syncToStorage(updated);
+    },
+
+    // ---- Block 精确位置编辑（推挤算法） ----
+
+    setBlockPosition: (wallId: string, track: TrackSpan, blockId: string, newDistanceFromLeft: number) => {
+      const { activeLayout } = get();
+      if (!activeLayout) return;
+
+      const ref = findWallInLayout(activeLayout, wallId);
+      if (!ref) return;
+
+      const updatedWall = { ...ref.wall };
+      const blocks = getTrackBlocks(updatedWall, track);
+      const block = blocks.find((b) => b.id === blockId);
+      if (!block) return;
+
+      const movingIsDual = block.items.some((item) => isDualTrack(item.category));
+
+      if (movingIsDual) {
+        const itemId = block.items[0].id;
+        // 分别在 air 和 ground 两轨按 itemId 找块并执行推挤算法
+        const airBlock = updatedWall.airBlocks.find((b) => b.items.some((it) => it.id === itemId));
+        const groundBlock = updatedWall.groundBlocks.find((b) => b.items.some((it) => it.id === itemId));
+        if (airBlock) applyPushAlgorithm(updatedWall.airBlocks, airBlock.id, newDistanceFromLeft);
+        if (groundBlock) applyPushAlgorithm(updatedWall.groundBlocks, groundBlock.id, newDistanceFromLeft);
+      } else {
+        applyPushAlgorithm(blocks, blockId, newDistanceFromLeft);
+      }
+
+      // 自动拓宽墙体宽度以容纳超出部分
+      const airTotal = updatedWall.airBlocks.reduce((s, b) => s + b.width, 0);
+      const groundTotal = updatedWall.groundBlocks.reduce((s, b) => s + b.width, 0);
+      const maxTotal = Math.max(airTotal, groundTotal);
+      if (maxTotal > updatedWall.width) {
+        updatedWall.width = maxTotal;
+      }
+
       alignAirGround(updatedWall);
 
       const updated: LayoutDocument = {

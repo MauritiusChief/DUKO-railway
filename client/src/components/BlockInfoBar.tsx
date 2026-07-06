@@ -64,6 +64,7 @@ export function BlockInfoBar({
   // ---- 本地输入态（commit on blur / Enter） ----
   const [sku, setSku] = useState(mainItem?.sku || '');
   const [width, setWidth] = useState(String(block.width));
+  const [pos, setPos] = useState(String(distanceFromLeft));
 
   // ---- SKU 提交 ----
   const commitSku = useCallback(() => {
@@ -91,6 +92,16 @@ export function BlockInfoBar({
       setWidth(String(block.width));
     }
   }, [width, block.width, block.id, isDual, mainItem, wall.id, track, store]);
+
+  // ---- 距左提交（推挤算法） ----
+  const commitPos = useCallback(() => {
+    const p = parseFloat(pos);
+    if (!isNaN(p) && p >= 0 && p !== distanceFromLeft) {
+      store.setBlockPosition(wall.id, track, block.id, p);
+    } else if (isNaN(p) || p < 0) {
+      setPos(String(distanceFromLeft));
+    }
+  }, [pos, distanceFromLeft, wall.id, track, block.id, store]);
 
   // ---- 叠放物品增删（交由 StackedItemsEditor 回调） ----
   const handleAddStacked = useCallback((skuVal: string) => {
@@ -144,10 +155,27 @@ export function BlockInfoBar({
           />
         </label>
 
-        {/* 距左（只读，编辑推迟到 Feature 3） */}
-        <span className="pf-readonly">
-          {t('距左')}: {distanceFromLeft}{t('英寸')}
-        </span>
+        {/* 距左位置编辑（gap 块保持只读） */}
+        {isGap ? (
+          <span className="pf-readonly">
+            {t('距左')}: {distanceFromLeft}{t('英寸')}
+          </span>
+        ) : (
+          <label className="pf-field">
+            {t('距左')}
+            <input
+              className="pf-input pf-width-input"
+              type="number"
+              min="0"
+              step="0.5"
+              value={pos}
+              onChange={(e) => setPos(e.target.value)}
+              onBlur={commitPos}
+              onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+            />
+            {t('英寸')}
+          </label>
+        )}
       </div>
 
       {/* 第2行：叠放物品管理（无叠放且不可叠放时 StackedItemsEditor 返回 null） */}

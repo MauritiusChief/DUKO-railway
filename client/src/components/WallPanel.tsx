@@ -4,7 +4,7 @@
  * 展示墙头信息（名称、总宽、暴露面）、空中 + 地面两个轨道。
  * 每轨渲染 BlockCard 列表（仅显示 SKU），点击块后在 wp-add-form 平级位置
  * 展示 BlockInfoBar 信息栏（编辑 SKU/宽度/叠放、删除），与添加表单互斥。
- * 支持拖拽移动、添加物品。拖拽时通过 mouse 事件计算距左距离，调用 store.moveBlock。
+ * 支持拖拽改序（吸附到块间隙）、添加物品。拖拽时通过 mouse 事件计算最近间隙，调用 store.reorderBlock。
  */
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useLayoutStore } from '../stores/layoutStore';
@@ -181,6 +181,10 @@ export function WallPanel({ wall }: WallPanelProps) {
   const [dragIndicatorX, setDragIndicatorX] = useState<number | null>(null);
   const dragOffsetRef = useRef(0);
 
+  // 供拖拽 effect 闭包访问 positioned 数据，在 render 中 .current 更新
+  const airPositionedRef = useRef<{ block: SectionBlock; distanceFromLeft: number }[]>([]);
+  const groundPositionedRef = useRef<{ block: SectionBlock; distanceFromLeft: number }[]>([]);
+
   const handleDragStart = useCallback(
     (blockId: string, e: React.MouseEvent) => {
       e.preventDefault();
@@ -208,7 +212,27 @@ export function WallPanel({ wall }: WallPanelProps) {
       if (!trackEl) return;
       const trackRect = trackEl.getBoundingClientRect();
       const x = Math.max(0, Math.min(e.clientX - trackRect.left, trackRect.width));
-      setDragIndicatorX(x);
+
+      // 吸附到最近间隙：计算所有边界像素位置
+      const positioned = dragTrack === 'air' ? airPositionedRef.current : groundPositionedRef.current;
+      const boundaries: number[] = [0];
+      let cumulative = 0;
+      for (const p of positioned) {
+        cumulative += p.block.width;
+        boundaries.push(cumulative);
+      }
+
+      let nearestPx = 0;
+      let nearestDist = Infinity;
+      for (const boundary of boundaries) {
+        const boundaryPx = (boundary / (wall.width || 1)) * trackRect.width;
+        const dist = Math.abs(x - boundaryPx);
+        if (dist < nearestDist) {
+          nearestDist = dist;
+          nearestPx = boundaryPx;
+        }
+      }
+      setDragIndicatorX(nearestPx);
     };
 
     const handleMouseUp = (e: MouseEvent) => {
@@ -216,10 +240,29 @@ export function WallPanel({ wall }: WallPanelProps) {
       const trackEl = trackRef.current;
       if (trackEl) {
         const trackRect = trackEl.getBoundingClientRect();
-        const inchesPerPixel = (wall.width || 1) / (trackRect.width || 1);
-        const dropX = Math.max(0, Math.min(e.clientX - trackRect.left, trackRect.width));
-        const newDistanceFromLeft = Math.round(dropX * inchesPerPixel);
-        store.moveBlock(wall.id, dragTrack, dragBlockId, newDistanceFromLeft);
+        const x = Math.max(0, Math.min(e.clientX - trackRect.left, trackRect.width));
+
+        // 同 handleMouseMove 计算最近边界索引作为 toIndex
+        const positioned = dragTrack === 'air' ? airPositionedRef.current : groundPositionedRef.current;
+        const boundaries: number[] = [0];
+        let cumulative = 0;
+        for (const p of positioned) {
+          cumulative += p.block.width;
+          boundaries.push(cumulative);
+        }
+
+        let nearestBoundaryIndex = 0;
+        let nearestDist = Infinity;
+        for (let i = 0; i < boundaries.length; i++) {
+          const boundaryPx = (boundaries[i] / (wall.width || 1)) * trackRect.width;
+          const dist = Math.abs(x - boundaryPx);
+          if (dist < nearestDist) {
+            nearestDist = dist;
+            nearestBoundaryIndex = i;
+          }
+        }
+
+        store.reorderBlock(wall.id, dragTrack, dragBlockId, nearestBoundaryIndex);
       }
       setDragBlockId(null);
       setDragTrack(null);
@@ -237,6 +280,8 @@ export function WallPanel({ wall }: WallPanelProps) {
   // ---- 位置计算 ----
   const airPositioned = store.computePositions(wall.airBlocks);
   const groundPositioned = store.computePositions(wall.groundBlocks);
+  airPositionedRef.current = airPositioned;
+  groundPositionedRef.current = groundPositioned;
 
   // ---- 暴露面编辑 ----
   const handleExposedChange = useCallback(
