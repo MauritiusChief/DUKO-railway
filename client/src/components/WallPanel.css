@@ -188,6 +188,30 @@
   opacity: 0.4;
 }
 
+/* 标尺线 */
+
+.wp-ruler-mark {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  border-left: 1px dashed #ddd;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.wp-ruler-label {
+  position: absolute;
+  top: 0;
+  left: 2px;
+  font-size: 9px;
+  color: #bbb;
+  white-space: nowrap;
+  background: rgba(255, 255, 255, 0.8);
+  padding: 0 2px;
+  border-radius: 2px;
+}
+
 /* 拖拽指示线 */
 
 .wp-drop-indicator {

@@ -30,6 +30,22 @@ interface WallPanelProps {
 /** 每英寸对应的像素参考值 */
 const PX_PER_INCH = 6;
 
+const RULER_INTERVALS = [30, 15, 9, 6, 3];
+
+/**
+ * 计算给定的墙宽度使用哪个标尺 intervel
+ * @param wallWidth 
+ * @returns 
+ */
+function pickRulerInterval(wallWidth: number): number {
+  for (const iv of RULER_INTERVALS) {
+    let marks = 0;
+    for (let k = 1; k * iv < wallWidth; k++) marks++;
+    if (marks >= 3) return iv;
+  }
+  return 3;
+}
+
 /** 空中轨道可用物品分类 */
 const AIR_CATEGORIES: BlockItemCategory[] = [
   'wall_cabinet', 'tall_cabinet', 'gap', 'range_hood', 'window', 'tall_appliance',
@@ -277,6 +293,11 @@ export function WallPanel({ wall }: WallPanelProps) {
     trackRef: React.MutableRefObject<HTMLDivElement | null>,
   ) => {
     const totalWidth = wall.width || 1;
+    const rulerInterval = pickRulerInterval(totalWidth);
+    const rulerMarks: number[] = [];
+    for (let k = 1; k * rulerInterval < totalWidth; k++) {
+      rulerMarks.push(k * rulerInterval);
+    }
     return (
       <div className="wp-track">
         <div className="wp-track-header">
@@ -318,6 +339,16 @@ export function WallPanel({ wall }: WallPanelProps) {
               </div>
             );
           })}
+          {/* 动态布置标尺线 */}
+          {rulerMarks.map((pos) => (
+            <div
+              key={`ruler-${pos}`}
+              className="wp-ruler-mark"
+              style={{ left: `${(pos / totalWidth) * 100}%` }}
+            >
+              <span className="wp-ruler-label">{pos}{t('英寸')}</span>
+            </div>
+          ))}
           {/* 拖拽指示线 */}
           {dragTrack === track && dragIndicatorX !== null && (
             <div
