@@ -181,18 +181,17 @@ setBlockPosition: (wallId: string, track: TrackSpan, blockId: string, newDistanc
      - 若 `rightGapWidth >= 0`：替换 gap 为 `[左gap?, A, 右gap?]`
      - 若 `rightGapWidth < 0`（A 比 gap 宽）：A 溢出部分把右侧块整体右移
    - **X 落在非 gap 块 B 内**（`bStart <= X < bEnd`）：A 越过 B。
-     - 左移 → A 插在 B 之前（`insertIdx = B 的索引`）
-     - 右移 → A 插在 B 之后（`insertIdx = B 的索引 + 1`）
+     - 左移 → A 插在 B 之前
+     - 右移 → A 保持在 B 之前，B以及其他右侧块整体右移动
    - **X 落在边界/首/尾**：直接插入，必要时补 gap。
 
 4. **调整 A 左侧 gap**：插入 A 后，确保 A 起点恰好 = X：
    - A 前面有 gap → 改其宽度 = `X - 该 gap 之前的累积宽度`（缩或扩）
-   - A 前面无 gap 且 `X > naturalStart` → 在 A 前插入 gap
-   - A 前面无 gap 且 `X < naturalStart` → 钳制到 `naturalStart`（不越过左侧块）
+   - A 前面无 gap → 在 A 前插入 gap
 
 5. **`alignAirGround(updatedWall)`** — 保证双轨物品对齐。
 
-#### 行为对应（已与用户确认）
+#### 行为对应
 
 **左移侵蚀 gap**（A 左侧有 gap）：
 - gap 缩小，A 及右侧块左移，总占用宽度缩小。
@@ -222,7 +221,7 @@ setBlockPosition: (wallId: string, track: TrackSpan, blockId: string, newDistanc
 → 移除 A → [B(10), C(10)]
 → X=5 落在 B(0-10) 内，非 gap，左移 → A 插在 B 前
 → 插入 A → [A(10), B(10), C(10)]
-→ 调整 A 左侧 gap：naturalStart=0, X=5 → 插入 gap(5)
+→ 调整 A 左侧 gap：Start=0, X=5 → 插入 gap(5)
 结果: [gap(5), A(10), B(10), C(10)]  总宽 35（原 30，增 5）
 ```
 
@@ -230,11 +229,11 @@ setBlockPosition: (wallId: string, track: TrackSpan, blockId: string, newDistanc
 ```
 初始: [gap(5), A(10), B(10)]  A 在位置 5
 设 X=8（右移 3）
-→ X=8 落在 gap(0-5)? 不，8 > 5，落在 A(5-15) 内
+→ X=8 落在 A(5-15) 内
 → A 没有越过任何块（仍在自己原位附近）
 → 实际上：移除 A → [gap(5), B(10)]，X=8 落在 B(5-15) 内
 → 右移 → A 插在 B 后 → [gap(5), B(10), A(10)]
-→ 调整 A 左侧 gap：naturalStart=15, X=8 < 15...
+→ 调整 A 左侧 gap：Start=15, X=8 < 15...
 ```
 > 此 case 需注意：右移时若 X 仍落在 A 原有范围内或紧邻，不应触发越过。算法需判断 X 是否真的越过了相邻块。若 X 在 A 原有范围内（`oldX <= X < oldX + A.width`），则为 no-op 或仅扩大左侧 gap。
 
