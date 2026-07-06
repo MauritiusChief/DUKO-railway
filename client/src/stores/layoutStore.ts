@@ -274,12 +274,15 @@ function deleteBlockStatic(blocks: SectionBlock[], blockIndex: number): void {
 
 // ==================================================================
 //  空挡对齐：确保全高物品在 air / ground 两轨的距左位置一致
+//  策略：优先削长轨左侧 gap，不够再补短轨。
 // ==================================================================
 
 /** 对墙/岛台的双轨进行空挡对齐。
  *  遍历所有全高物品（tall_cabinet / tall_appliance），
- *  若其在 airBlocks 和 groundBlocks 中的距左位置不一致，
- *  在较短轨的该全高块之前插入一个 gap。 */
+ *  若其在 airBlocks 和 groundBlocks 中的距左位置不一致：
+ *  1. 先检查长轨侧双轨块左侧紧邻是否为 gap —— 若是，优先削减它
+ *  2. gap 不够覆盖差值时，削掉 gap 后剩余差值补到短轨侧
+ *  3. 左侧紧邻非 gap 时才回退到旧行为：直接在短轨插入 gap */
 function alignAirGround(wall: LayoutWall): void {
   const dualItemIds: string[] = [];
   for (const block of wall.airBlocks) {
@@ -299,21 +302,74 @@ function alignAirGround(wall: LayoutWall): void {
     const groundBefore = wall.groundBlocks.slice(0, groundIdx).reduce((s, b) => s + b.width, 0);
 
     if (airBefore > groundBefore) {
-      const gapWidth = airBefore - groundBefore;
-      const gapBlock: SectionBlock = {
-        id: uuid(),
-        width: gapWidth,
-        items: [{ id: uuid(), category: 'gap', sku: 'gap' }],
-      };
-      wall.groundBlocks.splice(groundIdx, 0, gapBlock);
+      const diff = airBefore - groundBefore;
+
+      // 尝试从 air（长轨）左侧紧邻的 gap 削减
+      const airLeftIdx = airIdx - 1;
+      const airLeftBlock = airLeftIdx >= 0 ? wall.airBlocks[airLeftIdx] : null;
+      const airLeftIsGap = airLeftBlock && airLeftBlock.items[0]?.category === 'gap';
+
+      if (airLeftIsGap && airLeftBlock!.width > 0) {
+        if (airLeftBlock!.width >= diff) {
+          airLeftBlock!.width -= diff;
+          if (airLeftBlock!.width === 0) {
+            wall.airBlocks.splice(airLeftIdx, 1);
+          }
+        } else {
+          const consumed = airLeftBlock!.width;
+          wall.airBlocks.splice(airLeftIdx, 1);
+          const remaining = diff - consumed;
+          const gapBlock: SectionBlock = {
+            id: uuid(),
+            width: remaining,
+            items: [{ id: uuid(), category: 'gap', sku: 'gap' }],
+          };
+          // 削减后 airIdx 已减 1，groundIdx 不变
+          wall.groundBlocks.splice(groundIdx, 0, gapBlock);
+        }
+      } else {
+        // 左侧紧邻非 gap，无法削减，回退到在 ground 补 gap
+        const gapBlock: SectionBlock = {
+          id: uuid(),
+          width: diff,
+          items: [{ id: uuid(), category: 'gap', sku: 'gap' }],
+        };
+        wall.groundBlocks.splice(groundIdx, 0, gapBlock);
+      }
     } else if (groundBefore > airBefore) {
-      const gapWidth = groundBefore - airBefore;
-      const gapBlock: SectionBlock = {
-        id: uuid(),
-        width: gapWidth,
-        items: [{ id: uuid(), category: 'gap', sku: 'gap' }],
-      };
-      wall.airBlocks.splice(airIdx, 0, gapBlock);
+      const diff = groundBefore - airBefore;
+
+      // 尝试从 ground（长轨）左侧紧邻的 gap 削减
+      const groundLeftIdx = groundIdx - 1;
+      const groundLeftBlock = groundLeftIdx >= 0 ? wall.groundBlocks[groundLeftIdx] : null;
+      const groundLeftIsGap = groundLeftBlock && groundLeftBlock.items[0]?.category === 'gap';
+
+      if (groundLeftIsGap && groundLeftBlock!.width > 0) {
+        if (groundLeftBlock!.width >= diff) {
+          groundLeftBlock!.width -= diff;
+          if (groundLeftBlock!.width === 0) {
+            wall.groundBlocks.splice(groundLeftIdx, 1);
+          }
+        } else {
+          const consumed = groundLeftBlock!.width;
+          wall.groundBlocks.splice(groundLeftIdx, 1);
+          const remaining = diff - consumed;
+          const gapBlock: SectionBlock = {
+            id: uuid(),
+            width: remaining,
+            items: [{ id: uuid(), category: 'gap', sku: 'gap' }],
+          };
+          wall.airBlocks.splice(airIdx, 0, gapBlock);
+        }
+      } else {
+        // 左侧紧邻非 gap，无法削减，回退到在 air 补 gap
+        const gapBlock: SectionBlock = {
+          id: uuid(),
+          width: diff,
+          items: [{ id: uuid(), category: 'gap', sku: 'gap' }],
+        };
+        wall.airBlocks.splice(airIdx, 0, gapBlock);
+      }
     }
   }
 }
@@ -1018,23 +1074,27 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => {
       if (movingIsDual) {
         const itemId = block.items[0].id;
 
-        const airIdx = updatedWall.airBlocks.findIndex((b) => b.items.some((it) => it.id === itemId));
-        const groundIdx = updatedWall.groundBlocks.findIndex((b) => b.items.some((it) => it.id === itemId));
-
-        if (airIdx !== -1) {
-          const removed = updatedWall.airBlocks.splice(airIdx, 1)[0];
-          let target = toIndex;
-          if (target > airIdx) target--;
-          target = Math.max(0, Math.min(target, updatedWall.airBlocks.length));
-          updatedWall.airBlocks.splice(target, 0, removed);
+        // 计算主动轨 toIndex 对应的累积距左位置
+        let targetPosition = 0;
+        for (let i = 0; i < toIndex; i++) {
+          targetPosition += blocks[i].width;
         }
 
-        if (groundIdx !== -1) {
-          const removed = updatedWall.groundBlocks.splice(groundIdx, 1)[0];
-          let target = toIndex;
-          if (target > groundIdx) target--;
-          target = Math.max(0, Math.min(target, updatedWall.groundBlocks.length));
-          updatedWall.groundBlocks.splice(target, 0, removed);
+        // 主动轨：按 toIndex 序号 splice
+        const removed = blocks.splice(idx, 1)[0];
+        let target = toIndex;
+        if (target > idx) target--;
+        target = Math.max(0, Math.min(target, blocks.length));
+        blocks.splice(target, 0, removed);
+
+        // 被动轨：用推挤算法将对应双轨块推到 targetPosition
+        const passiveSpan: TrackSpan = track === 'air' ? 'ground' : 'air';
+        const passiveBlocks = getTrackBlocks(updatedWall, passiveSpan);
+        const passiveBlock = passiveBlocks.find(
+          (b) => b.items.some((it) => it.id === itemId),
+        );
+        if (passiveBlock) {
+          applyPushAlgorithm(passiveBlocks, passiveBlock.id, targetPosition);
         }
       } else {
         const removed = blocks.splice(idx, 1)[0];

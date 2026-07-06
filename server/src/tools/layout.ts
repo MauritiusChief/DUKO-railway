@@ -258,19 +258,67 @@ function alignAirGround(wall: LayoutWall): void {
     const groundBefore = sumWidths(wall.groundBlocks.slice(0, groundIdx));
 
     if (airBefore > groundBefore) {
-      const gapWidth = airBefore - groundBefore;
-      wall.groundBlocks.splice(groundIdx, 0, {
-        id: uuid(),
-        width: gapWidth,
-        items: [{ id: uuid(), category: 'gap', sku: 'gap' }],
-      });
+      const diff = airBefore - groundBefore;
+
+      // 尝试从 air（长轨）左侧紧邻的 gap 削减
+      const airLeftIdx = airIdx - 1;
+      const airLeftBlock = airLeftIdx >= 0 ? wall.airBlocks[airLeftIdx] : null;
+      const airLeftIsGap = airLeftBlock && airLeftBlock.items[0]?.category === 'gap';
+
+      if (airLeftIsGap && airLeftBlock!.width > 0) {
+        if (airLeftBlock!.width >= diff) {
+          airLeftBlock!.width -= diff;
+          if (airLeftBlock!.width === 0) {
+            wall.airBlocks.splice(airLeftIdx, 1);
+          }
+        } else {
+          const consumed = airLeftBlock!.width;
+          wall.airBlocks.splice(airLeftIdx, 1);
+          const remaining = diff - consumed;
+          wall.groundBlocks.splice(groundIdx, 0, {
+            id: uuid(),
+            width: remaining,
+            items: [{ id: uuid(), category: 'gap', sku: 'gap' }],
+          });
+        }
+      } else {
+        wall.groundBlocks.splice(groundIdx, 0, {
+          id: uuid(),
+          width: diff,
+          items: [{ id: uuid(), category: 'gap', sku: 'gap' }],
+        });
+      }
     } else if (groundBefore > airBefore) {
-      const gapWidth = groundBefore - airBefore;
-      wall.airBlocks.splice(airIdx, 0, {
-        id: uuid(),
-        width: gapWidth,
-        items: [{ id: uuid(), category: 'gap', sku: 'gap' }],
-      });
+      const diff = groundBefore - airBefore;
+
+      // 尝试从 ground（长轨）左侧紧邻的 gap 削减
+      const groundLeftIdx = groundIdx - 1;
+      const groundLeftBlock = groundLeftIdx >= 0 ? wall.groundBlocks[groundLeftIdx] : null;
+      const groundLeftIsGap = groundLeftBlock && groundLeftBlock.items[0]?.category === 'gap';
+
+      if (groundLeftIsGap && groundLeftBlock!.width > 0) {
+        if (groundLeftBlock!.width >= diff) {
+          groundLeftBlock!.width -= diff;
+          if (groundLeftBlock!.width === 0) {
+            wall.groundBlocks.splice(groundLeftIdx, 1);
+          }
+        } else {
+          const consumed = groundLeftBlock!.width;
+          wall.groundBlocks.splice(groundLeftIdx, 1);
+          const remaining = diff - consumed;
+          wall.airBlocks.splice(airIdx, 0, {
+            id: uuid(),
+            width: remaining,
+            items: [{ id: uuid(), category: 'gap', sku: 'gap' }],
+          });
+        }
+      } else {
+        wall.airBlocks.splice(airIdx, 0, {
+          id: uuid(),
+          width: diff,
+          items: [{ id: uuid(), category: 'gap', sku: 'gap' }],
+        });
+      }
     }
   }
 }

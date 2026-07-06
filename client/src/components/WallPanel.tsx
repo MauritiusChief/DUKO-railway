@@ -370,7 +370,6 @@ export function WallPanel({ wall }: WallPanelProps) {
                   position: 'absolute',
                   left: `${leftPx}%`,
                   width: `${widthPx}%`,
-                  minWidth: '40px',
                 }}
               >
                 <BlockCard
