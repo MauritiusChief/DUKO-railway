@@ -36,6 +36,7 @@
 - OCR agent 需要提示提供总体宽度
 - OCR agent 也需要 trace
 - layout agent 指示窗户和抽油烟机都视为大间隔物体；大间隔物体也可添加 SKU, 比如 VAL, GH (Glass Rack 等)
+- layout agent 指示允许 filler
 - layout agent 需要允许填SKU时把颜色留空
 
 - layout-recognize 无需颜色的东西不用警报，也不暴露选择颜色的下拉菜单
