@@ -38,8 +38,9 @@
 - ScriptCat 覆写模式不会检查数量
 - 前端和后端各自有一份 layout 用的推挤逻辑，看看如何统一
 - layout-recognzie 各个 block 需要允许定义 base 或 vanity
-- layout-recognzie 需要在墙已经建好之后再连接不同的墙
+- layout-recognzie 需要在墙已经建好之后再连接不同的墙，以及为墙的物品选颜色
 - layout-recognzie 允许改自动滑动方向
+- layout-recognize 最终生成所有东西的清单，以及 tk, qr, sm, bep, dwp, rrp 等等等等内容的功能
 
 - 发现 railway web 的 console 可以管理 `/data` 目录，应该不需要用到 railway cli 来管理 volume 了。
   - 但疑似缺少新建目录功能，需要调整 refresh cli 来配合
