@@ -534,11 +534,13 @@ interface LayoutStoreState {
   insertBothTracksWithItems: (wallId: string, mainItem: Omit<BlockItem, 'id'>, stackedItems: Omit<BlockItem, 'id'>[], width: number, colorCode?: string) => { airBlockId: string; groundBlockId: string };
   removeStackedItem: (wallId: string, blockId: string, itemId: string) => void;
   /** 向已有 block 追加一个叠放吊柜 item（仅 air 轨有意义） */
-  addStackedItem: (wallId: string, blockId: string, sku: string) => void;
+  addStackedItem: (wallId: string, blockId: string, sku: string, height?: number) => void;
   /** 修改某个 item 的 SKU（按 itemId 查找，双轨块共享 id 会同步两轨） */
   updateItemSku: (wallId: string, itemId: string, newSku: string) => void;
   /** 修改某个 item 的 isVanity（按 itemId 查找，双轨块共享 id 会同步两轨） */
   updateItemVanity: (wallId: string, itemId: string, isVanity: boolean) => void;
+  /** 修改某个 item 的高度（按 itemId 查找，双轨块共享 id 会同步两轨）。仅 air 轨物品有意义 */
+  updateItemHeight: (wallId: string, itemId: string, height: number) => void;
   /** 修改某个 block 的颜色代码 */
   updateBlockColor: (wallId: string, track: TrackSpan, blockId: string, colorCode: string) => void;
 
@@ -1024,7 +1026,7 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => {
       syncToStorage(updated);
     },
 
-    addStackedItem: (wallId: string, blockId: string, sku: string) => {
+    addStackedItem: (wallId: string, blockId: string, sku: string, height?: number) => {
       const { activeLayout } = get();
       if (!activeLayout) return;
 
@@ -1044,7 +1046,9 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => {
       const trimmed = sku.trim();
       if (!trimmed) return;
 
-      block.items = [...block.items, { id: uuid(), category: 'wall_cabinet', sku: trimmed }];
+      const newItem: BlockItem = { id: uuid(), category: 'wall_cabinet', sku: trimmed };
+      if (height !== undefined && height > 0) newItem.height = height;
+      block.items = [...block.items, newItem];
 
       const updated: LayoutDocument = {
         ...activeLayout,
@@ -1097,6 +1101,35 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => {
       for (const block of updatedWall.groundBlocks) {
         const item = block.items.find((it) => it.id === itemId);
         if (item && item.category === 'base_cabinet') item.isVanity = isVanity;
+      }
+
+      const updated: LayoutDocument = {
+        ...activeLayout,
+        walls: activeLayout.walls.map((w) => (w.id === wallId ? updatedWall : w)),
+        updatedAt: nowISO(),
+      };
+      set({ activeLayout: updated });
+      syncToStorage(updated);
+    },
+
+    updateItemHeight: (wallId: string, itemId: string, height: number) => {
+      const { activeLayout } = get();
+      if (!activeLayout) return;
+
+      const ref = findWallInLayout(activeLayout, wallId);
+      if (!ref) return;
+
+      const updatedWall = { ...ref.wall };
+      const h = Math.max(0, height);
+
+      // 双轨块共享 itemId，遍历两轨统一更新
+      for (const block of updatedWall.airBlocks) {
+        const item = block.items.find((it) => it.id === itemId);
+        if (item) item.height = h;
+      }
+      for (const block of updatedWall.groundBlocks) {
+        const item = block.items.find((it) => it.id === itemId);
+        if (item) item.height = h;
       }
 
       const updated: LayoutDocument = {

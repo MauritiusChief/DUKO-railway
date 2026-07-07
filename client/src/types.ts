@@ -177,6 +177,8 @@ export interface BlockItem {
   sku: string;
   /** 是否为 vanity cabinet（仅 base_cabinet 有效） */
   isVanity?: boolean;
+  /** 物品高度（英寸），地面柜无需记录。air 轨 wall_cabinet / tall_cabinet / tall_appliance 及叠放吊柜均需填写 */
+  height?: number;
 }
 
 /** 轨道中的一个排列单元 */

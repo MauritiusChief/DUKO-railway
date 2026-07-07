@@ -85,6 +85,11 @@
   text-align: right;
 }
 
+.pf-height-input {
+  width: 48px;
+  text-align: right;
+}
+
 .pf-readonly {
   font-size: 11px;
   color: #999;
@@ -112,6 +117,11 @@
   font-family: monospace;
 }
 
+.pf-stacked-height {
+  color: #4a90d9;
+  font-weight: 600;
+}
+
 .pf-stacked-remove {
   background: none;
   border: none;
@@ -137,6 +147,11 @@
 .pf-stacked-add-input {
   width: 90px;
   font-family: monospace;
+}
+
+.pf-stacked-add-height {
+  width: 48px;
+  text-align: right;
 }
 
 .pf-stacked-add-btn {

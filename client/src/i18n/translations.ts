@@ -381,6 +381,10 @@ export const messages = {
     zh: '宽度',
     en: 'Width',
   },
+  高度: {
+    zh: '高度',
+    en: 'Height',
+  },
   添加物品: {
     zh: '添加物品',
     en: 'Add Item',

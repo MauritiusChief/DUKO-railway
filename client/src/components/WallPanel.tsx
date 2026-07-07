@@ -87,6 +87,7 @@ export function WallPanel({ wall }: WallPanelProps) {
   const [addingTrack, setAddingTrack] = useState<TrackSpan | null>(null);
   const [newCategory, setNewCategory] = useState<BlockItemCategory>('wall_cabinet');
   const [newWidth, setNewWidth] = useState('');
+  const [newHeight, setNewHeight] = useState('');
   const [newSku, setNewSku] = useState('');
   const [stackedItems, setStackedItems] = useState<StackedItemRef[]>([]);
   const [newIsVanity, setNewIsVanity] = useState(false);
@@ -121,6 +122,7 @@ export function WallPanel({ wall }: WallPanelProps) {
     const categories = track === 'air' ? AIR_CATEGORIES : GROUND_CATEGORIES;
     setNewCategory(categories[0]);
     setNewWidth('');
+    setNewHeight('');
     setNewSku('');
     setStackedItems([]);
     setNewIsVanity(false);
@@ -132,26 +134,36 @@ export function WallPanel({ wall }: WallPanelProps) {
     const width = parseFloat(newWidth);
     if (isNaN(width) || width <= 0) return;
     const primarySku = newSku.trim() || newCategory;
+    const h = parseFloat(newHeight);
+    const hasHeight = !isNaN(h) && h > 0;
+    const heightRelevant =
+      newCategory === 'wall_cabinet' || newCategory === 'tall_cabinet' || newCategory === 'tall_appliance';
     const stacked: Omit<BlockItem, 'id'>[] = stackedItems
       .filter((it) => it.sku.trim())
-      .map((it) => ({ category: 'wall_cabinet' as const, sku: it.sku.trim() }));
+      .map((it) => {
+        const item: Omit<BlockItem, 'id'> = { category: 'wall_cabinet' as const, sku: it.sku.trim() };
+        if (it.height != null && it.height > 0) item.height = it.height;
+        return item;
+      });
     const cc = newColorCode.trim() || undefined;
 
     if (newCategory === 'tall_cabinet' || newCategory === 'tall_appliance') {
       store.insertBothTracksWithItems(
         wall.id,
-        { category: newCategory, sku: primarySku },
+        { category: newCategory, sku: primarySku, ...(hasHeight && heightRelevant ? { height: h } : {}) },
         stacked,
         width,
         cc,
       );
     } else {
       const items: Omit<BlockItem, 'id'>[] = [
-        { category: newCategory, sku: primarySku, isVanity: newIsVanity || undefined },
+        { category: newCategory, sku: primarySku, isVanity: newIsVanity || undefined, ...(hasHeight && heightRelevant ? { height: h } : {}) },
       ];
       for (const it of stackedItems) {
         if (it.sku.trim()) {
-          items.push({ category: 'wall_cabinet', sku: it.sku.trim() });
+          const item: Omit<BlockItem, 'id'> = { category: 'wall_cabinet', sku: it.sku.trim() };
+          if (it.height != null && it.height > 0) item.height = it.height;
+          items.push(item);
         }
       }
       store.insertBlockWithItems(wall.id, addingTrack, items, width, cc);
@@ -160,7 +172,7 @@ export function WallPanel({ wall }: WallPanelProps) {
     setStackedItems([]);
     setNewIsVanity(false);
     setNewColorCode('');
-  }, [addingTrack, newCategory, newWidth, newSku, newIsVanity, newColorCode, stackedItems, wall.id, store]);
+  }, [addingTrack, newCategory, newWidth, newHeight, newSku, newIsVanity, newColorCode, stackedItems, wall.id, store]);
 
   // ---- 删除 block ----
   const handleDelete = useCallback(
@@ -444,6 +456,18 @@ export function WallPanel({ wall }: WallPanelProps) {
                 onKeyDown={(e) => { if (e.key === 'Enter') confirmAdd(); }}
                 autoFocus
               />
+              {isStackableCategory && (
+                <input
+                  className="pf-input pf-height-input"
+                  type="number"
+                  min="0.5"
+                  step="0.5"
+                  placeholder={t('高度')}
+                  value={newHeight}
+                  onChange={(e) => setNewHeight(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') confirmAdd(); }}
+                />
+              )}
               <input
                 className="pf-input pf-sku-input"
                 placeholder={t('请输入SKU')}
@@ -470,7 +494,7 @@ export function WallPanel({ wall }: WallPanelProps) {
             {isStackableCategory && (
               <StackedItemsEditor
                 items={stackedItems}
-                onAdd={(sku) => setStackedItems([...stackedItems, { id: crypto.randomUUID(), sku }])}
+                onAdd={(sku, height) => setStackedItems([...stackedItems, { id: crypto.randomUUID(), sku, height }])}
                 onRemove={(id) => setStackedItems(stackedItems.filter((it) => it.id !== id))}
                 canAdd
               />

@@ -370,10 +370,18 @@ ${colorTable}
 - **groundBlocks**（地面轨道）：地柜(base_cabinet)、高柜(tall_cabinet)、空挡(gap)、通天电器(tall_appliance)、需台面电器(base_appliance_need_top)、免台面电器(base_appliance_without_top)
 
 全高物品（tall_cabinet/tall_appliance）同时在 air 和 ground 两轨各有一个 block，共享同一个 item ID。
-墙吊柜（wall_cabinet）和全高物品的 air 块支持多个物品堆叠（stackedSkus）。
+墙吊柜（wall_cabinet）和全高物品的 air 块支持多个物品堆叠（stackedItems，每个包含 sku 和可选 height）。
 
 每个 block 可以设置 colorCode（颜色代码，如 "02"），通过 insertItem 的 colorCode 参数设置。
 base_cabinet 物品可以标记为 vanity cabinet（isVanity: true），仅在 ground 轨有效，通过 insertItem 的 isVanity 参数设置。
+
+## 高度规则
+
+- air 轨物品（wall_cabinet、tall_cabinet、tall_appliance）及叠放吊柜必须填写 height（英寸）。
+- 地面柜（base_cabinet、base_appliance_*）因高度统一，无需填写 height。
+- 全高物品（tall_cabinet / tall_appliance）写入 height 后，通过共享的 item ID 同步到两轨；从 ground 轨点击编辑高度时也会自动同步 air 轨。
+- 叠放吊柜各自记录自己的 height，互不影响。主物品高度和叠放吊柜高度各自独立。
+- 使用 insertItem / insertItemAtPosition 时，stackedItems 为对象数组 [{ "sku": "...", "height": ... }]，单次请求内构造即可。
 
 岛台是一种特殊的墙。通过 backToBackIslandIds 表示背靠背关系。
 connectedWallIds 表示 L 形转角连接关系。connectIslands 用于设置背靠背关系，connectWalls 用于设置转角连接。

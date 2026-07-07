@@ -70,6 +70,7 @@ export function BlockInfoBar({
   // ---- 本地输入态（commit on blur / Enter） ----
   const [sku, setSku] = useState(mainItem?.sku || '');
   const [width, setWidth] = useState(String(block.width));
+  const [height, setHeight] = useState(mainItem?.height != null ? String(mainItem.height) : '');
   const [pos, setPos] = useState(String(distanceFromLeft));
 
   // ---- SKU 提交 ----
@@ -98,6 +99,21 @@ export function BlockInfoBar({
       setWidth(String(block.width));
     }
   }, [width, block.width, block.id, isDual, mainItem, wall.id, track, store]);
+
+  // ---- 高度提交 ----
+  const heightRelevant =
+    mainItem?.category === 'wall_cabinet' ||
+    mainItem?.category === 'tall_cabinet' ||
+    mainItem?.category === 'tall_appliance';
+  const commitHeight = useCallback(() => {
+    if (!mainItem) return;
+    const h = parseFloat(height);
+    if (!isNaN(h) && h > 0 && h !== (mainItem.height || 0)) {
+      store.updateItemHeight(wall.id, mainItem.id, h);
+    } else if (isNaN(h) || h <= 0) {
+      setHeight(mainItem.height != null ? String(mainItem.height) : '');
+    }
+  }, [height, mainItem, wall.id, store]);
 
   // ---- 距左提交（推挤算法） ----
   const commitPos = useCallback(() => {
@@ -128,8 +144,8 @@ export function BlockInfoBar({
   );
 
   // ---- 叠放物品增删（交由 StackedItemsEditor 回调） ----
-  const handleAddStacked = useCallback((skuVal: string) => {
-    store.addStackedItem(wall.id, block.id, skuVal);
+  const handleAddStacked = useCallback((skuVal: string, h?: number) => {
+    store.addStackedItem(wall.id, block.id, skuVal, h);
   }, [wall.id, block.id, store]);
 
   const handleRemoveStacked = useCallback((itemId: string) => {
@@ -145,7 +161,7 @@ export function BlockInfoBar({
   }, [block.id, onDelete]);
 
   // 叠放物品映射为 StackedItemRef
-  const stackedItems = block.items.slice(1).map((it) => ({ id: it.id, sku: it.sku }));
+  const stackedItems = block.items.slice(1).map((it) => ({ id: it.id, sku: it.sku, height: it.height }));
 
   return (
     <div className="pf-bar">
@@ -168,6 +184,22 @@ export function BlockInfoBar({
             onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
           />
         </label>
+
+        {heightRelevant && (
+          <label className="pf-field">
+            <input
+              className="pf-input pf-height-input"
+              type="number"
+              min="0.5"
+              step="0.5"
+              placeholder={t('高度')}
+              value={height}
+              onChange={(e) => setHeight(e.target.value)}
+              onBlur={commitHeight}
+              onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+            />
+          </label>
+        )}
 
         <label className="pf-field">
           <input
