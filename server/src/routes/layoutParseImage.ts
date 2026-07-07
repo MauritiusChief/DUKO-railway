@@ -137,7 +137,7 @@ layoutParseImageRouter.post('/', validate(layoutParseSchema), async (req: Reques
     // 阶段 1：OCR 预处理 —— OpenRouter 视觉模型识别图片中的橱柜结构
     const ocrAgent = new LayoutOcrAgent(visionLlm, {
       budgetLimit: 0,
-      maxRounds: 0,
+      maxRounds: 2,
       langHint: '中文',
     });
 

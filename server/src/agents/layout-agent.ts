@@ -239,7 +239,7 @@ export class LayoutAgent extends BaseAgent<ChatMessage> {
         };
         const sub = new LayoutOcrAgent(this.visionLlm, {
           budgetLimit: 0,
-          maxRounds: 0,
+          maxRounds: 2,
           langHint: this.config.langHint,
           onStep: (evt) => {
             if (evt.type === 'tool_call') {
