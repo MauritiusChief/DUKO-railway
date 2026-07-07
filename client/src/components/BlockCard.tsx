@@ -46,7 +46,6 @@ export function BlockCard({ block, track, isDual, isSelected, onDragStart, onSel
         const sku = it.sku || '-';
         return sku;
       });
-  const skuText = skuRows[0]
 
   const showSkuPrefix = block.width >= 6;
 
@@ -54,7 +53,7 @@ export function BlockCard({ block, track, isDual, isSelected, onDragStart, onSel
     <div
       className={`bc-card ${isGap ? 'bc-gap' : ''} ${isDual ? 'bc-dual' : ''} ${isSelected ? 'bc-selected' : ''}`}
       onClick={handleCardClick}
-      title={skuText}
+      title={skuRows.join(',')}
     >
       {/* 上半：拖拽手柄 + 叠放/双轨指示 */}
       <div className="bc-top">
