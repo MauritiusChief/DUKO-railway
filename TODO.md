@@ -26,13 +26,13 @@
   - 因为缺少 trace，不知道为何触发。可以添加大量 test case 来测试。
 - 管理员总览全员历史记录功能
 - 管理员修改密码功能
+- layout-recognzie budget tool 也需要改，搜索工具预算也要改
 
 ## 未完成
 
-- 改用 deepseek 解析图片
-- 不要每次都传输图片，改为通过工具调用，看完之后就从消息中移除
-- budget tool 也需要改，搜索工具预算也要改
 - 已创建墙、已更新 property 等信息被当作助手消息了，得删除。
+- layout agent 需要忽略 BEP 这种板子，而是将其作为某个面被暴露的确实证据，修改暴露面（因为只有暴露的才需要装 BEP 等板子）
+- OCR agent 需要提示提供总体宽度
 
 - 每次去 layout-recognize 或 debug, 以及再回到主页面时都需要重新登录，很烦人
 - ScriptCat 覆写模式不会检查数量
