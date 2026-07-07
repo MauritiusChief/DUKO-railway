@@ -40,7 +40,15 @@ export function BlockCard({ block, track, isDual, isSelected, onDragStart, onSel
     [block.id, onDragStart],
   );
 
-  const skuText = isGap ? t('空挡') : (item?.sku || '-');
+  const skuRows = isGap
+    ? [t('空挡')]
+    : block.items.map((it) => {
+        const sku = it.sku || '-';
+        return sku;
+      });
+  const skuText = skuRows[0]
+
+  const showSkuPrefix = block.width >= 6;
 
   return (
     <div
@@ -59,16 +67,25 @@ export function BlockCard({ block, track, isDual, isSelected, onDragStart, onSel
           ⠿
         </div>
         {isDual && <span className="bc-dual-badge" title={t('双轨联动')}>⇅</span>}
-        {block.items.length > 1 && (
+        {/* {block.items.length > 1 && (
           <span className="bc-stack-badge" title={t('叠放提示', { n: block.items.length - 1 })}>
             {block.items.length - 1}↑
           </span>
-        )}
+        )} */}
       </div>
 
       {/* 下半：SKU 独占整行，溢出截断 */}
       <div className="bc-sku">
-        {'· '+skuText}
+        {skuRows.map((row, index) => (
+          <span key={`${index}-${row}`} className="bc-sku-row">
+            {showSkuPrefix
+              ? index === 0  
+                ? `· ${row}`
+                : `↑ ${row}`
+              : row
+            }
+          </span>
+        ))}
       </div>
     </div>
   );

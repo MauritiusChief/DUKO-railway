@@ -93,10 +93,16 @@
   color: #555;
   font-family: monospace;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 0;
+}
+
+.bc-sku-row {
+  overflow: hidden;
+  white-space: nowrap;
+  line-height: 1.1;
 }
 
 .bc-gap .bc-sku {
