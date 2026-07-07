@@ -343,7 +343,7 @@ export class LayoutAgent extends BaseAgent<ChatMessage> {
     const shapeTable = this.shapeTypeTable || '（暂无数据）';
 
     return `你是一个厨房橱柜布局编排助手。系统已经通过 OCR 预处理识别了图片中的橱柜结构，
-你无需再查看图片——你的任务是根据 OCR 结果和当前布局，调用工具进行编排修改。
+你的任务是根据 OCR 结果和当前布局，调用工具进行编排修改。
 ${wallHint}
 
 ## 形状代码对照表
