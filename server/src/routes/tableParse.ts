@@ -303,7 +303,7 @@ tableParseLlmRouter.post('/', validate(tableParseSchema), async (req: Request, r
   }
 
   const agent = new TableParseAgent(llm, {
-    searchBudgetLimit: 32,
+    budgetLimit: 32,
     maxRounds: 40,
     langHint: '中文',
     onStep: (event) => {

@@ -44,7 +44,7 @@ export class LayoutOcrAgent extends BaseAgent<MultimodalChatMessage> {
 
   constructor(llm: LlmProvider<MultimodalChatMessage>, agentConfig?: BaseAgentConfig) {
     super(llm, agentConfig ?? {
-      searchBudgetLimit: 0,
+      budgetLimit: 0,
       maxRounds: 0,
       langHint: '中文',
     });

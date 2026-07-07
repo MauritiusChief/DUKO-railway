@@ -54,7 +54,7 @@ export interface AgentContext {
 
 export interface BaseAgentConfig {
   /** 受限工具预算上限（限制搜索和 dispatch 等耗时工具的总调用次数） */
-  searchBudgetLimit: number;
+  budgetLimit: number;
   /** 最大总对话轮数（兜底） */
   maxRounds: number;
   /** 回复语言提示，如 '中文' 或 '英文' */
@@ -190,7 +190,7 @@ export abstract class BaseAgent<
    * 子类可覆盖此方法，返回 true 的工具可在同一轮 LLM 响应中与其他可并发工具并行执行。
    * 默认所有工具串行执行。典型用法：TableParseAgent 将 dispatchBatchSearch / dispatchPreciseSearch /
    * dispatchGlassDoorCalc 标记为可并发，使多个委派子 agent 的调用并行执行，显著缩短总耗时。
-   * 
+   *
    * 注意：不要将存在共享可变状态依赖的工具标记为可并发（如 manifest 编辑工具）。
    */
   protected canExecuteInParallel(toolName: ToolName): boolean {
@@ -289,7 +289,7 @@ export abstract class BaseAgent<
     for (let round = 0; round < this.config.maxRounds; round++) {
       this.config.onStep?.({ type: 'round_start', round: round + 1 });
 
-      const remainingBudget = this.config.searchBudgetLimit - searchBudgetUsed;
+      const remainingBudget = this.config.budgetLimit - searchBudgetUsed;
       const budgetedNames = this.getBudgetedToolNames();
 
       // 搜索预算 > 0 → 提供全部工具；预算耗尽 → 仅非搜索工具
@@ -496,12 +496,12 @@ export abstract class BaseAgent<
 
         // 注入搜索预算虚拟 tool pair（仅告知搜索预算，不在工具 schema 中注册）
         if (budgetedNames.size > 0) {
-          const newRemaining = this.config.searchBudgetLimit - searchBudgetUsed;
+          const newRemaining = this.config.budgetLimit - searchBudgetUsed;
           injectBudgetInfo(
             messages as (ChatMessage | MultimodalChatMessage)[],
             round,
             newRemaining,
-            this.config.searchBudgetLimit,
+            this.config.budgetLimit,
             this.config.langHint,
             undefined,
             this.getBudgetedToolListText(),

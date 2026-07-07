@@ -109,7 +109,7 @@ chatRouter.post('/', validate(chatSchema), async (req: Request, res: Response) =
   }
 
   const agent = new ChatAgent(llm, {
-    searchBudgetLimit: 5,
+    budgetLimit: 5,
     maxRounds: 20,
     maxHistoryPairs: 8,
     langHint: lang ?? '英文',

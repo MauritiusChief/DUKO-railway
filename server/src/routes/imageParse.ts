@@ -102,7 +102,7 @@ imageParseRouter.post('/', validate(imageParseSchema), async (req: Request, res:
   }
 
   const agent = new ImageParseAgent(llm, {
-    searchBudgetLimit: 16,
+    budgetLimit: 16,
     maxRounds: 24,
     langHint: lang ?? '英文',
     onStep: (event) => {

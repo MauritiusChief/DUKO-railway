@@ -182,7 +182,7 @@ export class TableParseAgent extends BaseAgent<ChatMessage> {
         const batch = Array.isArray(args.batch) ? args.batch : [];
         if (batch.length === 0) return 'dispatchBatchSearch: batch 为空或格式错误';
         const sub = new BatchSearchAgent(this.llm, {
-          searchBudgetLimit: 5,
+          budgetLimit: 5,
           maxRounds: 8,
           langHint: this.config.langHint,
           onStep: (evt) => {
@@ -202,7 +202,7 @@ export class TableParseAgent extends BaseAgent<ChatMessage> {
         const originalName = String(item.originalName ?? '');
         if (!originalName) return 'dispatchPreciseSearch: item.originalName 必填';
         const sub = new PreciseSearchAgent(this.llm, {
-          searchBudgetLimit: 5,
+          budgetLimit: 5,
           maxRounds: 7,
           langHint: this.config.langHint,
           onStep: (evt) => {
@@ -224,7 +224,7 @@ export class TableParseAgent extends BaseAgent<ChatMessage> {
         const models = Array.isArray(args.cabinetModels) ? args.cabinetModels : [];
         if (models.length === 0) return 'dispatchGlassDoorCalc: cabinetModels 为空或格式错误';
         const sub = new GlassDoorAgent(this.llm, {
-          searchBudgetLimit: 2,
+          budgetLimit: 2,
           maxRounds: 4,
           langHint: this.config.langHint,
           onStep: (evt) => {

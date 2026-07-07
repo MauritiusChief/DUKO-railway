@@ -108,7 +108,7 @@ layoutParseImageRouter.post('/', validate(layoutParseSchema), async (req: Reques
   }
 
   const agentConfig: LayoutAgentExtendedConfig = {
-    searchBudgetLimit: 30,
+    budgetLimit: 30,
     maxRounds: 40,
     langHint: '中文',
     onStep: (event) => {
@@ -136,7 +136,7 @@ layoutParseImageRouter.post('/', validate(layoutParseSchema), async (req: Reques
   try {
     // 阶段 1：OCR 预处理 —— OpenRouter 视觉模型识别图片中的橱柜结构
     const ocrAgent = new LayoutOcrAgent(visionLlm, {
-      searchBudgetLimit: 0,
+      budgetLimit: 0,
       maxRounds: 0,
       langHint: '中文',
     });
