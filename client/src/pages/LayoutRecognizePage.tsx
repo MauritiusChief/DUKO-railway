@@ -12,6 +12,7 @@ import { ImageUploadPanel } from '../components/ImageUploadPanel';
 import { LayoutChatPanel } from '../components/LayoutChatPanel';
 import { SegSwitch } from '../components/SegSwitch';
 import { useSplitResize } from '../hooks/useSplitResize';
+import { fetchWithAuth } from '../lib/fetchWithAuth';
 import type { LayoutDocument } from '../types';
 import './LayoutRecognizePage.css';
 
@@ -118,6 +119,47 @@ export default function LayoutRecognizePage() {
     },
   });
 
+  // ---- 物料清单 ----
+  const [generatingList, setGeneratingList] = useState(false);
+  const [generatedListText, setGeneratedListText] = useState('');
+  const [generateListError, setGenerateListError] = useState('');
+  const [copyListSuccess, setCopyListSuccess] = useState(false);
+
+  // 调用后端生成完整物料清单
+  const handleGenerateList = useCallback(async () => {
+    setGeneratingList(true);
+    setGenerateListError('');
+    try {
+      const res = await fetchWithAuth('/api/layout/generate-list', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ layout: activeLayout }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || '生成失败');
+      }
+      const data = await res.json();
+      setGeneratedListText(data.text || '');
+    } catch (e) {
+      setGenerateListError(e instanceof Error ? e.message : '生成失败');
+    } finally {
+      setGeneratingList(false);
+    }
+  }, [activeLayout]);
+
+  // 复制清单到剪贴板
+  const handleCopyList = useCallback(async () => {
+    if (!generatedListText) return;
+    try {
+      await navigator.clipboard.writeText(generatedListText);
+      setCopyListSuccess(true);
+      setTimeout(() => setCopyListSuccess(false), 2000);
+    } catch {
+      setGenerateListError('复制失败');
+    }
+  }, [generatedListText]);
+
   // ---- 正常页面 ----
   return (
     <div className="lr-container">
@@ -194,9 +236,33 @@ export default function LayoutRecognizePage() {
                 }}
               />
             </div>
-            <div className="lr-top-placeholder">
-              <div className="lr-placeholder-header">更多功能</div>
-              <div className="lr-placeholder-body">敬请期待</div>
+            <div className="lr-top-placeholder lr-material-panel">
+              <div className="lr-placeholder-header">物料清单</div>
+              <div className="lr-material-actions">
+                <button
+                  className="lr-btn lr-btn-sm lr-btn-primary"
+                  onClick={handleGenerateList}
+                  disabled={generatingList}
+                >
+                  {generatingList ? '生成中…' : '生成完整清单'}
+                </button>
+                <button
+                  className="lr-btn lr-btn-sm"
+                  onClick={handleCopyList}
+                  disabled={!generatedListText || generatingList}
+                >
+                  {copyListSuccess ? '已复制' : '复制清单'}
+                </button>
+              </div>
+              <textarea
+                className="lr-material-textarea"
+                value={generatedListText}
+                readOnly
+                placeholder={'点击"生成完整清单"后在此显示物料清单…'}
+              />
+              {generateListError && (
+                <div className="lr-material-error">{generateListError}</div>
+              )}
             </div>
           </div>
           <div

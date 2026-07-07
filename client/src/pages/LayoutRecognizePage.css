@@ -111,6 +111,44 @@
   color: #aaa;
 }
 
+/* ====== 物料清单面板 ====== */
+
+.lr-material-panel {
+  align-items: stretch;
+  justify-content: flex-start;
+  padding: 8px;
+  gap: 6px;
+}
+
+.lr-material-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.lr-material-textarea {
+  flex: 1 1 0;
+  min-height: 0;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  padding: 6px 8px;
+  font-size: 12px;
+  font-family: 'Consolas', 'Monaco', monospace;
+  resize: none;
+  outline: none;
+  background: #fff;
+  color: #333;
+  line-height: 1.5;
+  white-space: pre;
+  overflow: auto;
+}
+
+.lr-material-error {
+  font-size: 11px;
+  color: #c00;
+  flex-shrink: 0;
+}
+
 /* ====== 横向拖拽杆（上下面板调高度） ====== */
 
 .lr-horizontal-handle {

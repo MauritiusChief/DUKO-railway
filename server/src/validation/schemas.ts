@@ -129,3 +129,8 @@ export const debugToolSchema = z.object({
   tool: z.string().min(1, '工具名称不能为空'),
   args: z.record(z.unknown()).optional(),
 });
+
+/** POST /api/layout/generate-list —— 根据布局生成完整物料清单 */
+export const layoutGenerateListSchema = z.object({
+  layout: z.object({}).passthrough(),
+});
