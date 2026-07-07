@@ -38,11 +38,12 @@
 - layout agent 指示窗户和抽油烟机都视为大间隔物体；大间隔物体也可添加 SKU, 比如 VAL, GH (Glass Rack 等)
 - layout agent 需要允许填SKU时把颜色留空
 
+- layout-recognize 无需颜色的东西不用警报，也不暴露选择颜色的下拉菜单
+- layout-recognzie 需要在墙已经建好之后再连接不同的墙
+- layout-recognzie 允许改自动滑动方向
 - 每次去 layout-recognize 或 debug, 以及再回到主页面时都需要重新登录，很烦人
 - ScriptCat 覆写模式不会检查数量
 - 前端和后端各自有一份 layout 用的推挤逻辑，看看如何统一
-- layout-recognzie 需要在墙已经建好之后再连接不同的墙
-- layout-recognzie 允许改自动滑动方向
 
 - 发现 railway web 的 console 可以管理 `/data` 目录，应该不需要用到 railway cli 来管理 volume 了。
   - 但疑似缺少新建目录功能，需要调整 refresh cli 来配合
