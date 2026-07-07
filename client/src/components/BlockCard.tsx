@@ -7,7 +7,6 @@
  */
 import { useCallback } from 'react';
 import { useI18n } from '../i18n/context';
-import type { TranslationKey } from '../i18n/translations';
 import type { SectionBlock, TrackSpan } from '../types';
 import './BlockCard.css';
 
@@ -69,7 +68,7 @@ export function BlockCard({ block, track, isDual, isSelected, onDragStart, onSel
 
       {/* 下半：SKU 独占整行，溢出截断 */}
       <div className="bc-sku">
-        {skuText}
+        {'·'+skuText}
       </div>
     </div>
   );
