@@ -11,6 +11,7 @@ import { LayoutCanvas } from '../components/LayoutCanvas';
 import { ImageUploadPanel } from '../components/ImageUploadPanel';
 import { LayoutChatPanel } from '../components/LayoutChatPanel';
 import { SegSwitch } from '../components/SegSwitch';
+import { useSplitResize } from '../hooks/useSplitResize';
 import type { LayoutDocument } from '../types';
 import './LayoutRecognizePage.css';
 
@@ -95,6 +96,28 @@ export default function LayoutRecognizePage() {
     setShowAddWall(false);
   }, [wallName, wallWidth, store]);
 
+  // ---- 拖拽分隔条 ----
+  const [topAreaHeight, setTopAreaHeight] = useState(40);
+  const [chatColumnWidth, setChatColumnWidth] = useState(35);
+
+  const mainAreaRef = useRef<HTMLDivElement>(null);
+  const leftColumnRef = useRef<HTMLDivElement>(null);
+
+  const { startResize } = useSplitResize({
+    horizontal: {
+      cursor: 'row-resize',
+      getContainer: () => leftColumnRef.current,
+      onResize: (pct) => setTopAreaHeight(Math.max(15, Math.min(70, pct))),
+      getPercent: (e, rect) => ((e.clientY - rect.top) / rect.height) * 100,
+    },
+    'main-vertical': {
+      cursor: 'col-resize',
+      getContainer: () => mainAreaRef.current,
+      onResize: (pct) => setChatColumnWidth(100 - Math.max(40, Math.min(85, pct))),
+      getPercent: (e, rect) => ((e.clientX - rect.left) / rect.width) * 100,
+    },
+  });
+
   // ---- 正常页面 ----
   return (
     <div className="lr-container">
@@ -159,18 +182,36 @@ export default function LayoutRecognizePage() {
         </div>
       </div>
 
-      {/* 主区域：左画布 + 右侧栏 */}
-      <div className="lr-main">
-        <div className="lr-canvas-wrap">
-          <LayoutCanvas />
-        </div>
-        <div className="lr-sidebar">
-          <ImageUploadPanel
-            layout={activeLayout}
-            onLayoutUpdated={(updatedLayout: LayoutDocument) => {
-              store.loadLayout(JSON.stringify(updatedLayout));
-            }}
+      {/* 主区域：左区（上方面板 + 画布）| 竖向拖拽杆 | 右区（对话） */}
+      <div className="lr-main" ref={mainAreaRef}>
+        <div className="lr-left-column" ref={leftColumnRef}>
+          <div className="lr-top-area" style={{ height: `${topAreaHeight}%` }}>
+            <div className="lr-top-left">
+              <ImageUploadPanel
+                layout={activeLayout}
+                onLayoutUpdated={(updatedLayout: LayoutDocument) => {
+                  store.loadLayout(JSON.stringify(updatedLayout));
+                }}
+              />
+            </div>
+            <div className="lr-top-placeholder">
+              <div className="lr-placeholder-header">更多功能</div>
+              <div className="lr-placeholder-body">敬请期待</div>
+            </div>
+          </div>
+          <div
+            className="lr-horizontal-handle"
+            onMouseDown={startResize('horizontal')}
           />
+          <div className="lr-canvas-wrap">
+            <LayoutCanvas />
+          </div>
+        </div>
+        <div
+          className="lr-resize-handle"
+          onMouseDown={startResize('main-vertical')}
+        />
+        <div className="lr-chat-column" style={{ width: `${chatColumnWidth}%` }}>
           <LayoutChatPanel />
         </div>
       </div>

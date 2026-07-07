@@ -27,6 +27,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTableParseStore, SHAPE_TYPES_COLOR_NA, SHAPE_TYPES_SIZE_NA } from '../stores/tableParseStore';
 import { useAuthStore } from '../stores/authStore';
 import { useI18n } from '../i18n/context';
+import { useSplitResize } from '../hooks/useSplitResize';
 import type { ParsedItem } from '../types';
 import ChatPanel from '../components/ChatPanel';
 import { SegSwitch } from '../components/SegSwitch';
@@ -281,55 +282,37 @@ export default function TableParsePage() {
   const [topLeftWidth, setTopLeftWidth] = useState(60);
   const [chatColumnWidth, setChatColumnWidth] = useState(35);
 
-  /** 当前正在拖拽的分隔条类型 */
-  type ResizeType = 'top-vertical' | 'main-vertical' | 'horizontal' | null;
-  const [resizing, setResizing] = useState<ResizeType>(null);
-
   const containerRef = useRef<HTMLDivElement>(null);
   const topAreaRef = useRef<HTMLDivElement>(null);
   const mainAreaRef = useRef<HTMLDivElement>(null);
   const leftColumnRef = useRef<HTMLDivElement>(null);
 
-  /** 统一浏览器级别监听 mousemove / mouseup 以支持平滑拖拽（三个分隔条共用一个 useEffect） */
-  useEffect(() => {
-    if (!resizing) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      if (resizing === 'horizontal') {
-        if (!leftColumnRef.current || !topAreaRef.current) return;
-        const rect = leftColumnRef.current.getBoundingClientRect();
-        const topAreaRect = topAreaRef.current.getBoundingClientRect();
+  const { startResize } = useSplitResize({
+    horizontal: {
+      cursor: 'row-resize',
+      getContainer: () => leftColumnRef.current,
+      onResize: (pct) => setTopAreaHeight(Math.max(15, Math.min(70, pct))),
+      getPercent: (e, rect) => {
+        const topAreaEl = topAreaRef.current;
+        if (!topAreaEl) return 0;
+        const topAreaRect = topAreaEl.getBoundingClientRect();
         const headerOffset = topAreaRect.top - rect.top;
-        const pct = ((e.clientY - rect.top - headerOffset) / rect.height) * 100;
-        setTopAreaHeight(Math.max(15, Math.min(70, pct)));
-      } else if (resizing === 'top-vertical') {
-        if (!topAreaRef.current) return;
-        const rect = topAreaRef.current.getBoundingClientRect();
-        const pct = ((e.clientX - rect.left) / rect.width) * 100;
-        setTopLeftWidth(Math.max(30, Math.min(80, pct)));
-      } else if (resizing === 'main-vertical') {
-        if (!mainAreaRef.current) return;
-        const rect = mainAreaRef.current.getBoundingClientRect();
-        const pct = ((e.clientX - rect.left) / rect.width) * 100;
-        const clampedLeft = Math.max(40, Math.min(85, pct));
-        setChatColumnWidth(100 - clampedLeft);
-      }
-    };
-
-    const handleMouseUp = () => setResizing(null);
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-    document.body.style.cursor = resizing === 'horizontal' ? 'row-resize' : 'col-resize';
-    document.body.style.userSelect = 'none';
-
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    };
-  }, [resizing]);
+        return ((e.clientY - rect.top - headerOffset) / rect.height) * 100;
+      },
+    },
+    'top-vertical': {
+      cursor: 'col-resize',
+      getContainer: () => topAreaRef.current,
+      onResize: (pct) => setTopLeftWidth(Math.max(30, Math.min(80, pct))),
+      getPercent: (e, rect) => ((e.clientX - rect.left) / rect.width) * 100,
+    },
+    'main-vertical': {
+      cursor: 'col-resize',
+      getContainer: () => mainAreaRef.current,
+      onResize: (pct) => setChatColumnWidth(100 - Math.max(40, Math.min(85, pct))),
+      getPercent: (e, rect) => ((e.clientX - rect.left) / rect.width) * 100,
+    },
+  });
 
   // Ctrl+Enter 触分解析
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -648,7 +631,7 @@ export default function TableParsePage() {
         </div>
         <div
           className="tp-resize-handle"
-          onMouseDown={(e) => { e.preventDefault(); setResizing('top-vertical'); }}
+          onMouseDown={startResize('top-vertical')}
         />
         <div className="tp-top-right">
           <span className="tp-color-hints-label">{t('颜色提示')}</span>
@@ -671,7 +654,7 @@ export default function TableParsePage() {
       {/* ---- 横向分隔条（上下拖拽调节） ---- */}
       <div
         className="tp-horizontal-handle"
-        onMouseDown={(e) => { e.preventDefault(); setResizing('horizontal'); }}
+        onMouseDown={startResize('horizontal')}
       />
 
       {/* ---- 下区：左（解析 + 产品）全宽 ---- */}
@@ -919,7 +902,7 @@ export default function TableParsePage() {
         </div>
         <div
           className="tp-resize-handle"
-          onMouseDown={(e) => { e.preventDefault(); setResizing('main-vertical'); }}
+          onMouseDown={startResize('main-vertical')}
         />
         <div className="tp-chat-column" style={{ width: `${chatColumnWidth}%` }}>
           <ChatPanel />
