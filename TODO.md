@@ -34,6 +34,8 @@
 - layout agent 指示允许 filler
 - layout agent 需要允许填SKU时把颜色留空
 - layout-recognize 无需颜色的东西不用警报，也不暴露选择颜色的下拉菜单
+- filler 似乎被自动双轨插入，需要修改
+- LLM 老是弄错需要删除的物体的 id, 很可能是信息给错了。需要检查
 
 ## 未完成
 

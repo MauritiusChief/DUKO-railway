@@ -68,6 +68,21 @@ function targetTracks(category: BlockItemCategory): TrackSpan[] {
   }
 }
 
+function isDualTrackCategory(category: BlockItemCategory): boolean {
+  return category === 'tall_cabinet' || category === 'tall_appliance';
+}
+
+/**
+ * ChatGPT 加的自动调整目标轨道的函数，有点用，所以留着吧
+ * @param category 
+ * @param requestedTrack 
+ * @returns 
+ */
+function actualTrackForCategory(category: BlockItemCategory, requestedTrack: TrackSpan): TrackSpan {
+  const tracks = targetTracks(category);
+  return tracks.includes(requestedTrack) ? requestedTrack : tracks[0];
+}
+
 // ==================================================================
 //  位置计算
 // ==================================================================
@@ -351,12 +366,13 @@ function serializeWall(wall: LayoutWall): string {
   } else {
     const airRows = airPos.map((p, i) => {
       const items = p.block.items.map((it) => {
-        let label = `${it.category}:${it.sku}`;
+        let label = `${it.category}:${it.sku}[id:${it.id}]`;
         if (it.height != null) label += `[H:${it.height}"]`;
         if (it.isVanity) label += ' [vanity]';
         return label;
       }).join(' + ');
       let itemText = p.block.colorCode ? `${items} [颜色: ${p.block.colorCode}]` : items;
+      itemText += ` [blockId:${p.block.id}]`;
       return [String(i + 1), String(p.block.width), String(p.distanceFromLeft), itemText];
     });
     text += markdownTable([header, ...airRows]) + '\n';
@@ -369,12 +385,13 @@ function serializeWall(wall: LayoutWall): string {
   } else {
     const groundRows = groundPos.map((p, i) => {
       const items = p.block.items.map((it) => {
-        let label = `${it.category}:${it.sku}`;
+        let label = `${it.category}:${it.sku}[id:${it.id}]`;
         if (it.height != null) label += `[H:${it.height}"]`;
         if (it.isVanity) label += ' [vanity]';
         return label;
       }).join(' + ');
       let itemText = p.block.colorCode ? `${items} [颜色: ${p.block.colorCode}]` : items;
+      itemText += ` [blockId:${p.block.id}]`;
       return [String(i + 1), String(p.block.width), String(p.distanceFromLeft), itemText];
     });
     text += markdownTable([header, ...groundRows]) + '\n';
@@ -494,7 +511,7 @@ export function executeDeleteWall(state: MutableLayout, args: Record<string, unk
 
 const CATEGORY_DESC =
   '物品分类: wall_cabinet(吊柜), base_cabinet(地柜), tall_cabinet(高柜-通天), gap(空挡), ' +
-  'range_hood(抽油烟机), window(窗户), tall_appliance(高电器如冰箱), ' +
+  'stuffed_gap(抽油烟机/窗户等，本质同 gap), gaplike_item(类似 gap 的装饰性商品), filler(填充条/窄条), tall_appliance(高电器如冰箱), ' +
   'base_appliance_need_top(需台面电器如洗碗机), base_appliance_without_top(免台面电器如灶台)';
 
 export const INSERT_ITEM_TOOL = {
@@ -562,8 +579,7 @@ export function executeInsertItem(state: MutableLayout, args: Record<string, unk
   const ref = findWallInLayout(state.layout, wallId);
   if (!ref) return `错误: 未找到 ID 为 "${wallId}" 的墙或岛台。`;
 
-  const tracks = targetTracks(category);
-  const isDual = tracks.length === 2 && category !== 'gap';
+  const isDual = isDualTrackCategory(category);
   const cc = colorCode || undefined;
   const heightRelevant =
     category === 'wall_cabinet' || category === 'tall_cabinet' || category === 'tall_appliance';
@@ -593,11 +609,12 @@ export function executeInsertItem(state: MutableLayout, args: Record<string, unk
     alignAirGround(ref.wall);
 
     return `已在 "${ref.wall.name}" 同时插入 ${category}（${width}"）到 air 和 ground 轨道。` +
+      ` itemId: ${sharedMainItem.id}; airBlockId: ${airBlock.id}; groundBlockId: ${groundBlock.id}。` +
       (height ? ` 高度: ${height}"` : '') +
       (colorCode ? ` 颜色: ${colorCode}` : '') +
-      (stackedItems.length > 0 ? ` 附带 ${stackedItems.length} 个叠放吊柜。` : '');
+      (stackedItems.length > 0 ? ` 附带 ${stackedItems.length} 个叠放吊柜: ${stackedItems.map((item) => `${item.sku}[id:${item.id}]`).join(', ')}。` : '');
   } else {
-    const actualTrack = category === 'gap' ? track : tracks[0];
+    const actualTrack = actualTrackForCategory(category, track);
     const mainItem: BlockItem & { isVanity?: boolean } = { id: uuid(), category, sku };
     if (category === 'base_cabinet' && isVanity === true) {
       mainItem.isVanity = true;
@@ -616,10 +633,11 @@ export function executeInsertItem(state: MutableLayout, args: Record<string, unk
     alignAirGround(ref.wall);
 
     return `已在 "${ref.wall.name}" 的 ${actualTrack} 轨道插入 ${category}（${width}"）。` +
+      ` itemId: ${mainItem.id}; blockId: ${newBlock.id}。` +
       (height ? ` 高度: ${height}"` : '') +
       (isVanity ? ' (vanity cabinet)' : '') +
       (colorCode ? ` 颜色: ${colorCode}` : '') +
-      (stackedItemsRaw.length > 0 ? ` 附带 ${stackedItemsRaw.length} 个叠放吊柜。` : '');
+      (stackedItemsRaw.length > 0 ? ` 附带 ${stackedItemsRaw.length} 个叠放吊柜: ${items.slice(1).map((item) => `${item.sku}[id:${item.id}]`).join(', ')}。` : '');
   }
 }
 
@@ -751,8 +769,7 @@ export function executeInsertItemAtPosition(state: MutableLayout, args: Record<s
   const ref = findWallInLayout(state.layout, wallId);
   if (!ref) return `错误: 未找到 ID 为 "${wallId}" 的墙或岛台。`;
 
-  const tracks = targetTracks(category);
-  const isDual = tracks.length === 2 && category !== 'gap';
+  const isDual = isDualTrackCategory(category);
   const cc = colorCode || undefined;
   const heightRelevant =
     category === 'wall_cabinet' || category === 'tall_cabinet' || category === 'tall_appliance';
@@ -774,11 +791,12 @@ export function executeInsertItemAtPosition(state: MutableLayout, args: Record<s
     alignAirGround(ref.wall);
 
     return `已在 "${ref.wall.name}" 的 air+ground 两轨距左 ${distanceFromLeft}" 处插入 ${category}（${width}"）。` +
+      ` itemId: ${sharedMainItem.id}; airBlockId: ${airBlock.id}; groundBlockId: ${groundBlock.id}。` +
       (height ? ` 高度: ${height}"` : '') +
       (colorCode ? ` 颜色: ${colorCode}` : '') +
-      (stackedItems.length > 0 ? ` 附带 ${stackedItems.length} 个叠放吊柜。` : '');
+      (stackedItems.length > 0 ? ` 附带 ${stackedItems.length} 个叠放吊柜: ${stackedItems.map((item) => `${item.sku}[id:${item.id}]`).join(', ')}。` : '');
   } else {
-    const actualTrack = category === 'gap' ? track : tracks[0];
+    const actualTrack = actualTrackForCategory(category, track);
     const mainItem: BlockItem & { isVanity?: boolean } = { id: uuid(), category, sku };
     if (category === 'base_cabinet' && isVanity === true) {
       mainItem.isVanity = true;
@@ -797,9 +815,11 @@ export function executeInsertItemAtPosition(state: MutableLayout, args: Record<s
     alignAirGround(ref.wall);
 
     return `已在 "${ref.wall.name}" 的 ${actualTrack} 轨距左 ${distanceFromLeft}" 处插入 ${category}（${width}"）。` +
+      ` itemId: ${mainItem.id}; blockId: ${newBlock.id}。` +
       (height ? ` 高度: ${height}"` : '') +
       (isVanity ? ' (vanity cabinet)' : '') +
-      (colorCode ? ` 颜色: ${colorCode}` : '');
+      (colorCode ? ` 颜色: ${colorCode}` : '') +
+      (stackedItemsRaw.length > 0 ? ` 附带 ${stackedItemsRaw.length} 个叠放吊柜: ${items.slice(1).map((item) => `${item.sku}[id:${item.id}]`).join(', ')}。` : '');
   }
 }
 
