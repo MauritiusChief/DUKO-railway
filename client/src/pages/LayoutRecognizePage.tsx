@@ -122,6 +122,8 @@ export default function LayoutRecognizePage() {
   // ---- 物料清单 ----
   const [generatingList, setGeneratingList] = useState(false);
   const [generatedListText, setGeneratedListText] = useState('');
+  const [lengthDetails, setLengthDetails] = useState<Array<{ sku: string; length: number }>>([]);
+  const [listWarnings, setListWarnings] = useState<string[]>([]);
   const [generateListError, setGenerateListError] = useState('');
   const [copyListSuccess, setCopyListSuccess] = useState(false);
 
@@ -141,6 +143,8 @@ export default function LayoutRecognizePage() {
       }
       const data = await res.json();
       setGeneratedListText(data.text || '');
+      setLengthDetails(data.lengthDetails || []);
+      setListWarnings(data.warnings || []);
     } catch (e) {
       setGenerateListError(e instanceof Error ? e.message : '生成失败');
     } finally {
@@ -237,7 +241,7 @@ export default function LayoutRecognizePage() {
               />
             </div>
             <div className="lr-top-placeholder lr-material-panel">
-              <div className="lr-placeholder-header">物料清单</div>
+              <div className="lr-material-title">物料清单</div>
               <div className="lr-material-actions">
                 <button
                   className="lr-btn lr-btn-sm lr-btn-primary"
@@ -254,12 +258,24 @@ export default function LayoutRecognizePage() {
                   {copyListSuccess ? '已复制' : '复制清单'}
                 </button>
               </div>
-              <textarea
-                className="lr-material-textarea"
-                value={generatedListText}
-                readOnly
-                placeholder={'点击"生成完整清单"后在此显示物料清单…'}
-              />
+              <div className="lr-material-body">
+                <textarea
+                  className="lr-material-textarea"
+                  value={generatedListText}
+                  readOnly
+                  placeholder={'点击"生成完整清单"后在此显示物料清单…'}
+                />
+                {(lengthDetails.length > 0 || listWarnings.length > 0) && (
+                  <div className="lr-material-info">
+                    {lengthDetails.map((d) => (
+                      <div key={d.sku}>{d.sku} - {d.length}"</div>
+                    ))}
+                    {listWarnings.map((w, i) => (
+                      <div key={`w-${i}`} className="lr-material-info-warn">⚠ {w}</div>
+                    ))}
+                  </div>
+                )}
+              </div>
               {generateListError && (
                 <div className="lr-material-error">{generateListError}</div>
               )}

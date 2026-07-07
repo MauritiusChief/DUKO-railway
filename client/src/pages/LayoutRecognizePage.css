@@ -120,15 +120,48 @@
   gap: 6px;
 }
 
+.lr-material-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #555;
+  flex-shrink: 0;
+}
+
 .lr-material-actions {
   display: flex;
   gap: 6px;
   flex-shrink: 0;
 }
 
+.lr-material-body {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  gap: 6px;
+}
+
+.lr-material-info {
+  flex: 0 0 32%;
+  min-width: 0;
+  overflow: auto;
+  border: 1px solid #e0e0e0;
+  border-radius: 3px;
+  background: #fff;
+  padding: 4px 6px;
+  font-size: 11px;
+  font-family: 'Consolas', 'Monaco', monospace;
+  line-height: 1.6;
+  color: #333;
+}
+
+.lr-material-info-warn {
+  color: #9a6a00;
+}
+
 .lr-material-textarea {
   flex: 1 1 0;
   min-height: 0;
+  min-width: 0;
   border: 1px solid #ccc;
   border-radius: 3px;
   padding: 6px 8px;

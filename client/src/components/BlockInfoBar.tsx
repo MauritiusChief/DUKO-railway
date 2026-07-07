@@ -138,9 +138,13 @@ export function BlockInfoBar({
   // ---- 颜色编辑 ----
   const handleColorChange = useCallback(
     (e: React.ChangeEvent<HTMLSelectElement>) => {
-      store.updateBlockColor(wall.id, track, block.id, e.target.value);
+      if (isDual && mainItem) {
+        store.updateBlockColorBothTracks(wall.id, mainItem.id, e.target.value);
+      } else {
+        store.updateBlockColor(wall.id, track, block.id, e.target.value);
+      }
     },
-    [wall.id, track, block.id, store],
+    [wall.id, track, block.id, isDual, mainItem, store],
   );
 
   // ---- 叠放物品增删（交由 StackedItemsEditor 回调） ----

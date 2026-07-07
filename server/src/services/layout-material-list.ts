@@ -53,17 +53,16 @@ export interface MaterialListItem {
   quantity: number;
 }
 
-export interface MaterialListTotals {
-  tkLength: number;
-  qrLength: number;
-  smLength: number;
-  cmLength: number;
+export interface MaterialListLengthDetail {
+  sku: string;
+  length: number;
 }
 
 export interface MaterialListResult {
   text: string;
   items: MaterialListItem[];
-  totals: MaterialListTotals;
+  /** 各距料 SKU 的原始长度（ceil 前），直接来自 lengthBySku */
+  lengthDetails: MaterialListLengthDetail[];
   warnings: string[];
 }
 
@@ -298,8 +297,6 @@ interface Accumulator {
   itemQuantityBySku: Map<string, number>;
   /** 距料原始长度（按含色 SKU 归集，ceil 前的值） */
   lengthBySku: Map<string, number>;
-  /** 四种距料的合计原始长度（跨所有颜色） */
-  totals: MaterialListTotals;
   /** 警告信息 */
   warnings: string[];
   /** 已计入原始行的 item id（去重双轨物品） */
@@ -311,15 +308,10 @@ function addDiscrete(acc: Accumulator, sku: string, qty: number): void {
   acc.itemQuantityBySku.set(sku, (acc.itemQuantityBySku.get(sku) ?? 0) + qty);
 }
 
-function addLength(
-  acc: Accumulator,
-  sku: string,
-  len: number,
-  totalKey: keyof MaterialListTotals,
-): void {
+/** 累加距料原始长度到对应 SKU */
+function addLength(acc: Accumulator, sku: string, len: number): void {
   if (len <= 0) return;
   acc.lengthBySku.set(sku, (acc.lengthBySku.get(sku) ?? 0) + len);
-  acc.totals[totalKey] += len;
 }
 
 function warnMissingColor(acc: Accumulator, wallName: string, idx: number): void {
@@ -399,11 +391,11 @@ function processDwp(
 
       // 框侧 SM（地柜高度，仅背墙不外露时）
       if (!wall.exposedBack) {
-        addLength(acc, withColor(color, 'SM'), BASE_HEIGHT, 'smLength');
+        addLength(acc, withColor(color, 'SM'), BASE_HEIGHT);
       }
 
       // 框侧 QR（进深，appliance 正背始终不算 QR）
-      addLength(acc, withColor(color, 'QR'), BASE_DEPTH, 'qrLength');
+      addLength(acc, withColor(color, 'QR'), BASE_DEPTH);
     }
   }
 }
@@ -496,11 +488,11 @@ function processRrp(
 
       // 框侧 SM（完整高度，仅背墙不外露时）
       if (!wall.exposedBack) {
-        addLength(acc, withColor(color, 'SM'), info.fullHeight, 'smLength');
+        addLength(acc, withColor(color, 'SM'), info.fullHeight);
       }
 
       // 框侧 QR（进深）
-      addLength(acc, withColor(color, 'QR'), TALL_DEPTH, 'qrLength');
+      addLength(acc, withColor(color, 'QR'), TALL_DEPTH);
     }
 
     // CM（通天电器 + 叠放 = air 物体，进深 24）
@@ -605,7 +597,7 @@ function processTk(wall: LayoutWall, ground: PosBlock[], acc: Accumulator): void
     // 地柜 + 高柜计入；电器不计入
     if (!isBaseCabinet(pos.cat) && !isTallCabinet(pos.cat)) continue;
     const color = blockColor(pos.block);
-    addLength(acc, withColor(color, 'TK'), pos.block.width, 'tkLength');
+    addLength(acc, withColor(color, 'TK'), pos.block.width);
   }
 }
 
@@ -628,17 +620,17 @@ function processQr(wall: LayoutWall, ground: PosBlock[], acc: Accumulator): void
     const depth = isVanityBlock(pos.block) ? VANITY_DEPTH : BASE_DEPTH;
 
     // 正面始终计入
-    addLength(acc, withColor(color, 'QR'), pos.block.width, 'qrLength');
+    addLength(acc, withColor(color, 'QR'), pos.block.width);
     // 背面：exposedBack 时计入
     if (wall.exposedBack) {
-      addLength(acc, withColor(color, 'QR'), pos.block.width, 'qrLength');
+      addLength(acc, withColor(color, 'QR'), pos.block.width);
     }
     // 侧面：外露时按进深计入
     if (frameSideExposed(pos, ground, wall, 'left')) {
-      addLength(acc, withColor(color, 'QR'), depth, 'qrLength');
+      addLength(acc, withColor(color, 'QR'), depth);
     }
     if (frameSideExposed(pos, ground, wall, 'right')) {
-      addLength(acc, withColor(color, 'QR'), depth, 'qrLength');
+      addLength(acc, withColor(color, 'QR'), depth);
     }
   }
 }
@@ -673,10 +665,10 @@ function processSm(
     const color = blockColor(pos.block);
     const h = BASE_HEIGHT;
     if (smSideExposed(pos.cat, pos, ground, wall, 'left')) {
-      addLength(acc, withColor(color, 'SM'), h, 'smLength');
+      addLength(acc, withColor(color, 'SM'), h);
     }
     if (smSideExposed(pos.cat, pos, ground, wall, 'right')) {
-      addLength(acc, withColor(color, 'SM'), h, 'smLength');
+      addLength(acc, withColor(color, 'SM'), h);
     }
   }
 
@@ -699,10 +691,10 @@ function processSm(
       const color = blockColor(pos.block);
       const h = heightOrDefault(item, 30, acc.warnings, `吊柜 ${item.sku}`);
       if (smSideExposed(cat, pos, air, wall, 'left')) {
-        addLength(acc, withColor(color, 'SM'), h, 'smLength');
+        addLength(acc, withColor(color, 'SM'), h);
       }
       if (smSideExposed(cat, pos, air, wall, 'right')) {
-        addLength(acc, withColor(color, 'SM'), h, 'smLength');
+        addLength(acc, withColor(color, 'SM'), h);
       }
       continue;
     }
@@ -720,8 +712,8 @@ function processSm(
       const rightExposed =
         smSideExposed(cat, pos, air, wall, 'right') ||
         (groundPos && smSideExposed(cat, groundPos, ground, wall, 'right'));
-      if (leftExposed) addLength(acc, withColor(color, 'SM'), h, 'smLength');
-      if (rightExposed) addLength(acc, withColor(color, 'SM'), h, 'smLength');
+      if (leftExposed) addLength(acc, withColor(color, 'SM'), h);
+      if (rightExposed) addLength(acc, withColor(color, 'SM'), h);
       continue;
     }
   }
@@ -786,17 +778,17 @@ function processCmForAirBlock(
   acc: Accumulator,
 ): void {
   // 正面始终计入
-  addLength(acc, withColor(color, 'CM'), pos.block.width, 'cmLength');
+  addLength(acc, withColor(color, 'CM'), pos.block.width);
   // 背面：exposedBack 时计入
   if (wall.exposedBack) {
-    addLength(acc, withColor(color, 'CM'), pos.block.width, 'cmLength');
+    addLength(acc, withColor(color, 'CM'), pos.block.width);
   }
   // 侧面：外露时按进深计入（QR 式：仅边缘 + 大开口；柜邻柜不算外露）
   if (frameSideExposed(pos, air, wall, 'left')) {
-    addLength(acc, withColor(color, 'CM'), depth, 'cmLength');
+    addLength(acc, withColor(color, 'CM'), depth);
   }
   if (frameSideExposed(pos, air, wall, 'right')) {
-    addLength(acc, withColor(color, 'CM'), depth, 'cmLength');
+    addLength(acc, withColor(color, 'CM'), depth);
   }
 }
 
@@ -831,7 +823,6 @@ export function generateMaterialList(layout: LayoutDocument): MaterialListResult
   const acc: Accumulator = {
     itemQuantityBySku: new Map(),
     lengthBySku: new Map(),
-    totals: { tkLength: 0, qrLength: 0, smLength: 0, cmLength: 0 },
     warnings: [],
     seenItemIds: new Set(),
   };
@@ -892,10 +883,16 @@ export function generateMaterialList(layout: LayoutDocument): MaterialListResult
 
   const text = items.map((i) => `${i.sku} x ${i.quantity}`).join('\n');
 
+  // 5. 距料原始长度明细（直接来自 lengthBySku，按 SKU 字母序）
+  const lengthDetails: MaterialListLengthDetail[] = [...acc.lengthBySku.entries()]
+    .filter(([, len]) => len > 0)
+    .map(([sku, length]) => ({ sku, length }))
+    .sort((a, b) => (a.sku < b.sku ? -1 : a.sku > b.sku ? 1 : 0));
+
   return {
     text,
     items,
-    totals: acc.totals,
+    lengthDetails,
     warnings: acc.warnings,
   };
 }

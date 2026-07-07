@@ -76,6 +76,11 @@ function qty(result: MaterialListResult, sku: string): number {
   return result.items.find((i) => i.sku === sku)?.quantity ?? 0;
 }
 
+/** 取 lengthDetails 中指定 SKU 的原始长度，不存在返回 0 */
+function lenOf(result: MaterialListResult, sku: string): number {
+  return result.lengthDetails.find((d) => d.sku === sku)?.length ?? 0;
+}
+
 // ==================================================================
 //  测试用例
 // ==================================================================
@@ -103,6 +108,10 @@ describe('generateMaterialList', () => {
     expect(qty(result, '14SM')).toBe(1);
     // BEP：两端各 1
     expect(qty(result, '14BEP')).toBe(2);
+    // lengthDetails：原始长度（ceil 前）
+    expect(lenOf(result, '14TK')).toBe(90);
+    expect(lenOf(result, '14QR')).toBe(138);
+    expect(lenOf(result, '14SM')).toBe(69);
   });
   // #endregion
 

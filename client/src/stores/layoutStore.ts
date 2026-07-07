@@ -543,6 +543,8 @@ interface LayoutStoreState {
   updateItemHeight: (wallId: string, itemId: string, height: number) => void;
   /** 修改某个 block 的颜色代码 */
   updateBlockColor: (wallId: string, track: TrackSpan, blockId: string, colorCode: string) => void;
+  /** 修改双轨块的颜色代码（按 itemId 同步两轨） */
+  updateBlockColorBothTracks: (wallId: string, itemId: string, colorCode: string) => void;
 
   // ---- Block 排序（拖拽用） ----
   reorderBlock: (wallId: string, track: TrackSpan, blockId: string, toIndex: number) => void;
@@ -1153,6 +1155,37 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => {
       const block = blocks.find((b) => b.id === blockId);
       if (block) {
         block.colorCode = colorCode || undefined;
+      }
+
+      const updated: LayoutDocument = {
+        ...activeLayout,
+        walls: activeLayout.walls.map((w) => (w.id === wallId ? updatedWall : w)),
+        updatedAt: nowISO(),
+      };
+      set({ activeLayout: updated });
+      syncToStorage(updated);
+    },
+
+    updateBlockColorBothTracks: (wallId: string, itemId: string, colorCode: string) => {
+      const { activeLayout } = get();
+      if (!activeLayout) return;
+
+      const ref = findWallInLayout(activeLayout, wallId);
+      if (!ref) return;
+
+      const updatedWall = { ...ref.wall };
+      const cc = colorCode || undefined;
+
+      // 双轨块共享 itemId，遍历两轨统一更新 colorCode
+      for (const block of updatedWall.airBlocks) {
+        if (block.items.some((item) => item.id === itemId)) {
+          block.colorCode = cc;
+        }
+      }
+      for (const block of updatedWall.groundBlocks) {
+        if (block.items.some((item) => item.id === itemId)) {
+          block.colorCode = cc;
+        }
       }
 
       const updated: LayoutDocument = {
