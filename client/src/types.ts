@@ -175,6 +175,8 @@ export interface BlockItem {
   category: BlockItemCategory;
   /** 必填。柜体填 DUKO SKU（如 "02B15"），非柜体填具体名称（如 "refrigerator"） */
   sku: string;
+  /** 是否为 vanity cabinet（仅 base_cabinet 有效） */
+  isVanity?: boolean;
 }
 
 /** 轨道中的一个排列单元 */
@@ -184,6 +186,8 @@ export interface SectionBlock {
   width: number;
   /** items 中多 item = 吊柜垂直叠放 */
   items: BlockItem[];
+  /** 该块的颜色代码（如 "02"），空字符串表示未选 */
+  colorCode?: string;
 }
 
 /** 墙（统一定义，岛台视为特殊墙面） */

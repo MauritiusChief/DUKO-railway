@@ -508,6 +508,18 @@ export const messages = {
     zh: '+ 叠放',
     en: '+ Stack',
   },
+  选择颜色: {
+    zh: '颜色',
+    en: 'Color',
+  },
+  无颜色: {
+    zh: '(无)',
+    en: '(None)',
+  },
+  浴室柜: {
+    zh: 'Vanity Cabinet',
+    en: 'Vanity Cabinet',
+  },
 
   /* ---- ImageUploadPanel ---- */
   图片识别: {

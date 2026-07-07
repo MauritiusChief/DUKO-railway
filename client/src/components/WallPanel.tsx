@@ -8,6 +8,7 @@
  */
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useLayoutStore } from '../stores/layoutStore';
+import { useTableParseStore } from '../stores/tableParseStore';
 import { useI18n } from '../i18n/context';
 import type { TranslationKey } from '../i18n/translations';
 import { BlockCard } from './BlockCard';
@@ -72,9 +73,15 @@ const CATEGORY_T_KEY: Record<BlockItemCategory, string> = {
 export function WallPanel({ wall }: WallPanelProps) {
   const { t } = useI18n();
   const store = useLayoutStore();
+  const { availableColors, fetchColors } = useTableParseStore();
 
   // ---- 折叠 ----
   const [collapsed, setCollapsed] = useState(false);
+
+  // 加载颜色列表（缓存，仅首次触发请求）
+  useEffect(() => {
+    fetchColors();
+  }, [fetchColors]);
 
   // ---- 添加物品表单 ----
   const [addingTrack, setAddingTrack] = useState<TrackSpan | null>(null);
@@ -82,6 +89,8 @@ export function WallPanel({ wall }: WallPanelProps) {
   const [newWidth, setNewWidth] = useState('');
   const [newSku, setNewSku] = useState('');
   const [stackedItems, setStackedItems] = useState<StackedItemRef[]>([]);
+  const [newIsVanity, setNewIsVanity] = useState(false);
+  const [newColorCode, setNewColorCode] = useState('');
 
   // ---- 选中块（信息栏）---- 与 addingTrack 互斥
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
@@ -114,6 +123,8 @@ export function WallPanel({ wall }: WallPanelProps) {
     setNewWidth('');
     setNewSku('');
     setStackedItems([]);
+    setNewIsVanity(false);
+    setNewColorCode('');
   }, []);
 
   const confirmAdd = useCallback(() => {
@@ -124,6 +135,7 @@ export function WallPanel({ wall }: WallPanelProps) {
     const stacked: Omit<BlockItem, 'id'>[] = stackedItems
       .filter((it) => it.sku.trim())
       .map((it) => ({ category: 'wall_cabinet' as const, sku: it.sku.trim() }));
+    const cc = newColorCode.trim() || undefined;
 
     if (newCategory === 'tall_cabinet' || newCategory === 'tall_appliance') {
       store.insertBothTracksWithItems(
@@ -131,21 +143,24 @@ export function WallPanel({ wall }: WallPanelProps) {
         { category: newCategory, sku: primarySku },
         stacked,
         width,
+        cc,
       );
     } else {
       const items: Omit<BlockItem, 'id'>[] = [
-        { category: newCategory, sku: primarySku },
+        { category: newCategory, sku: primarySku, isVanity: newIsVanity || undefined },
       ];
       for (const it of stackedItems) {
         if (it.sku.trim()) {
           items.push({ category: 'wall_cabinet', sku: it.sku.trim() });
         }
       }
-      store.insertBlockWithItems(wall.id, addingTrack, items, width);
+      store.insertBlockWithItems(wall.id, addingTrack, items, width, cc);
     }
     setAddingTrack(null);
     setStackedItems([]);
-  }, [addingTrack, newCategory, newWidth, newSku, stackedItems, wall.id, store]);
+    setNewIsVanity(false);
+    setNewColorCode('');
+  }, [addingTrack, newCategory, newWidth, newSku, newIsVanity, newColorCode, stackedItems, wall.id, store]);
 
   // ---- 删除 block ----
   const handleDelete = useCallback(
@@ -436,6 +451,19 @@ export function WallPanel({ wall }: WallPanelProps) {
                 onChange={(e) => setNewSku(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') confirmAdd(); }}
               />
+              <select
+                className="pf-select"
+                value={newColorCode}
+                onChange={(e) => setNewColorCode(e.target.value)}
+                style={{ marginLeft: 'auto' }}
+              >
+                <option value="">{t('无颜色')}</option>
+                {availableColors.map((c) => (
+                  <option key={c.code} value={c.code}>
+                    [{c.code}] {c.name}
+                  </option>
+                ))}
+              </select>
             </div>
 
             {/* 第2行：叠放吊柜（条件渲染，chips + 添加输入框） */}
@@ -446,6 +474,20 @@ export function WallPanel({ wall }: WallPanelProps) {
                 onRemove={(id) => setStackedItems(stackedItems.filter((it) => it.id !== id))}
                 canAdd
               />
+            )}
+
+            {/* Vanity Cabinet 选项（仅地面轨 + 地柜） */}
+            {track === 'ground' && newCategory === 'base_cabinet' && (
+              <div className="pf-row">
+                <label className="pf-field">
+                  <input
+                    type="checkbox"
+                    checked={newIsVanity}
+                    onChange={(e) => setNewIsVanity(e.target.checked)}
+                  />
+                  {t('浴室柜')}
+                </label>
+              </div>
             )}
 
             {/* 第3行：确定 / 取消 */}

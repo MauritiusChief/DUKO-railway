@@ -235,6 +235,9 @@ export const useTableParseStore = create<TableParseState>((set, get) => {
   },
 
   fetchColors: async () => {
+    // 已缓存则跳过请求
+    const { availableColors } = get();
+    if (availableColors.length > 0) return;
     try {
       const res = await fetchWithAuth('/api/colors');
       if (!res.ok) throw new Error('获取颜色列表失败');

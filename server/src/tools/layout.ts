@@ -346,8 +346,13 @@ function serializeWall(wall: LayoutWall): string {
     text += '(空)\n';
   } else {
     const airRows = airPos.map((p, i) => {
-      const items = p.block.items.map((it) => `${it.category}:${it.sku}`).join(' + ');
-      return [String(i + 1), String(p.block.width), String(p.distanceFromLeft), items];
+      const items = p.block.items.map((it) => {
+        let label = `${it.category}:${it.sku}`;
+        if (it.isVanity) label += ' [vanity]';
+        return label;
+      }).join(' + ');
+      let itemText = p.block.colorCode ? `${items} [颜色: ${p.block.colorCode}]` : items;
+      return [String(i + 1), String(p.block.width), String(p.distanceFromLeft), itemText];
     });
     text += markdownTable([header, ...airRows]) + '\n';
   }
@@ -358,8 +363,13 @@ function serializeWall(wall: LayoutWall): string {
     text += '(空)\n';
   } else {
     const groundRows = groundPos.map((p, i) => {
-      const items = p.block.items.map((it) => `${it.category}:${it.sku}`).join(' + ');
-      return [String(i + 1), String(p.block.width), String(p.distanceFromLeft), items];
+      const items = p.block.items.map((it) => {
+        let label = `${it.category}:${it.sku}`;
+        if (it.isVanity) label += ' [vanity]';
+        return label;
+      }).join(' + ');
+      let itemText = p.block.colorCode ? `${items} [颜色: ${p.block.colorCode}]` : items;
+      return [String(i + 1), String(p.block.width), String(p.distanceFromLeft), itemText];
     });
     text += markdownTable([header, ...groundRows]) + '\n';
   }
@@ -439,7 +449,7 @@ export function executeCreateWall(state: MutableLayout, args: Record<string, unk
     backToBackIslandIds: [],
   };
   state.layout.walls.push(wall);
-  return `已创建墙 "${name}" (ID: ${wall.id})，宽度 ${width}"}。`;
+  return `已创建墙 "${name}" (ID: ${wall.id})，宽度 ${width}"。`;
 }
 
 // ==================================================================
@@ -489,7 +499,9 @@ export const INSERT_ITEM_TOOL = {
       `在指定墙/岛台的最左侧（轨道末尾）插入一个或多个物品。` +
       `会自动将物品推到最左侧可插入位置。${CATEGORY_DESC}。` +
       `全高物品（tall_cabinet/tall_appliance）会自动同时在 air 和 ground 轨道插入。` +
-      `墙吊柜（wall_cabinet）支持通过 stackedSkus 堆叠。`,
+      `墙吊柜（wall_cabinet）支持通过 stackedSkus 堆叠。` +
+      `isVanity 仅对 base_cabinet 有效，标记为 vanity cabinet。` +
+      `colorCode 设置该 block 的颜色代码。`,
     parameters: {
       type: 'object',
       properties: {
@@ -498,6 +510,8 @@ export const INSERT_ITEM_TOOL = {
         category: { type: 'string', description: CATEGORY_DESC },
         sku: { type: 'string', description: 'SKU 代码（柜体如 "02B15"）或具体名称（电器如 "refrigerator"）' },
         width: { type: 'number', description: '宽度（英寸）' },
+        isVanity: { type: 'boolean', description: '是否为 vanity cabinet（仅 base_cabinet 有效）' },
+        colorCode: { type: 'string', description: '颜色代码（如 "02"），可选' },
         stackedSkus: {
           type: 'array',
           items: { type: 'string' },
@@ -515,6 +529,8 @@ export function executeInsertItem(state: MutableLayout, args: Record<string, unk
   const category = String(args.category ?? '') as BlockItemCategory;
   const sku = String(args.sku ?? '').trim() || category;
   const width = typeof args.width === 'number' && args.width > 0 ? args.width : 0;
+  const isVanity = typeof args.isVanity === 'boolean' ? args.isVanity : undefined;
+  const colorCode = typeof args.colorCode === 'string' ? args.colorCode.trim() : undefined;
   const stackedSkus: string[] = Array.isArray(args.stackedSkus)
     ? args.stackedSkus.filter((s) => typeof s === 'string' && s.trim())
     : [];
@@ -526,6 +542,7 @@ export function executeInsertItem(state: MutableLayout, args: Record<string, unk
 
   const tracks = targetTracks(category);
   const isDual = tracks.length === 2 && category !== 'gap';
+  const cc = colorCode || undefined;
 
   if (isDual) {
     const sharedMainItem: BlockItem = { id: uuid(), category, sku };
@@ -536,10 +553,12 @@ export function executeInsertItem(state: MutableLayout, args: Record<string, unk
     const airBlock: SectionBlock = {
       id: uuid(), width,
       items: [{ ...sharedMainItem }, ...stackedItems],
+      colorCode: cc,
     };
     const groundBlock: SectionBlock = {
       id: uuid(), width,
       items: [{ ...sharedMainItem }],
+      colorCode: cc,
     };
 
     insertBlocksAtEnd(ref.wall.airBlocks, [airBlock]);
@@ -547,20 +566,27 @@ export function executeInsertItem(state: MutableLayout, args: Record<string, unk
     alignAirGround(ref.wall);
 
     return `已在 "${ref.wall.name}" 同时插入 ${category}（${width}"）到 air 和 ground 轨道。` +
+      (colorCode ? ` 颜色: ${colorCode}` : '') +
       (stackedItems.length > 0 ? ` 附带 ${stackedItems.length} 个叠放吊柜。` : '');
   } else {
     const actualTrack = category === 'gap' ? track : tracks[0];
-    const items: BlockItem[] = [{ id: uuid(), category, sku }];
+    const mainItem: BlockItem & { isVanity?: boolean } = { id: uuid(), category, sku };
+    if (category === 'base_cabinet' && isVanity === true) {
+      mainItem.isVanity = true;
+    }
+    const items: BlockItem[] = [mainItem];
     for (const s of stackedSkus) {
       items.push({ id: uuid(), category: 'wall_cabinet', sku: s });
     }
 
-    const newBlock: SectionBlock = { id: uuid(), width, items };
+    const newBlock: SectionBlock = { id: uuid(), width, items, colorCode: cc };
     const blocks = getTrackBlocks(ref.wall, actualTrack);
     insertBlocksAtEnd(blocks, [newBlock]);
     alignAirGround(ref.wall);
 
     return `已在 "${ref.wall.name}" 的 ${actualTrack} 轨道插入 ${category}（${width}"）。` +
+      (isVanity ? ' (vanity cabinet)' : '') +
+      (colorCode ? ` 颜色: ${colorCode}` : '') +
       (stackedSkus.length > 0 ? ` 附带 ${stackedSkus.length} 个叠放吊柜。` : '');
   }
 }
@@ -646,7 +672,8 @@ export const INSERT_ITEM_AT_POSITION_TOOL = {
     description:
       '在指定墙/岛台的指定距左距离（英寸）处精确插入一个物品。' +
       '如果目标位置是 gap，会拆分或替换 gap；如果不是 gap，会将右侧物品挤开。' +
-      '全高物品会自动同时在 air 和 ground 两轨的相同距离插入。',
+      '全高物品会自动同时在 air 和 ground 两轨的相同距离插入。' +
+      'isVanity 仅对 base_cabinet 有效。colorCode 设置该 block 的颜色代码。',
     parameters: {
       type: 'object',
       properties: {
@@ -656,6 +683,8 @@ export const INSERT_ITEM_AT_POSITION_TOOL = {
         sku: { type: 'string', description: 'SKU 代码或具体名称' },
         width: { type: 'number', description: '宽度（英寸）' },
         distanceFromLeft: { type: 'number', description: '距左距离（英寸）' },
+        isVanity: { type: 'boolean', description: '是否为 vanity cabinet（仅 base_cabinet 有效）' },
+        colorCode: { type: 'string', description: '颜色代码（如 "02"），可选' },
         stackedSkus: { type: 'array', items: { type: 'string' }, description: '叠放吊柜的 SKU 列表（仅加在 air 轨）' },
       },
       required: ['wallId', 'category', 'sku', 'width', 'distanceFromLeft'],
@@ -670,6 +699,8 @@ export function executeInsertItemAtPosition(state: MutableLayout, args: Record<s
   const sku = String(args.sku ?? '').trim() || category;
   const width = typeof args.width === 'number' && args.width > 0 ? args.width : 0;
   const distanceFromLeft = typeof args.distanceFromLeft === 'number' ? args.distanceFromLeft : 0;
+  const isVanity = typeof args.isVanity === 'boolean' ? args.isVanity : undefined;
+  const colorCode = typeof args.colorCode === 'string' ? args.colorCode.trim() : undefined;
   const stackedSkus: string[] = Array.isArray(args.stackedSkus)
     ? args.stackedSkus.filter((s) => typeof s === 'string' && s.trim())
     : [];
@@ -681,6 +712,7 @@ export function executeInsertItemAtPosition(state: MutableLayout, args: Record<s
 
   const tracks = targetTracks(category);
   const isDual = tracks.length === 2 && category !== 'gap';
+  const cc = colorCode || undefined;
 
   if (isDual) {
     const sharedMainItem: BlockItem = { id: uuid(), category, sku };
@@ -688,27 +720,34 @@ export function executeInsertItemAtPosition(state: MutableLayout, args: Record<s
       id: uuid(), category: 'wall_cabinet' as const, sku: s,
     }));
 
-    const airBlock: SectionBlock = { id: uuid(), width, items: [{ ...sharedMainItem }, ...stackedItems] };
-    const groundBlock: SectionBlock = { id: uuid(), width, items: [{ ...sharedMainItem }] };
+    const airBlock: SectionBlock = { id: uuid(), width, items: [{ ...sharedMainItem }, ...stackedItems], colorCode: cc };
+    const groundBlock: SectionBlock = { id: uuid(), width, items: [{ ...sharedMainItem }], colorCode: cc };
 
     insertBlockAtPosition(ref.wall.airBlocks, airBlock, distanceFromLeft);
     insertBlockAtPosition(ref.wall.groundBlocks, groundBlock, distanceFromLeft);
     alignAirGround(ref.wall);
 
-    return `已在 "${ref.wall.name}" 的 air+ground 两轨距左 ${distanceFromLeft}" 处插入 ${category}（${width}"）。`;
+    return `已在 "${ref.wall.name}" 的 air+ground 两轨距左 ${distanceFromLeft}" 处插入 ${category}（${width}"）。` +
+      (colorCode ? ` 颜色: ${colorCode}` : '');
   } else {
     const actualTrack = category === 'gap' ? track : tracks[0];
-    const items: BlockItem[] = [{ id: uuid(), category, sku }];
+    const mainItem: BlockItem & { isVanity?: boolean } = { id: uuid(), category, sku };
+    if (category === 'base_cabinet' && isVanity === true) {
+      mainItem.isVanity = true;
+    }
+    const items: BlockItem[] = [mainItem];
     for (const s of stackedSkus) {
       items.push({ id: uuid(), category: 'wall_cabinet', sku: s });
     }
 
-    const newBlock: SectionBlock = { id: uuid(), width, items };
+    const newBlock: SectionBlock = { id: uuid(), width, items, colorCode: cc };
     const blocks = getTrackBlocks(ref.wall, actualTrack);
     insertBlockAtPosition(blocks, newBlock, distanceFromLeft);
     alignAirGround(ref.wall);
 
-    return `已在 "${ref.wall.name}" 的 ${actualTrack} 轨距左 ${distanceFromLeft}" 处插入 ${category}（${width}"）。`;
+    return `已在 "${ref.wall.name}" 的 ${actualTrack} 轨距左 ${distanceFromLeft}" 处插入 ${category}（${width}"）。` +
+      (isVanity ? ' (vanity cabinet)' : '') +
+      (colorCode ? ` 颜色: ${colorCode}` : '');
   }
 }
 

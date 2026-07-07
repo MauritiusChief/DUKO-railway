@@ -30,6 +30,8 @@ export interface BlockItem {
   id: string;
   category: BlockItemCategory;
   sku: string;
+  /** 是否为 vanity cabinet（仅 base_cabinet 有效） */
+  isVanity?: boolean;
 }
 
 /** 一个布局块（若干物品堆叠在一起的轨道片段） */
@@ -37,6 +39,8 @@ export interface SectionBlock {
   id: string;
   width: number;
   items: BlockItem[];
+  /** 该块的颜色代码（如 "02"），空字符串表示未选 */
+  colorCode?: string;
 }
 
 /** 一面墙（统一定义，岛台视为特殊墙面） */

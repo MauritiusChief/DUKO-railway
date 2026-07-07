@@ -6,8 +6,9 @@
  * 提供静态/动态删除与关闭按钮。与 wp-add-form 通过状态互斥显示。
  * 样式复用 panelForm.css（pf- 前缀），与 wp-add-form 视觉一致。
  */
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useLayoutStore } from '../stores/layoutStore';
+import { useTableParseStore } from '../stores/tableParseStore';
 import { useI18n } from '../i18n/context';
 import type { TranslationKey } from '../i18n/translations';
 import type { LayoutWall, SectionBlock, BlockItemCategory, TrackSpan } from '../types';
@@ -48,6 +49,11 @@ export function BlockInfoBar({
 }: BlockInfoBarProps) {
   const { t } = useI18n();
   const store = useLayoutStore();
+  const { availableColors, fetchColors } = useTableParseStore();
+
+  useEffect(() => {
+    fetchColors();
+  }, [fetchColors]);
 
   const mainItem = block.items[0];
   const isGap = mainItem?.category === 'gap';
@@ -102,6 +108,24 @@ export function BlockInfoBar({
       setPos(String(distanceFromLeft));
     }
   }, [pos, distanceFromLeft, wall.id, track, block.id, store]);
+
+  // ---- isVanity 编辑 ----
+  const handleVanityChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (mainItem) {
+        store.updateItemVanity(wall.id, mainItem.id, e.target.checked);
+      }
+    },
+    [mainItem, wall.id, store],
+  );
+
+  // ---- 颜色编辑 ----
+  const handleColorChange = useCallback(
+    (e: React.ChangeEvent<HTMLSelectElement>) => {
+      store.updateBlockColor(wall.id, track, block.id, e.target.value);
+    },
+    [wall.id, track, block.id, store],
+  );
 
   // ---- 叠放物品增删（交由 StackedItemsEditor 回调） ----
   const handleAddStacked = useCallback((skuVal: string) => {
@@ -176,6 +200,19 @@ export function BlockInfoBar({
             {t('英寸')}
           </label>
         )}
+        <select
+          className="pf-select"
+          value={block.colorCode || ''}
+          onChange={handleColorChange}
+          style={{ marginLeft: 'auto' }}
+        >
+          <option value="">{t('无颜色')}</option>
+          {availableColors.map((c) => (
+            <option key={c.code} value={c.code}>
+              [{c.code}] {c.name}
+            </option>
+          ))}
+        </select>
       </div>
 
       {/* 第2行：叠放物品管理（无叠放且不可叠放时 StackedItemsEditor 返回 null） */}
@@ -185,6 +222,20 @@ export function BlockInfoBar({
         onRemove={handleRemoveStacked}
         canAdd={isStackable}
       />
+
+      {/* ground 轨 base_cabinet 的 isVanity 编辑 */}
+      {mainItem?.category === 'base_cabinet' && track === 'ground' && (
+        <div className="pf-row">
+          <label className="pf-field">
+            <input
+              type="checkbox"
+              checked={!!mainItem.isVanity}
+              onChange={handleVanityChange}
+            />
+            {t('浴室柜')}
+          </label>
+        </div>
+      )}
 
       {/* 第3行：操作按钮（删除 + 关闭） */}
       <div className="pf-row">

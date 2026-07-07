@@ -505,7 +505,7 @@ interface LayoutStoreState {
   updateWall: (wallId: string, patch: Partial<LayoutWall>) => void;
 
   // ---- Block 操作（单轨） ----
-  insertBlock: (wallId: string, track: TrackSpan, item: Omit<BlockItem, 'id'>, width: number) => string;
+  insertBlock: (wallId: string, track: TrackSpan, item: Omit<BlockItem, 'id'>, width: number, colorCode?: string) => string;
   deleteBlock: (wallId: string, track: TrackSpan, blockId: string, mode: 'static' | 'dynamic') => void;
   insertBlockAtPosition: (
     wallId: string,
@@ -513,28 +513,34 @@ interface LayoutStoreState {
     item: Omit<BlockItem, 'id'>,
     width: number,
     distanceFromLeft: number,
+    colorCode?: string,
   ) => string;
   updateBlockWidth: (wallId: string, track: TrackSpan, blockId: string, newWidth: number) => void;
 
   // ---- Block 操作（全高物品双轨联动） ----
-  insertBothTracks: (wallId: string, item: Omit<BlockItem, 'id'>, width: number) => { airBlockId: string; groundBlockId: string };
+  insertBothTracks: (wallId: string, item: Omit<BlockItem, 'id'>, width: number, colorCode?: string) => { airBlockId: string; groundBlockId: string };
   deleteBothTracks: (wallId: string, itemId: string, mode: 'static' | 'dynamic') => void;
   insertBothTracksAtPosition: (
     wallId: string,
     item: Omit<BlockItem, 'id'>,
     width: number,
     distanceFromLeft: number,
+    colorCode?: string,
   ) => { airBlockId: string; groundBlockId: string };
   updateBlockWidthBothTracks: (wallId: string, itemId: string, newWidth: number) => void;
 
   // ---- Block 操作（多 item 叠放） ----
-  insertBlockWithItems: (wallId: string, track: TrackSpan, items: Omit<BlockItem, 'id'>[], width: number) => string;
-  insertBothTracksWithItems: (wallId: string, mainItem: Omit<BlockItem, 'id'>, stackedItems: Omit<BlockItem, 'id'>[], width: number) => { airBlockId: string; groundBlockId: string };
+  insertBlockWithItems: (wallId: string, track: TrackSpan, items: Omit<BlockItem, 'id'>[], width: number, colorCode?: string) => string;
+  insertBothTracksWithItems: (wallId: string, mainItem: Omit<BlockItem, 'id'>, stackedItems: Omit<BlockItem, 'id'>[], width: number, colorCode?: string) => { airBlockId: string; groundBlockId: string };
   removeStackedItem: (wallId: string, blockId: string, itemId: string) => void;
   /** 向已有 block 追加一个叠放吊柜 item（仅 air 轨有意义） */
   addStackedItem: (wallId: string, blockId: string, sku: string) => void;
   /** 修改某个 item 的 SKU（按 itemId 查找，双轨块共享 id 会同步两轨） */
   updateItemSku: (wallId: string, itemId: string, newSku: string) => void;
+  /** 修改某个 item 的 isVanity（按 itemId 查找，双轨块共享 id 会同步两轨） */
+  updateItemVanity: (wallId: string, itemId: string, isVanity: boolean) => void;
+  /** 修改某个 block 的颜色代码 */
+  updateBlockColor: (wallId: string, track: TrackSpan, blockId: string, colorCode: string) => void;
 
   // ---- Block 排序（拖拽用） ----
   reorderBlock: (wallId: string, track: TrackSpan, blockId: string, toIndex: number) => void;
@@ -668,7 +674,7 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => {
 
     // ---- Block 操作（单轨） ----
 
-    insertBlock: (wallId: string, track: TrackSpan, item: Omit<BlockItem, 'id'>, width: number) => {
+    insertBlock: (wallId: string, track: TrackSpan, item: Omit<BlockItem, 'id'>, width: number, colorCode?: string) => {
       const { activeLayout } = get();
       if (!activeLayout) return '';
 
@@ -676,7 +682,7 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => {
       if (!ref) return '';
 
       const newItem: BlockItem = { ...item, id: uuid() };
-      const newBlock: SectionBlock = { id: uuid(), width, items: [newItem] };
+      const newBlock: SectionBlock = { id: uuid(), width, items: [newItem], colorCode: colorCode || undefined };
 
       const updatedWall = { ...ref.wall };
       const blocks = getTrackBlocks(updatedWall, track);
@@ -727,6 +733,7 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => {
       item: Omit<BlockItem, 'id'>,
       width: number,
       distanceFromLeft: number,
+      colorCode?: string,
     ) => {
       const { activeLayout } = get();
       if (!activeLayout) return '';
@@ -735,7 +742,7 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => {
       if (!ref) return '';
 
       const newItem: BlockItem = { ...item, id: uuid() };
-      const newBlock: SectionBlock = { id: uuid(), width, items: [newItem] };
+      const newBlock: SectionBlock = { id: uuid(), width, items: [newItem], colorCode: colorCode || undefined };
 
       const updatedWall = { ...ref.wall };
       const blocks = getTrackBlocks(updatedWall, track);
@@ -778,7 +785,7 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => {
 
     // ---- Block 操作（全高物品双轨联动） ----
 
-    insertBothTracks: (wallId: string, item: Omit<BlockItem, 'id'>, width: number) => {
+    insertBothTracks: (wallId: string, item: Omit<BlockItem, 'id'>, width: number, colorCode?: string) => {
       const { activeLayout } = get();
       if (!activeLayout) return { airBlockId: '', groundBlockId: '' };
 
@@ -786,8 +793,9 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => {
       if (!ref) return { airBlockId: '', groundBlockId: '' };
 
       const sharedItem: BlockItem = { ...item, id: uuid() };
-      const airBlock: SectionBlock = { id: uuid(), width, items: [{ ...sharedItem }] };
-      const groundBlock: SectionBlock = { id: uuid(), width, items: [{ ...sharedItem }] };
+      const cc = colorCode || undefined;
+      const airBlock: SectionBlock = { id: uuid(), width, items: [{ ...sharedItem }], colorCode: cc };
+      const groundBlock: SectionBlock = { id: uuid(), width, items: [{ ...sharedItem }], colorCode: cc };
 
       const updatedWall = { ...ref.wall };
       insertBlocksAtEnd(updatedWall.airBlocks, [airBlock]);
@@ -849,6 +857,7 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => {
       item: Omit<BlockItem, 'id'>,
       width: number,
       distanceFromLeft: number,
+      colorCode?: string,
     ) => {
       const { activeLayout } = get();
       if (!activeLayout) return { airBlockId: '', groundBlockId: '' };
@@ -857,8 +866,9 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => {
       if (!ref) return { airBlockId: '', groundBlockId: '' };
 
       const sharedItem: BlockItem = { ...item, id: uuid() };
-      const airBlock: SectionBlock = { id: uuid(), width, items: [{ ...sharedItem }] };
-      const groundBlock: SectionBlock = { id: uuid(), width, items: [{ ...sharedItem }] };
+      const cc = colorCode || undefined;
+      const airBlock: SectionBlock = { id: uuid(), width, items: [{ ...sharedItem }], colorCode: cc };
+      const groundBlock: SectionBlock = { id: uuid(), width, items: [{ ...sharedItem }], colorCode: cc };
 
       const updatedWall = { ...ref.wall };
       insertBlockAtPosition(updatedWall.airBlocks, airBlock, distanceFromLeft);
@@ -912,6 +922,7 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => {
       track: TrackSpan,
       items: Omit<BlockItem, 'id'>[],
       width: number,
+      colorCode?: string,
     ) => {
       const { activeLayout } = get();
       if (!activeLayout) return '';
@@ -920,7 +931,7 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => {
       if (!ref) return '';
 
       const newItems: BlockItem[] = items.map((it) => ({ ...it, id: uuid() }));
-      const newBlock: SectionBlock = { id: uuid(), width, items: newItems };
+      const newBlock: SectionBlock = { id: uuid(), width, items: newItems, colorCode: colorCode || undefined };
 
       const updatedWall = { ...ref.wall };
       const blocks = getTrackBlocks(updatedWall, track);
@@ -942,6 +953,7 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => {
       mainItem: Omit<BlockItem, 'id'>,
       stackedItems: Omit<BlockItem, 'id'>[],
       width: number,
+      colorCode?: string,
     ) => {
       const { activeLayout } = get();
       if (!activeLayout) return { airBlockId: '', groundBlockId: '' };
@@ -951,16 +963,19 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => {
 
       const sharedMainItem: BlockItem = { ...mainItem, id: uuid() };
       const airStacked: BlockItem[] = stackedItems.map((it) => ({ ...it, id: uuid() }));
+      const cc = colorCode || undefined;
 
       const airBlock: SectionBlock = {
         id: uuid(),
         width,
         items: [{ ...sharedMainItem }, ...airStacked],
+        colorCode: cc,
       };
       const groundBlock: SectionBlock = {
         id: uuid(),
         width,
         items: [{ ...sharedMainItem }],
+        colorCode: cc,
       };
 
       const updatedWall = { ...ref.wall };
@@ -1058,6 +1073,53 @@ export const useLayoutStore = create<LayoutStoreState>((set, get) => {
       for (const block of updatedWall.groundBlocks) {
         const item = block.items.find((it) => it.id === itemId);
         if (item) item.sku = trimmed;
+      }
+
+      const updated: LayoutDocument = {
+        ...activeLayout,
+        walls: activeLayout.walls.map((w) => (w.id === wallId ? updatedWall : w)),
+        updatedAt: nowISO(),
+      };
+      set({ activeLayout: updated });
+      syncToStorage(updated);
+    },
+
+    updateItemVanity: (wallId: string, itemId: string, isVanity: boolean) => {
+      const { activeLayout } = get();
+      if (!activeLayout) return;
+
+      const ref = findWallInLayout(activeLayout, wallId);
+      if (!ref) return;
+
+      const updatedWall = { ...ref.wall };
+
+      // vanity 只可能在地面
+      for (const block of updatedWall.groundBlocks) {
+        const item = block.items.find((it) => it.id === itemId);
+        if (item && item.category === 'base_cabinet') item.isVanity = isVanity;
+      }
+
+      const updated: LayoutDocument = {
+        ...activeLayout,
+        walls: activeLayout.walls.map((w) => (w.id === wallId ? updatedWall : w)),
+        updatedAt: nowISO(),
+      };
+      set({ activeLayout: updated });
+      syncToStorage(updated);
+    },
+
+    updateBlockColor: (wallId: string, track: TrackSpan, blockId: string, colorCode: string) => {
+      const { activeLayout } = get();
+      if (!activeLayout) return;
+
+      const ref = findWallInLayout(activeLayout, wallId);
+      if (!ref) return;
+
+      const updatedWall = { ...ref.wall };
+      const blocks = getTrackBlocks(updatedWall, track);
+      const block = blocks.find((b) => b.id === blockId);
+      if (block) {
+        block.colorCode = colorCode || undefined;
       }
 
       const updated: LayoutDocument = {

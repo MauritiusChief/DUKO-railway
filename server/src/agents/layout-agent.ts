@@ -67,7 +67,7 @@ import { ToolName } from '../tools/index.js';
 import { BatchSearchAgent } from './batch-search-agent.js';
 import { PreciseSearchAgent } from './precise-search-agent.js';
 import { LayoutOcrAgent, type LayoutOcrInput } from './layout-ocr-agent.js';
-import { getShapeTypeTable } from '../services/utils.js';
+import { getShapeTypeTable, getColorTable } from '../services/utils.js';
 
 // ==================================================================
 //  LayoutAgent 专用上下文
@@ -114,6 +114,9 @@ export class LayoutAgent extends BaseAgent<ChatMessage> {
   /** 形状代码对照表（来自 exposed_types），注入 prompt 供 LLM 参考 */
   private shapeTypeTable: string;
 
+  /** 颜色代码对照表（来自 exposed_colors），注入 prompt 供 LLM 参考 */
+  private colorTable: string;
+
   constructor(
     textLlm: LlmProvider<ChatMessage>,
     visionLlm: LlmProvider<MultimodalChatMessage>,
@@ -122,6 +125,7 @@ export class LayoutAgent extends BaseAgent<ChatMessage> {
     super(textLlm, config);
     this.visionLlm = visionLlm;
     this.shapeTypeTable = getShapeTypeTable();
+    this.colorTable = getColorTable();
   }
 
   getSystemPrompt(): string {
@@ -341,6 +345,7 @@ export class LayoutAgent extends BaseAgent<ChatMessage> {
       ? `此图描述以下墙: ${associatedNames.join(', ')}。`
       : '';
     const shapeTable = this.shapeTypeTable || '（暂无数据）';
+    const colorTable = this.colorTable || '（暂无数据）';
 
     return `你是一个厨房橱柜布局编排助手。系统已经通过 OCR 预处理识别了图片中的橱柜结构，
 你的任务是根据 OCR 结果和当前布局，调用工具进行编排修改。
@@ -352,6 +357,12 @@ ${wallHint}
 |------|------|
 ${shapeTable}
 
+## 颜色代码对照表
+
+| 代码 | 名称 |
+|------|------|
+${colorTable}
+
 ## 布局数据模型
 
 一个布局包含若干墙（wall）。每面墙有两个轨道：
@@ -360,6 +371,9 @@ ${shapeTable}
 
 全高物品（tall_cabinet/tall_appliance）同时在 air 和 ground 两轨各有一个 block，共享同一个 item ID。
 墙吊柜（wall_cabinet）和全高物品的 air 块支持多个物品堆叠（stackedSkus）。
+
+每个 block 可以设置 colorCode（颜色代码，如 "02"），通过 insertItem 的 colorCode 参数设置。
+base_cabinet 物品可以标记为 vanity cabinet（isVanity: true），仅在 ground 轨有效，通过 insertItem 的 isVanity 参数设置。
 
 岛台是一种特殊的墙。通过 backToBackIslandIds 表示背靠背关系。
 connectedWallIds 表示 L 形转角连接关系。connectIslands 用于设置背靠背关系，connectWalls 用于设置转角连接。
