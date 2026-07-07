@@ -12,12 +12,12 @@ Use one item per line:
 
 ```text
 02B15 x 2
-02TK x 3
-02QR x 2
 02BEP x 1
 02WEP x 1
 02VEP x 1
 02PNL3696Q x 1
+02TK x 3
+02QR x 2
 ```
 
 Distance materials are rounded up by 96 inches and omitted with `96` in the SKU, for example `{color}TK`.
@@ -78,7 +78,6 @@ Response:
   items: Array<{
     sku: string;
     quantity: number;
-    source: string;
   }>;
   totals: {
     tkLength: number;
@@ -193,13 +192,13 @@ Wall edge detection:
 
 - Compute each block start and end from cumulative widths.
 - Left edge if `start === 0`.
-- Right edge if `end === wall.width` or the block is the last meaningful ground block and cumulative end equals the total occupied width. Prefer exact `wall.width` when available.
+- Right edge if `end === wall.width`.
 
 DWP SKU:
 
 - `{color}DWP`
 - No dimensions for now.
-s
+
 Frame side exposure:
 
 - Each DWP side that exists and is externally exposed needs one `PNL3696Q` if UNIPACK color, or BEP if non-UNIPACK color.
