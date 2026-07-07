@@ -34,6 +34,8 @@
 - 已创建墙、已更新 property 等信息被当作助手消息了，得删除。
 - layout agent 需要忽略 BEP 这种板子，而是将其作为某个面被暴露的确实证据，修改暴露面（因为只有暴露的才需要装 BEP 等板子）
 - OCR agent 需要提示提供总体宽度
+- OCR agent 也需要 trace
+- layout agent 指示窗户和抽油烟机都视为大间隔物体；大间隔物体也可添加 SKU, 比如 VAL, GH (Glass Rack 等)
 
 - 每次去 layout-recognize 或 debug, 以及再回到主页面时都需要重新登录，很烦人
 - ScriptCat 覆写模式不会检查数量
