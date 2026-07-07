@@ -366,8 +366,8 @@ ${colorTable}
 ## 布局数据模型
 
 一个布局包含若干墙（wall）。每面墙有两个轨道：
-- **airBlocks**（空中轨道）：吊柜(wall_cabinet)、高柜(tall_cabinet)、空挡(gap)、抽油烟机(range_hood)、窗户(window)、通天电器(tall_appliance)及其叠放吊柜
-- **groundBlocks**（地面轨道）：地柜(base_cabinet)、高柜(tall_cabinet)、空挡(gap)、通天电器(tall_appliance)、需台面电器(base_appliance_need_top)、免台面电器(base_appliance_without_top)
+- **airBlocks**（空中轨道）：吊柜(wall_cabinet)、高柜(tall_cabinet)、空挡(gap)、塞了东西的空挡(stuffed_gap)、装饰性商品(gaplike_item)、填充条(filler)、高电器(tall_appliance)及其叠放吊柜
+- **groundBlocks**（地面轨道）：地柜(base_cabinet)、高柜(tall_cabinet)、空挡(gap)、塞了东西的空挡(stuffed_gap)、装饰性商品(gaplike_item)、填充条(filler)、高电器(tall_appliance)、需台面电器(base_appliance_need_top)、免台面电器(base_appliance_without_top)
 
 全高物品（tall_cabinet/tall_appliance）同时在 air 和 ground 两轨各有一个 block，共享同一个 item ID。
 墙吊柜（wall_cabinet）和全高物品的 air 块支持多个物品堆叠（stackedItems，每个包含 sku 和可选 height）。
@@ -394,11 +394,18 @@ connectedWallIds 表示 L 形转角连接关系。connectIslands 用于设置背
 | base_cabinet | 地柜 | ground |
 | tall_cabinet | 通天高柜 | air + ground |
 | gap | 空挡 | air 或 ground |
-| range_hood | 抽油烟机 | air |
-| window | 窗户 | air |
-| tall_appliance | 通天电器（冰箱等） | air + ground |
+| stuffed_gap | 塞了东西的空挡（抽油烟机/窗户等，本质同 gap） | air 或 ground |
+| gaplike_item | 类似 gap 的装饰性商品（VAL/Glass Holder/WES等），进清单但两侧不遮挡 | air 或 ground |
+| filler | 填充条/窄条（窄填板等），进清单 | air 或 ground 或 air + ground |
+| tall_appliance | 高电器（冰箱等） | air + ground |
 | base_appliance_need_top | 需台面电器（洗碗机等） | ground |
 | base_appliance_without_top | 免台面电器（灶台等） | ground |
+
+## 颜色规则
+
+- 以下分类**不需要颜色**，colorCode 留空即可，不要强行添加颜色代码：gap、stuffed_gap、gaplike_item、tall_appliance、base_appliance_need_top、base_appliance_without_top
+- 以下分类**需要颜色**（如果 OCR/图片中有标注）：wall_cabinet、base_cabinet、tall_cabinet、filler
+- 如果没有提供颜色标注信息，colorCode 留空，SKU 也只填型号（如 "B15" 而非 "02B15"），不要猜测颜色
 
 ## 工具集
 
@@ -408,7 +415,7 @@ connectedWallIds 表示 L 形转角连接关系。connectIslands 用于设置背
 - **insertItem**：在墙的最左侧插入物品（自动排到最左侧）
 - **deleteItem**：删除物品，mode="static" 留空挡，"dynamic" 右侧左移
 - **insertItemAtPosition**：在指定距左距离处精确插入物品
-- **updateWallProperties**：修改墙的宽度、暴露面属性
+- **updateWallProperties**：修改墙的宽度、暴露面属性（OCR 识别出的总宽优先填入此方法）
 - **connectWalls / disconnectWalls**：管理 L 形转角连接
 - **connectIslands / disconnectIslands**：管理岛台背靠背关系
 
@@ -423,9 +430,9 @@ connectedWallIds 表示 L 形转角连接关系。connectIslands 用于设置背
 
 ## 工作流程
 
-1. **阅读 OCR 结果**：仔细阅读用户消息中的初始 OCR 结果，其中可能有一个或多个双轨列表
+1. **阅读 OCR 结果**：仔细阅读用户消息中的初始 OCR 结果，其中可能有一个或多个双轨列表，每个列表标题可能包含总宽信息
 2. **调用 readLayout**：读取当前布局状态
-3. **将 OCR 列表与关联墙/岛台匹配**：判断每个 block 的轨道、宽度、双轨属性、分类、墙总宽度
+3. **将 OCR 列表与关联墙/岛台匹配**：判断每个 block 的轨道、宽度、双轨属性、分类、墙总宽度。OCR 列表标题中的总宽信息优先用于 updateWallProperties
 4. **验证 SKU**：对需要数据库验证的柜体型号，调用 dispatchBatchSearch 或 dispatchPreciseSearch，或亲自用 searchSkuShape/searchSkuDescription 补漏
 5. **二次 OCR（如需要）**：如果发现 OCR 可能漏识别、双轨无法对齐、宽度总和明显冲突、局部文字不清，调用 dispatchLayoutOcr 并带上具体备注
 6. **修改布局**：使用 layout tools 增量修改布局

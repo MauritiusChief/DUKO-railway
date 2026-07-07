@@ -14,7 +14,7 @@ interface BlockCardProps {
   block: SectionBlock;
   /** 所属轨道，点击选中时回传 */
   track: TrackSpan;
-  /** 是否为双轨联动块（高柜/通天电器） */
+  /** 是否为双轨联动块（高柜/高电器） */
   isDual: boolean;
   isSelected: boolean;
   onDragStart: (blockId: string, e: React.MouseEvent) => void;
@@ -24,7 +24,7 @@ interface BlockCardProps {
 export function BlockCard({ block, track, isDual, isSelected, onDragStart, onSelect }: BlockCardProps) {
   const { t } = useI18n();
   const item = block.items[0];
-  const isGap = item?.category === 'gap';
+  const isGap = item?.category === 'gap' || item?.category === 'stuffed_gap';
 
   // 点击卡片主体 → 选中（手柄 mousedown 会 stopPropagation，不会误触发）
   const handleCardClick = useCallback(() => {

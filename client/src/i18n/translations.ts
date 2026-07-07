@@ -478,8 +478,8 @@ export const messages = {
     zh: '窗户',
     en: 'Window',
   },
-  通天电器: {
-    zh: '通天电器',
+  高电器: {
+    zh: '高电器',
     en: 'Tall Appliance',
   },
   需台面电器: {

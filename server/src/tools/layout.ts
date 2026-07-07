@@ -47,9 +47,9 @@ function sumWidths(blocks: SectionBlock[]): number {
 function targetTracks(category: BlockItemCategory): TrackSpan[] {
   switch (category) {
     case 'wall_cabinet':
-    case 'range_hood':
-    case 'window':
       return ['air'];
+    case 'stuffed_gap':
+      return ['air', 'ground'];
     case 'base_cabinet':
     case 'base_appliance_need_top':
     case 'base_appliance_without_top':
@@ -59,6 +59,10 @@ function targetTracks(category: BlockItemCategory): TrackSpan[] {
       return ['air', 'ground'];
     case 'gap':
       return ['air', 'ground'];
+    case 'gaplike_item':
+      return ['air', 'ground']; // 进清单但不挡两侧
+    case 'filler':
+      return ['air', 'ground']; // 填充条可 air / ground（BF / WF），TK 联动（TF）由 agent 手动双轨插入
     default:
       return ['air'];
   }
@@ -490,7 +494,7 @@ export function executeDeleteWall(state: MutableLayout, args: Record<string, unk
 
 const CATEGORY_DESC =
   '物品分类: wall_cabinet(吊柜), base_cabinet(地柜), tall_cabinet(高柜-通天), gap(空挡), ' +
-  'range_hood(抽油烟机), window(窗户), tall_appliance(通天电器如冰箱), ' +
+  'range_hood(抽油烟机), window(窗户), tall_appliance(高电器如冰箱), ' +
   'base_appliance_need_top(需台面电器如洗碗机), base_appliance_without_top(免台面电器如灶台)';
 
 export const INSERT_ITEM_TOOL = {

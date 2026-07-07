@@ -20,12 +20,19 @@ const CATEGORY_T_KEY: Record<BlockItemCategory, string> = {
   base_cabinet: '地柜',
   tall_cabinet: '高柜',
   gap: '空挡',
-  range_hood: '抽油烟机',
-  window: '窗户',
-  tall_appliance: '通天电器',
+  stuffed_gap: '近似空挡',
+  gaplike_item: '装饰性商品',
+  filler: '填充条',
+  tall_appliance: '高电器',
   base_appliance_need_top: '需台面电器',
   base_appliance_without_top: '免台面电器',
 };
+
+/** 无需颜色信息的分类 */
+const NO_COLOR_CATEGORIES: ReadonlySet<BlockItemCategory> = new Set([
+  'gap', 'stuffed_gap', 'gaplike_item',
+  'tall_appliance', 'base_appliance_need_top', 'base_appliance_without_top',
+]);
 
 interface BlockInfoBarProps {
   wall: LayoutWall;
@@ -56,7 +63,7 @@ export function BlockInfoBar({
   }, [fetchColors]);
 
   const mainItem = block.items[0];
-  const isGap = mainItem?.category === 'gap';
+  const isGap = mainItem?.category === 'gap' || mainItem?.category === 'stuffed_gap';
   const categoryLabel = mainItem ? t(CATEGORY_T_KEY[mainItem.category] as TranslationKey) : '?';
 
   // 叠放仅 air 轨且主物品可叠放时有意义
@@ -236,6 +243,7 @@ export function BlockInfoBar({
             {t('英寸')}
           </label>
         )}
+        {mainItem && !NO_COLOR_CATEGORIES.has(mainItem.category) && (
         <select
           className="pf-select"
           value={block.colorCode || ''}
@@ -249,6 +257,7 @@ export function BlockInfoBar({
             </option>
           ))}
         </select>
+        )}
       </div>
 
       {/* 第2行：叠放物品管理（无叠放且不可叠放时 StackedItemsEditor 返回 null） */}

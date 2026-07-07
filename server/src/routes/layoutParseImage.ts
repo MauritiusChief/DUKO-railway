@@ -141,7 +141,36 @@ layoutParseImageRouter.post('/', validate(layoutParseSchema), async (req: Reques
       langHint: '中文',
     });
 
-    // 可选：发送 OCR 开始事件供前端调试
+    // 为初始 OCR 创建 trace session（子 session，父级为 LayoutAgent 顶层 session）
+    if (traceContext) {
+      const ocrConversationId = randomUUID();
+      const ocrTrace: TraceContext = {
+        conversationId: ocrConversationId,
+        userId: traceContext.userId,
+        username: traceContext.username,
+        mainAgent: traceContext.mainAgent,
+        agentName: 'LayoutOcrAgent',
+        parentToolCallId: undefined, // 初始 OCR 无父工具调用
+        route: traceContext.route,
+        provider: visionLlm.providerName,
+        model: visionLlm.model,
+        enabled: true,
+      };
+      insertTraceSession(
+        ocrConversationId,
+        ocrTrace.userId,
+        ocrTrace.username,
+        ocrTrace.mainAgent,
+        ocrTrace.agentName,
+        null,
+        ocrTrace.route,
+        ocrTrace.provider,
+        ocrTrace.model,
+      );
+      ocrAgent.trace = ocrTrace;
+    }
+
+    // 发送 OCR 开始事件供前端调试
     sse.send('tool_call', { tool: 'layout-ocr-preprocess' });
 
     const associatedWallIds: string[] = Array.isArray(body.associatedWallIds)

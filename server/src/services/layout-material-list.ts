@@ -38,7 +38,7 @@ const BASE_DEPTH = 24;
 const VANITY_DEPTH = 21;
 /** 吊柜标准进深 */
 const WALL_DEPTH = 12;
-/** 高柜 / 通天电器进深 */
+/** 高柜 / 高电器进深 */
 const TALL_DEPTH = 24;
 
 /** UNIPACK 颜色集合（该颜色无需 BEP/WEP 等侧板，工厂不生产） */
@@ -70,15 +70,28 @@ export interface MaterialListResult {
 //  分类辅助
 // ==================================================================
 
-/** 大开口类（gap / window / range_hood）—— 会让相邻物体侧面外露 */
+/** 大开口类（gap / stuffed_gap）—— 会让相邻物体侧面外露 */
 const GAP_LIKE: ReadonlySet<BlockItemCategory> = new Set([
   'gap',
-  'window',
-  'range_hood',
+  'stuffed_gap',
+]);
+
+/** 无需颜色信息的分类 —— 清单生成时不做缺色警告 */
+const NO_COLOR_CATEGORIES: ReadonlySet<BlockItemCategory> = new Set([
+  'gap',
+  'stuffed_gap',
+  'gaplike_item',
+  'tall_appliance',
+  'base_appliance_need_top',
+  'base_appliance_without_top',
 ]);
 
 function isGapLike(cat: BlockItemCategory): boolean {
   return GAP_LIKE.has(cat);
+}
+/** 两侧均遮挡不住的物体（gap-like + gaplike_item），用于外露判定 */
+function isBothSidesUnblocked(cat: BlockItemCategory): boolean {
+  return GAP_LIKE.has(cat) || cat === 'gaplike_item';
 }
 function isBaseCabinet(cat: BlockItemCategory): boolean {
   return cat === 'base_cabinet';
@@ -102,12 +115,18 @@ function isGroundObject(cat: BlockItemCategory): boolean {
     cat === 'tall_cabinet' ||
     cat === 'tall_appliance' ||
     cat === 'base_appliance_need_top' ||
-    cat === 'base_appliance_without_top'
+    cat === 'base_appliance_without_top' ||
+    cat === 'gaplike_item' ||
+    cat === 'filler'
   );
 }
-/** tall 物体（高柜 / 通天电器）—— 跨 air + ground 双轨，用于"整侧外露"简化规则 */
+/** tall 物体（高柜 / 高电器）—— 跨 air + ground 双轨，用于"整侧外露"简化规则 */
 function isTallObject(cat: BlockItemCategory): boolean {
   return cat === 'tall_cabinet' || cat === 'tall_appliance';
+}
+/** 两类电器：tall_appliance / base_appliance_need_top —— filler 紧邻时需清除 */
+function isHighApplianceOrDwp(cat: BlockItemCategory): boolean {
+  return cat === 'tall_appliance' || cat === 'base_appliance_need_top';
 }
 
 // ==================================================================
@@ -124,7 +143,7 @@ function isVanityBlock(block: SectionBlock): boolean {
   return block.items[0]?.isVanity === true;
 }
 
-/** block 是否含 tall 物体（高柜/通天电器）—— 用于识别叠放吊柜场景 */
+/** block 是否含 tall 物体（高柜/高电器）—— 用于识别叠放吊柜场景 */
 function hasTallItem(block: SectionBlock): boolean {
   return block.items.some(
     (it) => it.category === 'tall_cabinet' || it.category === 'tall_appliance',
@@ -149,7 +168,7 @@ function isUnicolor(colorCode: string | undefined): boolean {
 
 /**
  * 取物品高度，缺失则用默认值并写 warning。
- * @param def 默认高度（吊柜 30 / 叠放吊柜 15 / 高柜·通天电器 96）
+ * @param def 默认高度（吊柜 30 / 叠放吊柜 15 / 高柜·高电器 96）
  */
 function heightOrDefault(
   item: BlockItem,
@@ -220,8 +239,8 @@ function getNeighbor(
 }
 
 /**
- * 框侧外露（仅边缘 + 大开口）—— 用于 DWP/RRP 框侧板、QR/CM 侧面、DWP 框 SM。
- * 柜邻电器、柜邻柜均不算外露。
+ * 框侧外露（仅边缘 + 两侧均遮挡不住的邻居）—— 用于 DWP/RRP 框侧板、QR/CM 侧面、DWP 框 SM。
+ * 柜邻电器、柜邻柜均不算外露。gaplike_item 和 filler 两侧也遮挡不住。
  */
 function frameSideExposed(
   pos: PosBlock,
@@ -231,7 +250,7 @@ function frameSideExposed(
 ): boolean {
   if (atEdge(pos, wall, side)) return edgeFlag(wall, side);
   const neighbor = getNeighbor(pos, blocks, side);
-  return !!neighbor && isGapLike(neighbor.cat);
+  return !!neighbor && isBothSidesUnblocked(neighbor.cat);
 }
 
 /**
@@ -314,7 +333,9 @@ function addLength(acc: Accumulator, sku: string, len: number): void {
   acc.lengthBySku.set(sku, (acc.lengthBySku.get(sku) ?? 0) + len);
 }
 
-function warnMissingColor(acc: Accumulator, wallName: string, idx: number): void {
+function warnMissingColor(acc: Accumulator, wallName: string, idx: number, block?: SectionBlock): void {
+  // 无需颜色的分类不报警
+  if (block && block.items[0] && NO_COLOR_CATEGORIES.has(block.items[0].category)) return;
   acc.warnings.push(`墙"${wallName}"第 ${idx + 1} 个块缺少颜色信息`);
 }
 
@@ -322,12 +343,12 @@ function warnMissingColor(acc: Accumulator, wallName: string, idx: number): void
 //  原始柜/电器行
 // ==================================================================
 
-/** 遍历所有墙的所有 block 所有 item，按 id 去重，跳过 gap-like，聚合 sku */
+/** 遍历所有墙的所有 block 所有 item，按 id 去重，跳过 gap-like（含 stuffed_gap），聚合 sku */
 function collectOriginalItems(layout: LayoutDocument, acc: Accumulator): void {
   for (const wall of layout.walls) {
     for (const block of [...wall.airBlocks, ...wall.groundBlocks]) {
       for (const item of block.items) {
-        // gap / window / range_hood 不作为产品行
+        // gap / window / range_hood / stuffed_gap 不作为产品行
         if (isGapLike(item.category)) continue;
         // 双轨物品（tall_cabinet / tall_appliance）按 id 去重
         if (acc.seenItemIds.has(item.id)) continue;
@@ -349,7 +370,7 @@ interface TallApplianceInfo {
   groundPos: PosBlock | undefined;
   /** 是否有叠放吊柜（决定是否需要 RRP） */
   hasStacked: boolean;
-  /** 通天电器本体高度 */
+  /** 高电器本体高度 */
   applianceHeight: number;
   /** 叠放吊柜高度之和 */
   stackedHeight: number;
@@ -369,7 +390,7 @@ function processDwp(
   for (const pos of ground) {
     if (!isBaseApplianceNeedTop(pos.cat)) continue;
     const color = blockColor(pos.block);
-    if (!color) warnMissingColor(acc, wall.name, ground.indexOf(pos));
+    if (!color) warnMissingColor(acc, wall.name, ground.indexOf(pos), pos.block);
 
     // 左右两侧是否需要 DWP（贴墙且不外露则省去）
     const leftOmit = atEdge(pos, wall, 'left') && !wall.exposedLeft;
@@ -401,7 +422,7 @@ function processDwp(
 }
 
 /**
- * 收集通天电器信息（air/ground 双轨定位 + 叠放吊柜检测 + 高度计算）。
+ * 收集高电器信息（air/ground 双轨定位 + 叠放吊柜检测 + 高度计算）。
  */
 function collectTallAppliances(
   wall: LayoutWall,
@@ -426,7 +447,7 @@ function collectTallAppliances(
       item,
       96,
       acc.warnings,
-      `通天电器 ${item.sku}`,
+      `高电器 ${item.sku}`,
     );
     const stackedHeight = stacked.reduce(
       (s, it) => s + heightOrDefault(it, 15, acc.warnings, `叠放吊柜 ${it.sku}`),
@@ -452,7 +473,7 @@ function collectTallAppliances(
 
 /**
  * 处理 RRP 框料及其框侧板 / 框侧 SM / 框侧 QR / CM。
- * 仅当通天电器上方有叠放吊柜时才需要 RRP。
+ * 仅当高电器上方有叠放吊柜时才需要 RRP。
  */
 function processRrp(
   wall: LayoutWall,
@@ -465,7 +486,7 @@ function processRrp(
     if (!info.hasStacked) continue; // 无叠放 → 无 RRP
     const pos = info.airPos!;
     const color = blockColor(pos.block);
-    if (!color) warnMissingColor(acc, wall.name, air.indexOf(pos));
+    if (!color) warnMissingColor(acc, wall.name, air.indexOf(pos), pos.block);
 
     // 左右两侧是否需要 RRP
     const leftOmit = atEdge(pos, wall, 'left') && !wall.exposedLeft;
@@ -495,7 +516,7 @@ function processRrp(
       addLength(acc, withColor(color, 'QR'), TALL_DEPTH);
     }
 
-    // CM（通天电器 + 叠放 = air 物体，进深 24）
+    // CM（高电器 + 叠放 = air 物体，进深 24）
     processCmForAirBlock(pos, air, wall, TALL_DEPTH, color, acc);
   }
 }
@@ -524,7 +545,7 @@ function processSidePanels(
     const cat = pos.cat;
     if (!isBaseCabinet(cat) && !isTallCabinet(cat)) continue;
     const color = blockColor(pos.block);
-    if (!color) warnMissingColor(acc, wall.name, ground.indexOf(pos));
+    if (!color) warnMissingColor(acc, wall.name, ground.indexOf(pos), pos.block);
     // UNIPACK 颜色跳过柜体侧板
     if (isUnicolor(color)) continue;
 
@@ -562,7 +583,7 @@ function processSidePanels(
     // 叠放吊柜（与 tall 物体同 block）跳过，由 tall 物体侧板覆盖
     if (hasTallItem(pos.block)) continue;
     const color = blockColor(pos.block);
-    if (!color) warnMissingColor(acc, wall.name, air.indexOf(pos));
+    if (!color) warnMissingColor(acc, wall.name, air.indexOf(pos), pos.block);
     if (isUnicolor(color)) continue;
 
     const leftExposed = cabinetSideExposed(pos.cat, pos, air, wall, 'left');
@@ -642,8 +663,8 @@ function processQr(wall: LayoutWall, ground: PosBlock[], acc: Accumulator): void
 /**
  * SM 规则（仅 exposedBack === false 时计算）：
  * - 地柜：34.5；吊柜：item.height；高柜：item.height（双轨取并集）
- * - 通天电器 + 叠放：完整高度（本体 + 叠放），叠放吊柜不另算
- * - 通天电器无叠放：无 RRP，自身及邻居均无需 SM
+ * - 高电器 + 叠放：完整高度（本体 + 叠放），叠放吊柜不另算
+ * - 高电器无叠放：无 RRP，自身及邻居均无需 SM
  * - DWP/RRP 框侧：在 processDwp/processRrp 中累计
  * - tall 物体紧邻较矮柜 → 整侧外露，加一整段物体高度
  */
@@ -654,7 +675,7 @@ function processSm(
   tallApps: TallApplianceInfo[],
   acc: Accumulator,
 ): void {
-  // 已处理的通天电器 item id（避免在 air 循环中重复）
+  // 已处理的高电器 item id（避免在 air 循环中重复）
   const tallAppIds = new Set(
     tallApps.map((t) => t.airPos?.block.items[0]?.id).filter(Boolean) as string[],
   );
@@ -672,18 +693,18 @@ function processSm(
     }
   }
 
-  // air 轨：吊柜（独立）+ 高柜 + 通天电器（含叠放）
+  // air 轨：吊柜（独立）+ 高柜 + 高电器（含叠放）
   for (const pos of air) {
     const cat = pos.cat;
     const item = pos.block.items[0];
     if (!item) continue;
 
-    // 通天电器在此处理（含叠放的 SM；无叠放则跳过）
+    // 高电器在此处理（含叠放的 SM；无叠放则跳过）
     if (isTallAppliance(cat)) {
       if (tallAppIds.has(item.id)) {
         tallAppIds.delete(item.id); // 标记已处理
       }
-      continue; // 通天电器的 SM 已在 processRrp 中累计
+      continue; // 高电器的 SM 已在 processRrp 中累计
     }
 
     // 吊柜（独立，非叠放）
@@ -728,7 +749,7 @@ function processSm(
  * - 吊柜（独立）：进深 12
  * - 叠放吊柜（与 tall 同 block）：不单独算，由 tall 物体覆盖
  * - 高柜：进深 24
- * - 通天电器 + 叠放：进深 24（在 processRrp 中处理）
+ * - 高电器 + 叠放：进深 24（在 processRrp 中处理）
  * - 正面按宽、背面按宽（exposedBack 时）、侧面按进深（外露时）
  */
 function processCm(
@@ -746,7 +767,7 @@ function processCm(
     const item = pos.block.items[0];
     if (!item) continue;
 
-    // 通天电器已在 processRrp 中处理
+    // 高电器已在 processRrp 中处理
     if (isTallAppliance(cat)) continue;
 
     // 吊柜（独立，非叠放）
@@ -812,6 +833,45 @@ function groupOf(sku: string): number {
 }
 
 // ==================================================================
+//  填充器清除 —— 紧邻高电器/需台面电器的 filler 自动清除
+// ==================================================================
+
+/**
+ * 对于紧邻 tall_appliance 或 base_appliance_need_top 的 filler，
+ * 从 material list 累积器中移除其原始产品行。
+ * 因为 OCR 可能会把 DWP/RRP 误标为 filler，实际这些是由辅料规则自动生成的。
+ */
+function removeAdjacentFillers(layout: LayoutDocument, acc: Accumulator): void {
+  for (const wall of layout.walls) {
+    const allBlocks = [...wall.airBlocks, ...wall.groundBlocks];
+    const positioned = positionBlocks(allBlocks);
+
+    for (const pos of positioned) {
+      if (pos.cat !== 'filler') continue;
+      const leftNeighbor = getNeighbor(pos, positioned, 'left');
+      const rightNeighbor = getNeighbor(pos, positioned, 'right');
+
+      const adjacentToHighAppliance =
+        (leftNeighbor && isHighApplianceOrDwp(leftNeighbor.cat)) ||
+        (rightNeighbor && isHighApplianceOrDwp(rightNeighbor.cat));
+
+      if (adjacentToHighAppliance) {
+        for (const item of pos.block.items) {
+          const currentQty = acc.itemQuantityBySku.get(item.sku);
+          if (currentQty != null && currentQty > 0) {
+            if (currentQty <= 1) {
+              acc.itemQuantityBySku.delete(item.sku);
+            } else {
+              acc.itemQuantityBySku.set(item.sku, currentQty - 1);
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+// ==================================================================
 //  主入口
 // ==================================================================
 
@@ -838,7 +898,7 @@ export function generateMaterialList(layout: LayoutDocument): MaterialListResult
     // DWP（地轨 base_appliance_need_top）
     processDwp(wall, ground, acc);
 
-    // 通天电器信息（供 RRP / 侧板 / SM / CM 共用）
+    // 高电器信息（供 RRP / 侧板 / SM / CM 共用）
     const tallApps = collectTallAppliances(wall, air, ground, acc);
 
     // RRP（air 轨 tall_appliance + 叠放）
@@ -861,6 +921,9 @@ export function generateMaterialList(layout: LayoutDocument): MaterialListResult
     // CM
     processCm(wall, air, tallApps, acc);
   }
+
+  // 2.5. 清除紧邻高电器/需台面电器的 filler（OCR 误识别的 DWP/RRP）
+  removeAdjacentFillers(layout, acc);
 
   // 3. 距料长度转数量（每色各自 ceil）
   for (const [sku, len] of acc.lengthBySku) {

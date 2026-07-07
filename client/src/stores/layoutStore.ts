@@ -37,8 +37,9 @@ function isDualTrack(category: BlockItemCategory): boolean {
 /** 判断 category 属于空中轨道 */
 function isAirTrack(category: BlockItemCategory): boolean {
   return category === 'wall_cabinet'
-    || category === 'range_hood'
-    || category === 'window'
+    || category === 'stuffed_gap'
+    || category === 'gaplike_item'
+    || category === 'filler'
     || isDualTrack(category);
 }
 
@@ -47,6 +48,9 @@ function isGroundTrack(category: BlockItemCategory): boolean {
   return category === 'base_cabinet'
     || category === 'base_appliance_need_top'
     || category === 'base_appliance_without_top'
+    || category === 'stuffed_gap'
+    || category === 'gaplike_item'
+    || category === 'filler'
     || isDualTrack(category);
 }
 
@@ -62,11 +66,6 @@ function loadFromStorage(): LayoutDocument | null {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (parsed && parsed.id && Array.isArray(parsed.walls)) {
-        // 兼容旧格式：若存在 islands 数组则合并到 walls
-        if (Array.isArray(parsed.islands) && parsed.islands.length > 0) {
-          parsed.walls = [...parsed.walls, ...parsed.islands];
-          delete parsed.islands;
-        }
         return parsed as LayoutDocument;
       }
     }

@@ -124,6 +124,13 @@ ${wallHint}
 
 请仔细阅读图片，将每个墙面上的橱柜和电器逐项列出。**你的唯一任务是识别图片中可见的物品及其属性——不要做任何型号解释或布局对齐检查。**
 
+## 总体宽度
+
+**重要**：请从图片中识别每面墙/岛台/连续段的总体宽度标记（如尺寸标注、总长数字），并在 OCR 列表标题中注明，格式如下：
+\`## OCR List 1 (总宽约 XX in)\`
+
+如果图片中没有明确的总体宽度标注，请根据画面比例估算并标注 \`(est.)\`。
+
 ## 物品分类
 
 | 分类 | 含义 | 轨道 |
@@ -132,18 +139,23 @@ ${wallHint}
 | base_cabinet | 地柜 | ground |
 | tall_cabinet | 通天高柜 | air + ground |
 | gap | 空挡 | air 或 ground |
-| range_hood | 抽油烟机 | air |
-| window | 窗户 | air |
-| tall_appliance | 通天电器（冰箱等） | air + ground |
+| stuffed_gap | 塞了东西的空挡（抽油烟机/窗户等），本质同 gap | air 或 ground |
+| gaplike_item | 类似 gap 的装饰性商品（如 VAL/Glass Holder/WES），进清单但两侧遮挡不住 | air 或 ground |
+| filler | 填充条/窄条（如窄填板），进清单 | air 或 ground 或 air + ground |
+| tall_appliance | 高电器（冰箱等） | air + ground |
 | base_appliance_need_top | 需台面电器（洗碗机等） | ground |
 | base_appliance_without_top | 免台面电器（灶台等） | ground |
+
+**注意**：
+- 抽油烟机、窗户等"塞了东西的空位"统一标为 **stuffed_gap**
+- VAL（Valance）、GH（Glass Holder / Glass Rack）、WES（Wall Ending Shelf）等不像橱柜或电器那样大块的、能起到遮挡作用的物体，统一标为 **gaplike_item**
 
 ## 输出格式
 
 对图片中的每面墙（或独立连续段）输出一个 OCR 列表，格式如下：
 
 \`\`\`md
-## OCR List 1
+## OCR List 1 (总宽约 XX in)
 
 * air
   * {物品名称或分类标签} - {宽度} in  [also in ground]
@@ -151,13 +163,13 @@ ${wallHint}
 * ground
   * {物品名称或分类标签} - {宽度} in  [also in air]
 
-## OCR List 2
+## OCR List 2 (总宽约 XX in)
 ...
 \`\`\`
 
 **标记说明**：
 - 物品名直接使用图片中看到的标注文字（如 "W3024"、"REF"），仅在无标注文字且通过画面可识别类型的时候使用分类标签，除了 gap
-- 可见的 gap 用\`(gap)\`标记
+- 可见的 gap 用 \`(gap)\` 标记
 - 若物品在 air 和 ground 两轨都存在（tall_cabinet / tall_appliance），在对应条目后标注 \`[also in ground]\` 或 \`[also in air]\`
 - 宽度单位为英寸，根据图片中的标注数字提取；若无明确标注则根据比例估算并标注 \`(est.)\`
 

@@ -162,9 +162,10 @@ export type BlockItemCategory =
   | 'base_cabinet'            // 地柜
   | 'tall_cabinet'            // 高柜（通天，占双轨）
   | 'gap'                      // 空挡
-  | 'range_hood'              // 抽油烟机
-  | 'window'                  // 窗户
-  | 'tall_appliance'          // 通天电器（冰箱等，占双轨）
+  | 'stuffed_gap'              // 塞了东西的空挡（hood/window 等），本质同 gap
+  | 'gaplike_item'             // 类似 gap 的商品（VAL/GH/WES），进清单但两侧遮挡不住
+  | 'filler'                   // 填充条（BF/WF/TF），进清单但紧邻高电器时自动清除
+  | 'tall_appliance'          // 高电器（冰箱等，占双轨）
   | 'base_appliance_need_top'  // 需台面电器（洗碗机等）
   | 'base_appliance_without_top'; // 免台面电器（灶台等）
 

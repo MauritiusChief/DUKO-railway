@@ -15,8 +15,9 @@ export type BlockItemCategory =
   | 'base_cabinet'
   | 'tall_cabinet'
   | 'gap'
-  | 'range_hood'
-  | 'window'
+  | 'stuffed_gap'              // 塞了东西的空挡（hood/window 等），本质同 gap
+  | 'gaplike_item'             // 类似 gap 的商品（VAL/GH/WES），进清单但两侧遮挡不住
+  | 'filler'                   // 填充条（BF/WF/TF），进清单但紧邻高电器时自动清除
   | 'tall_appliance'
   | 'base_appliance_need_top'
   | 'base_appliance_without_top';

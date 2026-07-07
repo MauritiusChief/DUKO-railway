@@ -28,18 +28,18 @@
 - 管理员修改密码功能
 - layout-recognzie budget tool 也需要改，搜索工具预算也要改
 - layout-recognzie 各个 block 需要允许定义 base 或 vanity，以及选颜色
-
-## 未完成
-
-- 已创建墙、已更新 property 等信息被当作助手消息了，得删除。
-- layout agent 需要忽略 BEP 这种板子，而是将其作为某个面被暴露的确实证据，修改暴露面（因为只有暴露的才需要装 BEP 等板子）
 - OCR agent 需要提示提供总体宽度
 - OCR agent 也需要 trace
 - layout agent 指示窗户和抽油烟机都视为大间隔物体；大间隔物体也可添加 SKU, 比如 VAL, GH (Glass Rack 等)
 - layout agent 指示允许 filler
 - layout agent 需要允许填SKU时把颜色留空
-
 - layout-recognize 无需颜色的东西不用警报，也不暴露选择颜色的下拉菜单
+
+## 未完成
+
+- 已创建墙、已更新 property 等信息被当作助手消息了，得删除。
+- layout agent 需要忽略 BEP 这种板子，而是将其作为某个面被暴露的确实证据，修改暴露面（因为只有暴露的才需要装 BEP 等板子）
+
 - layout-recognzie 需要在墙已经建好之后再连接不同的墙
 - layout-recognzie 允许改自动滑动方向
 - 每次去 layout-recognize 或 debug, 以及再回到主页面时都需要重新登录，很烦人

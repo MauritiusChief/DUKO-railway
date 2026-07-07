@@ -49,23 +49,30 @@ function pickRulerInterval(wallWidth: number): number {
 
 /** 空中轨道可用物品分类 */
 const AIR_CATEGORIES: BlockItemCategory[] = [
-  'wall_cabinet', 'tall_cabinet', 'gap', 'range_hood', 'window', 'tall_appliance',
+  'wall_cabinet', 'tall_cabinet', 'gap', 'stuffed_gap', 'gaplike_item', 'filler', 'tall_appliance',
 ];
 
 /** 地面轨道可用物品分类 */
 const GROUND_CATEGORIES: BlockItemCategory[] = [
-  'base_cabinet', 'tall_cabinet', 'gap', 'tall_appliance',
+  'base_cabinet', 'tall_cabinet', 'gap', 'stuffed_gap', 'gaplike_item', 'filler', 'tall_appliance',
   'base_appliance_need_top', 'base_appliance_without_top',
 ];
+
+/** 无需颜色信息的分类 */
+const NO_COLOR_CATEGORIES: ReadonlySet<BlockItemCategory> = new Set([
+  'gap', 'stuffed_gap', 'gaplike_item',
+  'tall_appliance', 'base_appliance_need_top', 'base_appliance_without_top',
+]);
 
 const CATEGORY_T_KEY: Record<BlockItemCategory, string> = {
   wall_cabinet: '吊柜',
   base_cabinet: '地柜',
   tall_cabinet: '高柜',
   gap: '空挡',
-  range_hood: '抽油烟机',
-  window: '窗户',
-  tall_appliance: '通天电器',
+  stuffed_gap: '近似空挡',
+  gaplike_item: '装饰性商品',
+  filler: '填充条',
+  tall_appliance: '高电器',
   base_appliance_need_top: '需台面电器',
   base_appliance_without_top: '免台面电器',
 };
@@ -475,6 +482,7 @@ export function WallPanel({ wall }: WallPanelProps) {
                 onChange={(e) => setNewSku(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') confirmAdd(); }}
               />
+              {!NO_COLOR_CATEGORIES.has(newCategory) && (
               <select
                 className="pf-select"
                 value={newColorCode}
@@ -488,6 +496,7 @@ export function WallPanel({ wall }: WallPanelProps) {
                   </option>
                 ))}
               </select>
+              )}
             </div>
 
             {/* 第2行：叠放吊柜（条件渲染，chips + 添加输入框） */}
