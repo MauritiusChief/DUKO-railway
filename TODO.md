@@ -27,6 +27,7 @@
 - 管理员总览全员历史记录功能
 - 管理员修改密码功能
 - layout-recognzie budget tool 也需要改，搜索工具预算也要改
+- layout-recognzie 各个 block 需要允许定义 base 或 vanity，以及选颜色
 
 ## 未完成
 
@@ -37,8 +38,7 @@
 - 每次去 layout-recognize 或 debug, 以及再回到主页面时都需要重新登录，很烦人
 - ScriptCat 覆写模式不会检查数量
 - 前端和后端各自有一份 layout 用的推挤逻辑，看看如何统一
-- layout-recognzie 各个 block 需要允许定义 base 或 vanity
-- layout-recognzie 需要在墙已经建好之后再连接不同的墙，以及为墙的物品选颜色
+- layout-recognzie 需要在墙已经建好之后再连接不同的墙
 - layout-recognzie 允许改自动滑动方向
 - layout-recognize 最终生成所有东西的清单，以及 tk, qr, sm, bep, dwp, rrp 等等等等内容的功能
 
