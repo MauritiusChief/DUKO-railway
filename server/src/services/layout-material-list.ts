@@ -110,6 +110,9 @@ function isTallAppliance(cat: BlockItemCategory): boolean {
 function isBaseApplianceNeedTop(cat: BlockItemCategory): boolean {
   return cat === 'base_appliance_need_top';
 }
+function isFiller(cat: BlockItemCategory): boolean {
+  return cat === 'filler';
+}
 /** 占据地面轨的物体（用于邻接遮挡判断；base_appliance_without_top 仅遮挡不产辅料） */
 function isGroundObject(cat: BlockItemCategory): boolean {
   return (
@@ -674,8 +677,8 @@ function tallSidePanelExposed(
 
 function processTk(wall: LayoutWall, ground: PosBlock[], acc: Accumulator): void {
   for (const pos of ground) {
-    // 地柜 + 高柜计入；电器不计入
-    if (!isBaseCabinet(pos.cat) && !isTallCabinet(pos.cat)) continue;
+    // 地柜 + 高柜 + filler 计入；电器不计入
+    if (!isBaseCabinet(pos.cat) && !isTallCabinet(pos.cat) && !isFiller(pos.cat)) continue;
     const color = blockColor(pos.block);
     addLength(acc, withColor(color, 'TK'), pos.block.width);
   }

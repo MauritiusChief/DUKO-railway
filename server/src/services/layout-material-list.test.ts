@@ -169,9 +169,11 @@ describe('generateMaterialList', () => {
 
     expect(qty(result, '14B15')).toBe(2);
     // QR：正面 60 + 4 侧 4×24 = 156 → ceil = 2
+    expect(lenOf(result, '14QR')).toBe(156);
     expect(qty(result, '14QR')).toBe(2);
     // SM：4 侧 4×34.5 = 138 → ceil = 2
-    expect(qty(result, '14SM')).toBe(2);
+    expect(lenOf(result, '14SM')).toBe(138);
+    expect(qty(result, '14QR')).toBe(2);
     // BEP：4 个外露侧
     expect(qty(result, '14BEP')).toBe(4);
   });
@@ -232,6 +234,7 @@ describe('generateMaterialList', () => {
     // WEP：4 个外露侧（两端边缘 + 两侧朝窗）
     expect(qty(result, '14WEP')).toBe(4);
     // SM：4 侧 4×30 = 120 → ceil = 2
+    expect(lenOf(result, '14SM')).toBe(120);
     expect(qty(result, '14SM')).toBe(2);
   });
   // #endregion
@@ -364,10 +367,10 @@ describe('generateMaterialList', () => {
   // #region Filler 填充条
   it('filler 正常进清单（不紧邻电器时）', () => {
     const wall = makeWall({
-      width: 60,
+      width: 90,
       groundBlocks: [
         makeBlock({ width: 30, colorCode: '14', items: [makeItem({ category: 'filler', sku: 'BF3' })] }),
-        makeBlock({ width: 30, colorCode: '14', items: [makeItem({ sku: '14B15' })] }),
+        makeBlock({ width: 30, colorCode: '14', items: [makeItem({ category: 'base_cabinet', sku: '14B15' })] }),
         makeBlock({ width: 30, colorCode: '14', items: [makeItem({ category: 'filler', sku: 'BF3' })] }),
       ],
     });
@@ -375,6 +378,10 @@ describe('generateMaterialList', () => {
 
     // filler 进清单
     expect(qty(result, 'BF3')).toBe(2);
+    // TK 包含 filler 的长度
+    expect(lenOf(result, '14TK')).toBe(90);
+    // QR 正面 90 + 2 侧 2×24, filler 的长度
+    expect(lenOf(result, '14QR')).toBe(90+2*24);
   });
 
   it('边缘 filler 后的地柜按有效边缘生成 BEP', () => {
@@ -404,7 +411,7 @@ describe('generateMaterialList', () => {
     expect(qty(result, '14BEP')).toBe(0);
   });
 
-  it('filler 夹在普通地柜和 vanity 之间时普通地柜侧生成 BEP', () => {
+  it('filler 夹在普通地柜和 vanity 之间时普通地柜侧依然生成 BEP', () => {
     const wall = makeWall({
       width: 90,
       groundBlocks: [
