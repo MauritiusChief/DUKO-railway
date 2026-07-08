@@ -719,13 +719,13 @@ function processQr(wall: LayoutWall, ground: PosBlock[], acc: Accumulator): void
     if (!isFiller(cat) && atEdgeAbsorbFiller(pos, ground, wall, 'left') && edgeFlag(wall, 'left')) {
       addLength(acc, withColor(color, 'QR'), depth);
     }
-    // 邻居遮挡不住的情况
+    // 邻居遮挡不住的情况，同样需要跳过 filler
     const rightNeighbor = getNonFillerNeighbor(pos, ground, 'right')
-    if (rightNeighbor && isNonBlocking(rightNeighbor.cat)) {
+    if (!isFiller(cat) && rightNeighbor && isNonBlocking(rightNeighbor.cat)) {
       addLength(acc, withColor(color, 'QR'), depth);
     }
     const leftNeighbor = getNonFillerNeighbor(pos, ground, 'left')
-    if (leftNeighbor && isNonBlocking(leftNeighbor.cat)) {
+    if (!isFiller(cat) && leftNeighbor && isNonBlocking(leftNeighbor.cat)) {
       addLength(acc, withColor(color, 'QR'), depth);
     }
   }

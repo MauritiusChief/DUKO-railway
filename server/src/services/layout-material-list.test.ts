@@ -466,16 +466,22 @@ describe('generateMaterialList', () => {
 
   it('filler 夹在地柜和 gap 之间时地柜朝 gap 侧生成 BEP', () => {
     const wall = makeWall({
-      width: 90,
+      width: 48,
       groundBlocks: [
-        makeBlock({ width: 30, colorCode: '14', items: [makeItem({ sku: '14B15' })] }),
-        makeBlock({ width: 30, colorCode: '14', items: [makeItem({ category: 'filler', sku: 'BF3' })] }),
+        makeBlock({ width: 15, colorCode: '14', items: [makeItem({ sku: '14B15' })] }),
+        makeBlock({ width: 3, colorCode: '14', items: [makeItem({ category: 'filler', sku: 'BF3' })] }),
         makeBlock({ width: 30, items: [makeItem({ category: 'gap', sku: 'gap' })] }),
       ],
     });
     const result = generateMaterialList(makeLayout([wall]));
 
     // 地柜：左边缘 + 右侧经 filler 朝 gap 外露
+    expect(qty(result, '14BEP')).toBe(2);
+    // TK 包含 filler 的长度
+    expect(lenOf(result, '14TK')).toBe(15+3);
+    // QR 正面 18 + 2 侧 2×24, filler 的长度
+    expect(lenOf(result, '14QR')).toBe(15+3+2*24);
+    // filler 不产生额外 BEP → 2 BEP
     expect(qty(result, '14BEP')).toBe(2);
   });
 
@@ -504,7 +510,7 @@ describe('generateMaterialList', () => {
     const wall = makeWall({
       width: 60,
       groundBlocks: [
-        makeBlock({ width: 30, colorCode: '14', items: [makeItem({ category: 'base_appliance_need_top', sku: '14DWPA' })] }),
+        makeBlock({ width: 30, colorCode: '14', items: [makeItem({ category: 'base_appliance_need_top', sku: 'dishwasher' })] }),
         makeBlock({ width: 30, colorCode: '14', items: [makeItem({ category: 'filler', sku: 'BF3' })] }),
       ],
     });
@@ -513,7 +519,7 @@ describe('generateMaterialList', () => {
     // filler 被清除
     expect(qty(result, 'BF3')).toBe(0);
     // DWP 辅料应正常生成
-    expect(qty(result, '14DWP')).toBeGreaterThan(0);
+    expect(qty(result, '14DWP')).toBe(2);
   });
   // #endregion
 });
