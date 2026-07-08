@@ -241,8 +241,29 @@ function getNeighbor(
 }
 
 /**
- * 框侧外露（仅边缘 + 两侧均遮挡不住的邻居）—— 用于 DWP/RRP 框侧板、QR/CM 侧面、DWP 框 SM。
- * 柜邻电器、柜邻柜均不算外露。gaplike_item 和 filler 两侧也遮挡不住。
+ * 获取指定方向非 filler 的相邻 PosBlock, 用于侧板和 SM 判断逻辑
+ */
+function getNonFillerNeighbor(
+  pos: PosBlock,
+  blocks: PosBlock[],
+  side: Side,
+): PosBlock | undefined {
+  const i = blocks.indexOf(pos);
+  if (i < 0) return undefined;
+
+  let j = side === 'left' ? i - 1 : i + 1;
+  while (j >= 0 && j < blocks.length) {
+    const neighbor = blocks[j];
+    if (neighbor.cat !== 'filler') return neighbor;
+    j += side === 'left' ? -1 : 1;
+  }
+
+  return undefined;
+}
+
+/**
+ * DWP/RRP 框的侧边外露的情况（仅边缘 + 两侧均遮挡不住的邻居）—— 用于 DWP/RRP 框侧板、QR/CM 侧面、DWP 框 SM。
+ * 柜邻电器、柜邻柜均不算外露。gaplike_item 两侧也遮挡不住。filler 需要被跳过，看其更外侧是否有邻居
  */
 function frameSideExposed(
   pos: PosBlock,
@@ -251,12 +272,17 @@ function frameSideExposed(
   side: Side,
 ): boolean {
   if (atEdge(pos, wall, side)) return edgeFlag(wall, side);
-  const neighbor = getNeighbor(pos, blocks, side);
+  const neighbor = getNonFillerNeighbor(pos, blocks, side);
   return !!neighbor && isBothSidesUnblocked(neighbor.cat);
 }
 
 /**
- * 柜体侧板外露（边缘 + 大开口 + vanity 邻接 + tall 柜紧邻较矮柜）。
+ * 柜体侧板外露情形：
+ *
+ * - 边缘
+ * - 大开口
+ * - vanity 邻接
+ * - tall 柜紧邻较矮柜。
  */
 function cabinetSideExposed(
   cat: BlockItemCategory,
@@ -266,7 +292,7 @@ function cabinetSideExposed(
   side: Side,
 ): boolean {
   if (frameSideExposed(pos, blocks, wall, side)) return true;
-  const neighbor = getNeighbor(pos, blocks, side);
+  const neighbor = getNonFillerNeighbor(pos, blocks, side);
   if (!neighbor) return false;
   const ncat = neighbor.cat;
   // vanity 邻接：普通地柜紧邻 vanity 地柜 → 普通地柜侧外露（需 BEP）
@@ -297,7 +323,7 @@ function smSideExposed(
   side: Side,
 ): boolean {
   if (frameSideExposed(pos, blocks, wall, side)) return true;
-  const neighbor = getNeighbor(pos, blocks, side);
+  const neighbor = getNonFillerNeighbor(pos, blocks, side);
   if (!neighbor) return false;
   // tall 物体紧邻较矮柜 → 整侧外露（简化规则，加一整段物体高度的 SM）
   if (
