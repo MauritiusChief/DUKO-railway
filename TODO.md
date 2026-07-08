@@ -50,6 +50,8 @@
 - ScriptCat 覆写模式不会检查数量
 - 前端和后端各自有一份 layout 用的推挤逻辑，看看如何统一
 
+- context 里面基本硬编码 langHint: '中文', 需要改动
+
 - 发现 railway web 的 console 可以管理 `/data` 目录，应该不需要用到 railway cli 来管理 volume 了。
   - 但疑似缺少新建目录功能，需要调整 refresh cli 来配合
   - console 可以管理 `/data` 的话，那整个 wsl 都变成可选了

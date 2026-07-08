@@ -29,47 +29,17 @@ export function LayoutChatPanel() {
     failed: t('请求失败'),
   });
 
-  // 处理 layout 特有的 SSE 事件
-  const handleLayoutEvent = useCallback((event: SSEEvent) => {
-    // reply_done → 已有通用处理
-    // layout_update / result → 自定义处理
-    if (event.type === 'layout_update') {
-      const data = event.data as { message?: string };
-      if (data.message) {
-        setMessages((prev) => {
-          const clean = prev.filter((m) => m.role !== 'streaming');
-          return [...clean, { role: 'assistant' as const, content: data.message! }];
-        });
-      }
-    } else if (event.type === 'result') {
-      const data = event.data as { reply?: string };
-      if (data.reply) {
-        setMessages((prev) => {
-          const clean = prev.filter((m) => m.role !== 'streaming');
-          return [...clean, { role: 'assistant' as const, content: data.reply! }];
-        });
-      }
-    }
-  }, []);
-
-  // 用 ref 持有最新的 handler，避免 useLayoutStore 订阅循环
-  const handlerRef = useRef<(event: SSEEvent) => void>(() => {});
-  handlerRef.current = (event: SSEEvent) => {
-    handleEvent(event, { onCustomEvent: handleLayoutEvent });
-  };
-
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // 注册 SSE 事件回调（仅挂载/卸载一次）
+  // 注册 SSE 事件回调
   useEffect(() => {
-    const cb = (event: SSEEvent) => handlerRef.current(event);
-    useLayoutStore.getState().setRecognitionEventCallback(cb);
+    useLayoutStore.getState().setRecognitionEventCallback(handleEvent);
     return () => {
       useLayoutStore.getState().setRecognitionEventCallback(null);
     };
-  }, []);
+  }, [handleEvent]);
 
   const hasMessages = messages.length > 0;
 

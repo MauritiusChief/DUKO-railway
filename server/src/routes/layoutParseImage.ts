@@ -207,8 +207,9 @@ layoutParseImageRouter.post('/', validate(layoutParseSchema), async (req: Reques
       markSessionCompleted(traceContext.conversationId);
     }
 
-    sse.send('result', { updatedLayout, reply });
-    sse.send('done', {});
+    sse.send('reply_done', {});
+
+    sse.send('result', { updatedLayout });
   } catch (err) {
     console.error('[layout-parse] error:', err);
     if (traceContext) {

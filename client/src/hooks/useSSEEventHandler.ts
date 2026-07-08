@@ -96,7 +96,7 @@ export function useSSEEventHandler(
           lastToolNameRef.current = toolName;
           toolDotCountRef.current = 0;
         }
-        const dots = '.'.repeat(toolDotCountRef.current % 4);
+        const dots = '.'.repeat(toolDotCountRef.current);
         setMessages((prev) => {
           const toolMsg = `${_t.calling} ${toolName}${dots}`;
           if (prev.length > 0 && prev[prev.length - 1].role === 'tool') {
