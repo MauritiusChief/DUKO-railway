@@ -845,8 +845,8 @@ function processCm(
     // 高电器已在 processRrp 中处理
     if (isTallAppliance(cat)) continue;
 
-    // 吊柜（独立，非叠放）
-    if (isWallCabinet(cat) && !hasTallItem(pos.block)) {
+    // 吊柜（独立，非叠放）/ filler
+    if ((isWallCabinet(cat) && !hasTallItem(pos.block)) || isFiller(cat)) {
       const color = blockColor(pos.block);
       processCmForAirBlock(pos, air, wall, WALL_DEPTH, color, acc);
       continue;
@@ -873,17 +873,29 @@ function processCmForAirBlock(
   color: string | undefined,
   acc: Accumulator,
 ): void {
+  const cat = pos.cat;
+
   // 正面始终计入
   addLength(acc, withColor(color, 'CM'), pos.block.width);
   // 背面：exposedBack 时计入
   if (wall.exposedBack) {
     addLength(acc, withColor(color, 'CM'), pos.block.width);
   }
-  // 侧面：外露时按进深计入（QR 式：仅边缘 + 大开口；柜邻柜不算外露）
-  if (frameSideExposed(pos, air, wall, 'left')) {
+  // 侧面：外露时按进深计入（QR 式：穿透 filler 看边缘 + 跳过 filler 看邻居）
+  // 边缘：穿透 filler 贴边且该侧外露
+  if (!isFiller(cat) && atEdgeAbsorbFiller(pos, air, wall, 'left') && edgeFlag(wall, 'left')) {
     addLength(acc, withColor(color, 'CM'), depth);
   }
-  if (frameSideExposed(pos, air, wall, 'right')) {
+  if (!isFiller(cat) && atEdgeAbsorbFiller(pos, air, wall, 'right') && edgeFlag(wall, 'right')) {
+    addLength(acc, withColor(color, 'CM'), depth);
+  }
+  // 邻居遮挡不住：跳过 filler 看有效邻居
+  const rightNeighbor = getNonFillerNeighbor(pos, air, 'right');
+  if (!isFiller(cat) && rightNeighbor && isNonBlocking(rightNeighbor.cat)) {
+    addLength(acc, withColor(color, 'CM'), depth);
+  }
+  const leftNeighbor = getNonFillerNeighbor(pos, air, 'left');
+  if (!isFiller(cat) && leftNeighbor && isNonBlocking(leftNeighbor.cat)) {
     addLength(acc, withColor(color, 'CM'), depth);
   }
 }

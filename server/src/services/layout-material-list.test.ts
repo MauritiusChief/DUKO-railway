@@ -522,4 +522,159 @@ describe('generateMaterialList', () => {
     expect(qty(result, '14DWP')).toBe(2);
   });
   // #endregion
+
+  // #region CM（顶线）
+  it('连续吊柜 CM：正面 + 两侧边缘', () => {
+    const wall = makeWall({
+      width: 60,
+      airBlocks: [
+        makeBlock({ width: 30, colorCode: '14', items: [makeItem({ category: 'wall_cabinet', sku: '14W30', height: 30 })] }),
+        makeBlock({ width: 30, colorCode: '14', items: [makeItem({ category: 'wall_cabinet', sku: '14W30', height: 30 })] }),
+      ],
+    });
+    const result = generateMaterialList(makeLayout([wall]));
+
+    // CM：正面 30 + 30 + 两侧 2×12 = 84 → ceil = 1
+    expect(lenOf(result, '14CM')).toBe(30+30+2*12);
+    expect(qty(result, '14CM')).toBe(1);
+    // SM: 两侧高
+    expect(lenOf(result, '14SM')).toBe(30+30);
+    expect(qty(result, '14SM')).toBe(1);
+  });
+
+  it('高柜 CM：进深 24', () => {
+    const tallItem = makeItem({ category: 'tall_cabinet', sku: '14UT', height: 96 });
+    const wall = makeWall({
+      width: 30,
+      airBlocks: [makeBlock({ width: 30, colorCode: '14', items: [tallItem] })],
+      groundBlocks: [makeBlock({ width: 30, colorCode: '14', items: [{ ...tallItem }] })],
+    });
+    const result = generateMaterialList(makeLayout([wall]));
+
+    // CM：正面 30 + 两侧 2×24 = 78 → ceil = 1
+    expect(lenOf(result, '14CM')).toBe(30+2*24);
+    expect(qty(result, '14CM')).toBe(1);
+    // SM: 两侧高
+    expect(lenOf(result, '14SM')).toBe(96+96);
+    expect(qty(result, '14SM')).toBe(2);
+  });
+
+  it('高柜+吊柜 CM：进深升级为 24', () => {
+    const tallItem = makeItem({ category: 'tall_cabinet', sku: '14UT', height: 96 });
+    const wall = makeWall({
+      width: 60,
+      airBlocks: [
+        makeBlock({ width: 18, colorCode: '14', items: [tallItem] }),
+        makeBlock({ width: 18, colorCode: '14', items: [makeItem({ category: 'wall_cabinet', sku: '14W30', height: 30 })] }),
+      ],
+      groundBlocks: [makeBlock({ width: 30, colorCode: '14', items: [{ ...tallItem }] })],
+    });
+    const result = generateMaterialList(makeLayout([wall]));
+
+    // CM：正面 18 + 18 + 两侧升级为了 2×24
+    expect(lenOf(result, '14CM')).toBe(18+18+2*24);
+    // SM: 高柜两侧高+吊柜单侧
+    expect(lenOf(result, '14SM')).toBe(96+96+30);
+  });
+
+  it('吊柜夹 gap：4 侧 CM', () => {
+    const wall = makeWall({
+      width: 90,
+      airBlocks: [
+        makeBlock({ width: 30, colorCode: '14', items: [makeItem({ category: 'wall_cabinet', sku: '14W30', height: 30 })] }),
+        makeBlock({ width: 30, items: [makeItem({ category: 'gap', sku: 'gap' })] }),
+        makeBlock({ width: 30, colorCode: '14', items: [makeItem({ category: 'wall_cabinet', sku: '14W30', height: 30 })] }),
+      ],
+    });
+    const result = generateMaterialList(makeLayout([wall]));
+
+    // CM：正面 30 + 30 + 4 侧 4×12 = 108 → ceil = 2
+    expect(lenOf(result, '14CM')).toBe(30+30+4*12);
+    expect(qty(result, '14CM')).toBe(2);
+  });
+
+  it('吊柜夹 filler：filler 透明，仅 2 侧边缘 CM', () => {
+    const wall = makeWall({
+      width: 63,
+      airBlocks: [
+        makeBlock({ width: 30, colorCode: '14', items: [makeItem({ category: 'wall_cabinet', sku: '14W30', height: 30 })] }),
+        makeBlock({ width: 3, colorCode: '14', items: [makeItem({ category: 'filler', sku: 'AF3' })] }),
+        makeBlock({ width: 30, colorCode: '14', items: [makeItem({ category: 'wall_cabinet', sku: '14W30', height: 30 })] }),
+      ],
+    });
+    const result = generateMaterialList(makeLayout([wall]));
+
+    // filler 计入正面：30 + 3 + 30 = 63
+    // 两侧边缘外露 2×12 = 24（吊柜彼此透过 filler 相邻，不产生额外侧 CM）
+    // Total: 63 + 24 = 87 → ceil = 1
+    expect(lenOf(result, '14CM')).toBe(87);
+    expect(qty(result, '14CM')).toBe(1);
+  });
+
+  it('边缘 filler + 吊柜：穿透 filler 触达墙边', () => {
+    const wall = makeWall({
+      width: 33,
+      airBlocks: [
+        makeBlock({ width: 3, colorCode: '14', items: [makeItem({ category: 'filler', sku: 'AF3' })] }),
+        makeBlock({ width: 30, colorCode: '14', items: [makeItem({ category: 'wall_cabinet', sku: '14W30', height: 30 })] }),
+      ],
+    });
+    const result = generateMaterialList(makeLayout([wall]));
+
+    // filler 正面 3 + 吊柜正面 30 = 33
+    // 吊柜左侧经 filler 到外露墙边 → 侧 CM 12
+    // 吊柜右侧本身在外露墙边 → 侧 CM 12
+    // Total: 33 + 24 = 57 → ceil = 1
+    expect(lenOf(result, '14CM')).toBe(57);
+    expect(qty(result, '14CM')).toBe(1);
+  });
+
+  it('高电器 + 叠放吊柜 CM：进深 24', () => {
+    const tallApp = makeItem({ category: 'tall_appliance', sku: 'REF', height: 84 });
+    const stacked = makeItem({ category: 'wall_cabinet', sku: '14W24', height: 12 });
+    const wall = makeWall({
+      width: 30,
+      exposedLeft: true,
+      exposedRight: false,
+      airBlocks: [makeBlock({ width: 30, colorCode: '14', items: [tallApp, stacked] })],
+      groundBlocks: [makeBlock({ width: 30, colorCode: '14', items: [{ ...tallApp }] })],
+    });
+    const result = generateMaterialList(makeLayout([wall]));
+
+    // CM：正面 30 + 左侧 24 = 54 → ceil = 1（右侧贴墙且不外露，无侧 CM）
+    expect(lenOf(result, '14CM')).toBe(54);
+    expect(qty(result, '14CM')).toBe(1);
+  });
+
+  it('exposedBack 时背面 CM 计入', () => {
+    const wall = makeWall({
+      width: 30,
+      exposedLeft: false,
+      exposedRight: false,
+      exposedBack: true,
+      airBlocks: [
+        makeBlock({ width: 30, colorCode: '14', items: [makeItem({ category: 'wall_cabinet', sku: '14W30', height: 30 })] }),
+      ],
+    });
+    const result = generateMaterialList(makeLayout([wall]));
+
+    // CM：正面 30 + 背面 30 = 60 → ceil = 1（两侧不露边）
+    expect(lenOf(result, '14CM')).toBe(60);
+    expect(qty(result, '14CM')).toBe(1);
+  });
+
+  it('单独 filler air：正面计入，无侧 CM', () => {
+    const wall = makeWall({
+      width: 30,
+      airBlocks: [
+        makeBlock({ width: 30, colorCode: '14', items: [makeItem({ category: 'filler', sku: 'AF3' })] }),
+      ],
+    });
+    const result = generateMaterialList(makeLayout([wall]));
+
+    // CM：仅正面 30，两侧 !isFiller 守卫 → 无侧 CM
+    expect(lenOf(result, '14CM')).toBe(30);
+    expect(qty(result, '14CM')).toBe(1);
+  });
+  // #endregion
 });
