@@ -92,7 +92,7 @@ function isAppliance(cat: BlockItemCategory): boolean {
   return cat === 'base_appliance_need_top' || cat === 'tall_appliance' || cat === 'base_appliance_without_top'
 }
 /** 两侧均遮挡不住的物体（gap-like + gaplike_item），用于外露判定 */
-function isBothSidesUnblocked(cat: BlockItemCategory): boolean {
+function isNonBlocking(cat: BlockItemCategory): boolean {
   return GAP_LIKE.has(cat) || cat === 'gaplike_item';
 }
 function isBaseCabinet(cat: BlockItemCategory): boolean {
@@ -218,6 +218,24 @@ function atEdge(pos: PosBlock, wall: LayoutWall, side: Side): boolean {
   return side === 'left' ? pos.start === 0 : pos.end === wall.width;
 }
 
+/** 把紧邻 filler 也算作自己的一部分的情况下，是否贴墙边缘（最远的紧邻 filler, start===0 或 end===wall.width） */
+function atEdgeAbsorbFiller(
+  pos: PosBlock,
+  blocks: PosBlock[],
+  wall: LayoutWall,
+  side: Side,
+): boolean {
+  let current = pos;
+  while (true) {
+    const neighbor = getNeighbor(current, blocks, side);
+    if (!neighbor || neighbor.cat !== 'filler') break;
+    current = neighbor;
+  }
+  return side === 'left'
+    ? current.start === 0
+    : current.end === wall.width;
+}
+
 /** 墙边缘外露标志（exposedLeft / exposedRight） */
 function edgeFlag(wall: LayoutWall, side: Side): boolean {
   return side === 'left' ? wall.exposedLeft : wall.exposedRight;
@@ -273,16 +291,17 @@ function frameSideExposed(
 ): boolean {
   if (atEdge(pos, wall, side)) return edgeFlag(wall, side);
   const neighbor = getNonFillerNeighbor(pos, blocks, side);
-  return !!neighbor && isBothSidesUnblocked(neighbor.cat);
+  return !!neighbor && isNonBlocking(neighbor.cat);
 }
 
 /**
  * 柜体侧板外露情形：
- *
  * - 边缘
  * - 大开口
  * - vanity 邻接
- * - tall 柜紧邻较矮柜。
+ * - tall 柜紧邻较矮柜
+ * 
+ * 检测相邻关系时，直接令 filler 透明化
  */
 function cabinetSideExposed(
   cat: BlockItemCategory,
@@ -291,10 +310,13 @@ function cabinetSideExposed(
   wall: LayoutWall,
   side: Side,
 ): boolean {
-  if (atEdge(pos, wall, side)) return edgeFlag(wall, side);
+  // 边缘 → 根据墙本身暴露情况
+  if (atEdgeAbsorbFiller(pos, blocks, wall, side)) return edgeFlag(wall, side);
+  // 大开口 → 略过 filler, 看有没有真正有效的邻居
   const neighbor = getNonFillerNeighbor(pos, blocks, side);
   if (!neighbor) return false;
   const ncat = neighbor.cat;
+  if (isNonBlocking(ncat)) return true;
   // vanity 邻接：普通地柜紧邻 vanity 地柜 → 普通地柜侧外露（需 BEP）
   if (
     cat === 'base_cabinet' &&
@@ -312,7 +334,11 @@ function cabinetSideExposed(
 }
 
 /**
- * SM 侧面外露（边缘 + 大开口 + tall 物体紧邻较矮柜；不含 vanity）。
+ * SM 侧面外露（不含 vanity）。
+ * - 边缘
+ * - 大开口
+ * - tall 柜紧邻较矮柜
+ * 
  * 用于 SM 距料长度累计。
  */
 function smSideExposed(
@@ -322,9 +348,13 @@ function smSideExposed(
   wall: LayoutWall,
   side: Side,
 ): boolean {
-  if (frameSideExposed(pos, blocks, wall, side)) return true;
+  // 边缘 → 根据墙本身暴露情况
+  if (atEdgeAbsorbFiller(pos, blocks, wall, side)) return edgeFlag(wall, side);
+  // 大开口 → 略过 filler, 看有没有真正有效的邻居
   const neighbor = getNonFillerNeighbor(pos, blocks, side);
   if (!neighbor) return false;
+  const ncat = neighbor.cat;
+  if (isNonBlocking(ncat)) return true;
   // tall 物体紧邻较矮柜 → 整侧外露（简化规则，加一整段物体高度的 SM）
   if (
     isTallObject(cat) &&

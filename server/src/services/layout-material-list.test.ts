@@ -86,8 +86,8 @@ function lenOf(result: MaterialListResult, sku: string): number {
 // ==================================================================
 
 describe('generateMaterialList', () => {
-  // #region 1. 连续地柜 run
-  it('1. 连续地柜 run：原始行 + TK + QR + SM + BEP', () => {
+  // #region 连续地柜 run
+  it('连续地柜 run：原始行 + TK + QR + SM + BEP', () => {
     const wall = makeWall({
       width: 90,
       groundBlocks: [
@@ -115,8 +115,8 @@ describe('generateMaterialList', () => {
   });
   // #endregion
 
-  // #region 2. 地柜中间夹 gap
-  it('2. 地柜中间夹 gap：QR 含 4 个侧深，SM 含 4 个地柜高', () => {
+  // #region 地柜中间夹 gap
+  it('地柜中间夹 gap：QR 含 4 个侧深，SM 含 4 个地柜高', () => {
     const wall = makeWall({
       width: 90,
       groundBlocks: [
@@ -137,8 +137,8 @@ describe('generateMaterialList', () => {
   });
   // #endregion
 
-  // #region 3. 吊柜夹 window
-  it('3. 吊柜夹 window：WEP 朝窗侧 + SM 侧高', () => {
+  // #region 吊柜夹 window
+  it('吊柜夹 window：WEP 朝窗侧 + SM 侧高', () => {
     const wall = makeWall({
       width: 90,
       airBlocks: [
@@ -157,8 +157,8 @@ describe('generateMaterialList', () => {
   });
   // #endregion
 
-  // #region 4. vanity 邻接
-  it('4. vanity 邻接：普通地柜侧加 BEP，vanity 外侧加 VEP', () => {
+  // #region vanity 邻接
+  it('vanity 邻接：普通地柜侧加 BEP，vanity 外侧加 VEP', () => {
     const wall = makeWall({
       width: 60,
       groundBlocks: [
@@ -175,8 +175,8 @@ describe('generateMaterialList', () => {
   });
   // #endregion
 
-  // #region 5. UNIPACK 柜体侧板跳过
-  it('5. UNIPACK 颜色高柜侧板跳过（PNL3696Q 不产生）', () => {
+  // #region UNIPACK 柜体侧板跳过
+  it('UNIPACK 颜色高柜侧板跳过（PNL3696Q 不产生）', () => {
     const tallItem = makeItem({ category: 'tall_cabinet', sku: '02T96', height: 96 });
     const wall = makeWall({
       width: 30,
@@ -194,8 +194,8 @@ describe('generateMaterialList', () => {
   });
   // #endregion
 
-  // #region 6. UNIPACK DWP 框侧仍用 PNL3696Q
-  it('6. UNIPACK 颜色 DWP 框侧仍用 PNL3696Q', () => {
+  // #region UNIPACK DWP 框侧仍用 PNL3696Q
+  it('UNIPACK 颜色 DWP 框侧仍用 PNL3696Q', () => {
     const wall = makeWall({
       width: 30,
       exposedLeft: true,
@@ -217,8 +217,8 @@ describe('generateMaterialList', () => {
   });
   // #endregion
 
-  // #region 7. DWP 贴墙边缘省略
-  it('7. DWP 贴墙边缘省略：exposedLeft=false → 仅 1 个 DWP', () => {
+  // #region DWP 贴墙边缘省略
+  it('DWP 贴墙边缘省略：exposedLeft=false → 仅 1 个 DWP', () => {
     const wall = makeWall({
       width: 60,
       exposedLeft: false,
@@ -236,8 +236,8 @@ describe('generateMaterialList', () => {
   });
   // #endregion
 
-  // #region 8. 高电器无叠放
-  it('8. 高电器无叠放：无 RRP', () => {
+  // #region 高电器无叠放
+  it('高电器无叠放：无 RRP', () => {
     const tallApp = makeItem({ category: 'tall_appliance', sku: 'REF', height: 84 });
     const wall = makeWall({
       width: 30,
@@ -252,8 +252,8 @@ describe('generateMaterialList', () => {
   });
   // #endregion
 
-  // #region 9. 高电器 + 叠放吊柜 + 贴右墙
-  it('9. 高电器 + 叠放吊柜 + 贴右墙：仅 1 个 RRP', () => {
+  // #region 高电器 + 叠放吊柜 + 贴右墙
+  it('高电器 + 叠放吊柜 + 贴右墙：仅 1 个 RRP', () => {
     const tallApp = makeItem({ category: 'tall_appliance', sku: 'REF', height: 84 });
     const stacked = makeItem({ category: 'wall_cabinet', sku: '14W24', height: 12 });
     const wall = makeWall({
@@ -271,8 +271,8 @@ describe('generateMaterialList', () => {
   });
   // #endregion
 
-  // #region 10. 96 英寸取整
-  it('10. 96 英寸取整：长度 97 → 数量 2', () => {
+  // #region 96 英寸取整
+  it('96 英寸取整：长度 97 → 数量 2', () => {
     const wall = makeWall({
       width: 97,
       exposedLeft: false,
@@ -288,8 +288,8 @@ describe('generateMaterialList', () => {
   });
   // #endregion
 
-  // #region 11. 缺色行为
-  it('11. 缺色：BEP 无颜色前缀，不按 UNIPACK 跳过', () => {
+  // #region 缺色行为
+  it('缺色：BEP 无颜色前缀，不按 UNIPACK 跳过', () => {
     const wall = makeWall({
       width: 30,
       exposedLeft: true,
@@ -315,8 +315,8 @@ describe('generateMaterialList', () => {
   });
   // #endregion
 
-  // #region 12. stuffed_gap 不进清单但触发外露
-  it('12. stuffed_gap 不进清单但触发外露', () => {
+  // #region stuffed_gap 不进清单但触发外露
+  it('stuffed_gap 不进清单但触发外露', () => {
     const wall = makeWall({
       width: 90,
       groundBlocks: [
@@ -336,8 +336,8 @@ describe('generateMaterialList', () => {
   });
   // #endregion
 
-  // #region 13. gaplike_item 进清单且两侧不遮挡
-  it('13. gaplike_item 进清单且两侧不遮挡', () => {
+  // #region gaplike_item 进清单且两侧不遮挡
+  it('gaplike_item 进清单且两侧不遮挡', () => {
     const wall = makeWall({
       width: 90,
       groundBlocks: [
@@ -358,11 +358,12 @@ describe('generateMaterialList', () => {
   });
   // #endregion
 
-  // #region 14. filler 默认进清单
-  it('14. filler 正常进清单（不紧邻电器时）', () => {
+  // #region filler 默认进清单
+  it('filler 正常进清单（不紧邻电器时）', () => {
     const wall = makeWall({
       width: 60,
       groundBlocks: [
+        makeBlock({ width: 30, colorCode: '14', items: [makeItem({ category: 'filler', sku: 'BF3' })] }),
         makeBlock({ width: 30, colorCode: '14', items: [makeItem({ sku: '14B15' })] }),
         makeBlock({ width: 30, colorCode: '14', items: [makeItem({ category: 'filler', sku: 'BF3' })] }),
       ],
@@ -370,10 +371,10 @@ describe('generateMaterialList', () => {
     const result = generateMaterialList(makeLayout([wall]));
 
     // filler 进清单
-    expect(qty(result, 'BF3')).toBe(1);
+    expect(qty(result, 'BF3')).toBe(2);
   });
 
-  it('14a. 边缘 filler 后的地柜按有效边缘生成 BEP', () => {
+  it('边缘 filler 后的地柜按有效边缘生成 BEP', () => {
     const wall = makeWall({
       width: 60,
       groundBlocks: [
@@ -387,7 +388,20 @@ describe('generateMaterialList', () => {
     expect(qty(result, '14BEP')).toBe(2);
   });
 
-  it('14b. filler 夹在普通地柜和 vanity 之间时普通地柜侧生成 BEP', () => {
+  it('单一 filler 不合理，不生成 BEP', () => {
+    const wall = makeWall({
+      width: 60,
+      groundBlocks: [
+        makeBlock({ width: 30, colorCode: '14', items: [makeItem({ category: 'filler', sku: 'BF3' })] }),
+      ],
+    });
+    const result = generateMaterialList(makeLayout([wall]));
+
+    // 没有 BEP 生成
+    expect(qty(result, '14BEP')).toBe(0);
+  });
+
+  it('filler 夹在普通地柜和 vanity 之间时普通地柜侧生成 BEP', () => {
     const wall = makeWall({
       width: 90,
       groundBlocks: [
@@ -404,7 +418,7 @@ describe('generateMaterialList', () => {
     expect(qty(result, '14VEP')).toBe(1);
   });
 
-  it('14c. filler 夹在地柜和 gap 之间时地柜朝 gap 侧生成 BEP', () => {
+  it('filler 夹在地柜和 gap 之间时地柜朝 gap 侧生成 BEP', () => {
     const wall = makeWall({
       width: 90,
       groundBlocks: [
@@ -420,8 +434,8 @@ describe('generateMaterialList', () => {
   });
   // #endregion
 
-  // #region 15. filler 紧邻 tall_appliance 被清除
-  it('15. filler 紧邻 tall_appliance 被清除', () => {
+  // #region filler 紧邻 tall_appliance 被清除
+  it('filler 紧邻 tall_appliance 被清除', () => {
     const tallApp = makeItem({ category: 'tall_appliance', sku: 'refrigerator', height: 84 });
     const wall = makeWall({
       width: 60,
@@ -443,8 +457,8 @@ describe('generateMaterialList', () => {
   });
   // #endregion
 
-  // #region 16. filler 紧邻 base_appliance_need_top 被清除
-  it('16. filler 紧邻 base_appliance_need_top 被清除', () => {
+  // #region filler 紧邻 base_appliance_need_top 被清除
+  it('filler 紧邻 base_appliance_need_top 被清除', () => {
     const wall = makeWall({
       width: 60,
       groundBlocks: [
@@ -461,8 +475,8 @@ describe('generateMaterialList', () => {
   });
   // #endregion
 
-  // #region 17. 电器缺色不报警
-  it('17. 电器缺色不报警', () => {
+  // #region 电器缺色不报警
+  it('电器缺色不报警', () => {
     const wall = makeWall({
       width: 30,
       groundBlocks: [
