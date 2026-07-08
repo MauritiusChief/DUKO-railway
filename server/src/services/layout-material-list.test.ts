@@ -158,18 +158,21 @@ describe('generateMaterialList', () => {
   // #region 隔断与空白
   it('地柜中间夹 gap：QR 含 4 个侧深，SM 含 4 个地柜高', () => {
     const wall = makeWall({
-      width: 90,
+      width: 75,
       groundBlocks: [
         makeBlock({ width: 30, colorCode: '14', items: [makeItem({ sku: '14B15' })] }),
-        makeBlock({ width: 30, items: [makeItem({ category: 'gap', sku: 'gap' })] }),
+        makeBlock({ width: 15, items: [makeItem({ category: 'gap', sku: 'gap' })] }),
         makeBlock({ width: 30, colorCode: '14', items: [makeItem({ sku: '14B15' })] }),
       ],
     });
     const result = generateMaterialList(makeLayout([wall]));
 
     expect(qty(result, '14B15')).toBe(2);
-    // QR：正面 60 + 4 侧 4×24 = 156 → ceil = 2
-    expect(lenOf(result, '14QR')).toBe(156);
+    // TK：正面 30 + 30 = 60 → ceil = 1
+    expect(lenOf(result, '14TK')).toBe(30+30);
+    expect(qty(result, '14TK')).toBe(1);
+    // QR：正面 30 + 30 + 4 侧 4×24 = 156 → ceil = 2
+    expect(lenOf(result, '14QR')).toBe(30+30+4*24);
     expect(qty(result, '14QR')).toBe(2);
     // SM：4 侧 4×34.5 = 138 → ceil = 2
     expect(lenOf(result, '14SM')).toBe(138);
@@ -180,10 +183,10 @@ describe('generateMaterialList', () => {
 
   it('stuffed_gap 不进清单但触发外露', () => {
     const wall = makeWall({
-      width: 90,
+      width: 75,
       groundBlocks: [
         makeBlock({ width: 30, colorCode: '14', items: [makeItem({ sku: '14B15' })] }),
-        makeBlock({ width: 30, items: [makeItem({ category: 'stuffed_gap', sku: 'stuffed_gap' })] }),
+        makeBlock({ width: 15, items: [makeItem({ category: 'stuffed_gap', sku: 'stuffed_gap' })] }),
         makeBlock({ width: 30, colorCode: '14', items: [makeItem({ sku: '14B15' })] }),
       ],
     });
@@ -193,6 +196,15 @@ describe('generateMaterialList', () => {
     expect(result.items.find((i) => i.sku === 'stuffed_gap')).toBeUndefined();
     // 两侧地柜各 1
     expect(qty(result, '14B15')).toBe(2);
+    // TK：正面 30 + 30 = 60 → ceil = 1
+    expect(lenOf(result, '14TK')).toBe(30+30);
+    expect(qty(result, '14TK')).toBe(1);
+    // QR：正面 30 + 30 + 4 侧 4×24 = 156 → ceil = 2
+    expect(lenOf(result, '14QR')).toBe(30+30+4*24);
+    expect(qty(result, '14QR')).toBe(2);
+    // SM：4 侧 4×34.5 = 138 → ceil = 2
+    expect(lenOf(result, '14SM')).toBe(138);
+    expect(qty(result, '14QR')).toBe(2);
     // BEP：两端边缘 + 两侧朝 stuffed_gap = 4 外露侧
     expect(qty(result, '14BEP')).toBe(4);
   });
@@ -242,9 +254,9 @@ describe('generateMaterialList', () => {
   // #region Vanity
   it('vanity 邻接：普通地柜侧加 BEP，vanity 外侧加 VEP', () => {
     const wall = makeWall({
-      width: 60,
+      width: 45,
       groundBlocks: [
-        makeBlock({ width: 30, colorCode: '14', items: [makeItem({ sku: '14B15', isVanity: false })] }),
+        makeBlock({ width: 15, colorCode: '14', items: [makeItem({ sku: '14B15', isVanity: false })] }),
         makeBlock({ width: 30, colorCode: '14', items: [makeItem({ sku: '14V30', isVanity: true })] }),
       ],
     });
@@ -254,12 +266,18 @@ describe('generateMaterialList', () => {
     expect(qty(result, '14BEP')).toBe(2);
     // vanity：左（邻普通地柜，不外露）+ 右（边缘）→ 1 VEP
     expect(qty(result, '14VEP')).toBe(1);
+    // TK: 普通和 vanity 都算
+    expect(lenOf(result, '14TK')).toBe(15+30)
+    // QR: 正面之合 + 向上升级的进深(21 → 24) * 2
+    expect(lenOf(result, '14QR')).toBe(15+30+2*24)
+    // SM: 两侧高
+    expect(lenOf(result, '14SM')).toBe(34.5*2)
   });
   // #endregion
 
   // #region UNIPACK
   it('UNIPACK 颜色高柜侧板跳过（PNL3696Q 不产生）', () => {
-    const tallItem = makeItem({ category: 'tall_cabinet', sku: '02T96', height: 96 });
+    const tallItem = makeItem({ category: 'tall_cabinet', sku: '02UT', height: 96 });
     const wall = makeWall({
       width: 30,
       exposedLeft: true,
@@ -300,19 +318,27 @@ describe('generateMaterialList', () => {
   // #region 电器与框架
   it('DWP 贴墙边缘省略：exposedLeft=false → 仅 1 个 DWP', () => {
     const wall = makeWall({
-      width: 60,
+      width: 51,
       exposedLeft: false,
       exposedRight: true,
       groundBlocks: [
-        makeBlock({ width: 30, colorCode: '14', items: [makeItem({ category: 'base_appliance_need_top', sku: '14DWPA' })] }),
-        makeBlock({ width: 30, colorCode: '14', items: [makeItem({ sku: '14B15' })] }),
+        makeBlock({ width: 36, colorCode: '14', items: [makeItem({ category: 'base_appliance_need_top', sku: 'dishwasher' })] }),
+        makeBlock({ width: 15, colorCode: '14', items: [makeItem({ sku: '14B15' })] }),
       ],
     });
     const result = generateMaterialList(makeLayout([wall]));
 
     // 左侧贴墙且 exposedLeft=false → 省去左 DWP；右侧朝柜 → DWP 存在但框侧不外露
     expect(qty(result, '14DWP')).toBe(1);
-    expect(qty(result, '14DWPA')).toBe(0);
+    expect(qty(result, 'dishwasher')).toBe(0);
+    // TK: 仅普通橱柜正面
+    expect(lenOf(result, '14TK')).toBe(15)
+    // QR: 仅普通橱柜正面+其侧面
+    expect(lenOf(result, '14QR')).toBe(15+24)
+    // SM: 仅普通橱柜那侧一个高
+    expect(lenOf(result, '14SM')).toBe(34.5)
+    // 仅普通橱柜那侧一个高
+    expect(qty(result, '14BEP')).toBe(1);
   });
 
   it('高电器无叠放：无 RRP', () => {
@@ -367,11 +393,11 @@ describe('generateMaterialList', () => {
   // #region Filler 填充条
   it('filler 正常进清单（不紧邻电器时）', () => {
     const wall = makeWall({
-      width: 90,
+      width: 60,
       groundBlocks: [
-        makeBlock({ width: 30, colorCode: '14', items: [makeItem({ category: 'filler', sku: 'BF3' })] }),
+        makeBlock({ width: 15, colorCode: '14', items: [makeItem({ category: 'filler', sku: 'BF3' })] }),
         makeBlock({ width: 30, colorCode: '14', items: [makeItem({ category: 'base_cabinet', sku: '14B15' })] }),
-        makeBlock({ width: 30, colorCode: '14', items: [makeItem({ category: 'filler', sku: 'BF3' })] }),
+        makeBlock({ width: 15, colorCode: '14', items: [makeItem({ category: 'filler', sku: 'BF3' })] }),
       ],
     });
     const result = generateMaterialList(makeLayout([wall]));
@@ -379,9 +405,11 @@ describe('generateMaterialList', () => {
     // filler 进清单
     expect(qty(result, 'BF3')).toBe(2);
     // TK 包含 filler 的长度
-    expect(lenOf(result, '14TK')).toBe(90);
-    // QR 正面 90 + 2 侧 2×24, filler 的长度
-    expect(lenOf(result, '14QR')).toBe(90+2*24);
+    expect(lenOf(result, '14TK')).toBe(60);
+    // QR 正面 60 + 2 侧 2×24, filler 的长度
+    expect(lenOf(result, '14QR')).toBe(60+2*24);
+    // filler 不产生额外 BEP → 2 BEP
+    expect(qty(result, '14BEP')).toBe(2);
   });
 
   it('边缘 filler 后的地柜按有效边缘生成 BEP', () => {

@@ -445,8 +445,8 @@ interface TallApplianceInfo {
 }
 
 /**
- * 处理 DWP 框料及其框侧板 / 框侧 SM / 框侧 QR。
- * DWP 默认左右各 1 根（共 2）；贴墙边缘且该侧不外露时省去该侧 DWP。
+ * 处理 DWP 框料
+ * DWP 默认左右各 1 片（共 2）；贴墙边缘且该侧不外露时省去该侧 DWP。
  */
 function processDwp(
   wall: LayoutWall,
@@ -698,7 +698,7 @@ function processQr(wall: LayoutWall, ground: PosBlock[], acc: Accumulator): void
   for (const pos of ground) {
     const cat = pos.cat;
     // 仅地柜 / 高柜参与（电器框侧 QR 在 DWP/RRP 处理中累计）
-    if (!isBaseCabinet(cat) && !isTallCabinet(cat)) continue;
+    if (!isBaseCabinet(cat) && !isTallCabinet(cat) && !isFiller(cat)) continue;
     const color = blockColor(pos.block);
     const depth = isVanityBlock(pos.block) ? VANITY_DEPTH : BASE_DEPTH;
 
@@ -709,10 +709,20 @@ function processQr(wall: LayoutWall, ground: PosBlock[], acc: Accumulator): void
       addLength(acc, withColor(color, 'QR'), pos.block.width);
     }
     // 侧面：外露时按进深计入
-    if (frameSideExposed(pos, ground, wall, 'left')) {
+    // 边缘的情况，由于常规柜子会越过 filler 查看边缘情况，因此 filler 需要跳过
+    if (!isFiller(cat) && atEdgeAbsorbFiller(pos, ground, wall, 'right') && edgeFlag(wall, 'right')) {
       addLength(acc, withColor(color, 'QR'), depth);
     }
-    if (frameSideExposed(pos, ground, wall, 'right')) {
+    if (!isFiller(cat) && atEdgeAbsorbFiller(pos, ground, wall, 'left') && edgeFlag(wall, 'left')) {
+      addLength(acc, withColor(color, 'QR'), depth);
+    }
+    // 邻居遮挡不住的情况
+    const rightNeighbor = getNonFillerNeighbor(pos, ground, 'right')
+    if (rightNeighbor && isNonBlocking(rightNeighbor.cat)) {
+      addLength(acc, withColor(color, 'QR'), depth);
+    }
+    const leftNeighbor = getNonFillerNeighbor(pos, ground, 'left')
+    if (leftNeighbor && isNonBlocking(leftNeighbor.cat)) {
       addLength(acc, withColor(color, 'QR'), depth);
     }
   }
