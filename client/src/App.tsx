@@ -32,9 +32,9 @@ export default function App() {
       <Route
         path="/layout-recognize"
         element={
-          <AdminGuard>
+          <AuthGuard>
             <LayoutRecognizePage />
-          </AdminGuard>
+          </AuthGuard>
         }
       />
       <Route
