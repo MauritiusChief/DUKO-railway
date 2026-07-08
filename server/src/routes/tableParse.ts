@@ -1,7 +1,7 @@
 /**
  * TableParse 路由 —— 表格解析 + 颜色查询 + 产品生成
  *
- * POST /api/table-parse    → MainAgent (SSE 流式)
+ * POST /api/table-parse    → TableParseAgent (SSE 流式)
  * GET  /api/colors         → 颜色代码对照表
  * POST /api/check-exposed  → 批量校验 Exposed-Items 匹配
  * POST /api/generate-products → 将 ParsedItem 转为 Product 列表
@@ -20,7 +20,7 @@ import { Router, type Request, type Response } from 'express';
 import { randomUUID } from 'crypto';
 import { createDeepSeekProvider } from '../llm/index.js';
 import { config } from '../config/env.js';
-import { MainAgent } from '../agents/main-agent.js';
+import { TableParseAgent } from '../agents/table-parse-agent.js';
 import { SSEConnection } from '../middleware/sse.js';
 import { validate } from '../middleware/validate.js';
 import {
@@ -282,8 +282,8 @@ tableParseLlmRouter.post('/', validate(tableParseSchema), async (req: Request, r
       conversationId,
       userId: req.user!.userId,
       username: req.user!.username,
-      mainAgent: 'MainAgent',
-      agentName: 'MainAgent',
+      mainAgent: 'TableParseAgent',
+      agentName: 'TableParseAgent',
       route: '/api/table-parse',
       provider: llm.providerName,
       model: llm.model,
@@ -302,8 +302,8 @@ tableParseLlmRouter.post('/', validate(tableParseSchema), async (req: Request, r
     );
   }
 
-  const agent = new MainAgent(llm, {
-    searchBudgetLimit: 32,
+  const agent = new TableParseAgent(llm, {
+    budgetLimit: 32,
     maxRounds: 40,
     langHint: '中文',
     onStep: (event) => {

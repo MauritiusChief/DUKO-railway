@@ -1,5 +1,5 @@
 /**
- * MainAgent —— 解析清单编排 Agent
+ * TableParseAgent —— 解析清单编排 Agent
  *
  * 接收原始清单文本，拆分并委派给三个子 agent（BatchSearch / PreciseSearch / GlassDoor），
  * 自身可通过 searchSkuXxx 工具补漏，通过清单编辑工具（addItem / deleteItem / editItemCell）
@@ -69,10 +69,10 @@ import { ToolName } from '../tools/index.js';
 import { computeExposedStatus } from '../services/exposed-check.js';
 
 // ==================================================================
-//  MainAgent 专用上下文
+//  TableParseAgent 专用上下文
 // ==================================================================
 
-export interface MainAgentContext extends AgentContext {
+export interface TableParseAgentContext extends AgentContext {
   manifest: MutableManifest;
   inputLines: string[];
   notes?: ChatNote[];
@@ -80,10 +80,10 @@ export interface MainAgentContext extends AgentContext {
 }
 
 // ==================================================================
-//  MainAgent
+//  TableParseAgent
 // ==================================================================
 
-export class MainAgent extends BaseAgent<ChatMessage> {
+export class TableParseAgent extends BaseAgent<ChatMessage> {
   static override ownedToolNames = [
     'dispatchBatchSearch',
     'dispatchPreciseSearch',
@@ -159,7 +159,7 @@ export class MainAgent extends BaseAgent<ChatMessage> {
     _messages: ChatMessage[],
     context: AgentContext,
   ): void {
-    const ctx = context as MainAgentContext;
+    const ctx = context as TableParseAgentContext;
     ctx.manifest.itemSnapshot = [...ctx.manifest.items];
     ctx.manifest.productSnapshot = [...ctx.manifest.products];
   }
@@ -172,7 +172,7 @@ export class MainAgent extends BaseAgent<ChatMessage> {
     tc: ToolCall,
     context: AgentContext,
   ): Promise<string> {
-    const ctx = context as MainAgentContext;
+    const ctx = context as TableParseAgentContext;
     const args = this.parseArgs(tc.function.arguments);
 
     switch (tc.function.name) {
@@ -182,7 +182,7 @@ export class MainAgent extends BaseAgent<ChatMessage> {
         const batch = Array.isArray(args.batch) ? args.batch : [];
         if (batch.length === 0) return 'dispatchBatchSearch: batch 为空或格式错误';
         const sub = new BatchSearchAgent(this.llm, {
-          searchBudgetLimit: 5,
+          budgetLimit: 5,
           maxRounds: 8,
           langHint: this.config.langHint,
           onStep: (evt) => {
@@ -202,7 +202,7 @@ export class MainAgent extends BaseAgent<ChatMessage> {
         const originalName = String(item.originalName ?? '');
         if (!originalName) return 'dispatchPreciseSearch: item.originalName 必填';
         const sub = new PreciseSearchAgent(this.llm, {
-          searchBudgetLimit: 5,
+          budgetLimit: 5,
           maxRounds: 7,
           langHint: this.config.langHint,
           onStep: (evt) => {
@@ -224,7 +224,7 @@ export class MainAgent extends BaseAgent<ChatMessage> {
         const models = Array.isArray(args.cabinetModels) ? args.cabinetModels : [];
         if (models.length === 0) return 'dispatchGlassDoorCalc: cabinetModels 为空或格式错误';
         const sub = new GlassDoorAgent(this.llm, {
-          searchBudgetLimit: 2,
+          budgetLimit: 2,
           maxRounds: 4,
           langHint: this.config.langHint,
           onStep: (evt) => {
@@ -303,7 +303,7 @@ export class MainAgent extends BaseAgent<ChatMessage> {
       products: [],
     };
 
-    const context: MainAgentContext = {
+    const context: TableParseAgentContext = {
       manifest,
       inputLines,
       notes: args.notes,
@@ -460,7 +460,7 @@ ${notesSection}${fromImageNote}
 - **searchSkuDescription**：BM25 全文检索描述字段 + 颜色
 - **searchSkuStructured**：结构化多维度检索（形状 JSON 过滤树 + 描述 JSON 过滤树 + 向量检索 + 颜色）
 
-自有搜索工具与 dispatch 工具均计入搜索预算，用完即不可再调用。
+自有搜索工具与 dispatch 工具均计入工具预算，用完即不可再调用。
 
 ## 清单编辑工具
 

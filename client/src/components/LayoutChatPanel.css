@@ -1,4 +1,4 @@
-/* LayoutChatPanel —— 对话面板占位样式 */
+/* LayoutChatPanel —— 对话面板样式 */
 
 .lc-panel {
   border: 1px solid #ddd;
@@ -19,12 +19,19 @@
   flex-shrink: 0;
 }
 
-.lc-panel-placeholder {
+.lc-panel-messages {
   flex: 1;
+  overflow-y: auto;
+  padding: 8px 12px;
+}
+
+.lc-panel-empty {
   display: flex;
   align-items: center;
   justify-content: center;
   color: #bbb;
-  font-size: 12px;
+  font-size: 13px;
   padding: 20px;
+  text-align: center;
+  height: 100%;
 }

@@ -15,8 +15,9 @@ export type BlockItemCategory =
   | 'base_cabinet'
   | 'tall_cabinet'
   | 'gap'
-  | 'range_hood'
-  | 'window'
+  | 'stuffed_gap'              // 塞了东西的空挡（hood/window 等），本质同 gap
+  | 'gaplike_item'             // 类似 gap 的商品（VAL/GH/WES），进清单但两侧遮挡不住
+  | 'filler'                   // 填充条（BF/WF/TF），进清单但紧邻高电器时自动清除
   | 'tall_appliance'
   | 'base_appliance_need_top'
   | 'base_appliance_without_top';
@@ -30,6 +31,10 @@ export interface BlockItem {
   id: string;
   category: BlockItemCategory;
   sku: string;
+  /** 是否为 vanity cabinet（仅 base_cabinet 有效） */
+  isVanity?: boolean;
+  /** 物品高度（英寸），地面柜无需记录。air 轨 wall_cabinet / tall_cabinet / tall_appliance 及叠放吊柜均需填写 */
+  height?: number;
 }
 
 /** 一个布局块（若干物品堆叠在一起的轨道片段） */
@@ -37,9 +42,11 @@ export interface SectionBlock {
   id: string;
   width: number;
   items: BlockItem[];
+  /** 该块的颜色代码（如 "02"），空字符串表示未选 */
+  colorCode?: string;
 }
 
-/** 一面墙 */
+/** 一面墙（统一定义，岛台视为特殊墙面） */
 export interface LayoutWall {
   id: string;
   name: string;
@@ -50,27 +57,14 @@ export interface LayoutWall {
   airBlocks: SectionBlock[];
   groundBlocks: SectionBlock[];
   connectedWallIds: string[];
-}
-
-/** 一个岛台 */
-export interface LayoutIsland {
-  id: string;
-  name: string;
-  width: number;
-  exposedLeft: boolean;
-  exposedRight: boolean;
-  exposedBack: boolean;
-  airBlocks: SectionBlock[];
-  groundBlocks: SectionBlock[];
+  /** 背靠背岛台关系（仅 Agent 可编辑） */
   backToBackIslandIds: string[];
 }
 
 /** 布局文档顶层结构 */
 export interface LayoutDocument {
   id: string;
-  name: string;
   walls: LayoutWall[];
-  islands: LayoutIsland[];
   createdAt: string;
   updatedAt: string;
 }

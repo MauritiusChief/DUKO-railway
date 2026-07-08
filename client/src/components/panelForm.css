@@ -1,0 +1,234 @@
+/**
+ * panelForm —— BlockInfoBar 与 wp-add-form 共用的面板表单样式
+ *
+ * 两组件均为「3 行纵向排列」结构：信息字段行 → 叠放行（条件） → 操作行。
+ * 使用 pf- 前缀的统一类名，确保视觉一致。
+ */
+
+/* 面板容器：纵向排列行，带浅蓝边框/底色 */
+
+.pf-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 4px 6px;
+  border: 1px solid #d0e3f7;
+  border-radius: 3px;
+  background: #f5f9ff;
+}
+
+/* 行容器：横排，行内放不下时才折行 */
+
+.pf-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  width: 100%;
+}
+
+/* 叠放行：加左侧装饰线表示子区块 */
+
+.pf-row-stacked {
+  padding-left: 4px;
+  border-left: 2px solid #d0e3f7;
+}
+
+/* ---- 第1行：信息字段 ---- */
+
+.pf-category {
+  font-size: 11px;
+  font-weight: 600;
+  color: #333;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
+}
+
+.pf-field {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  color: #666;
+  white-space: nowrap;
+}
+
+.pf-input {
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  padding: 2px 5px;
+  font-size: 11px;
+  font-family: inherit;
+  background: #fff;
+}
+
+.pf-select {
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  padding: 2px 5px;
+  font-size: 11px;
+  font-family: inherit;
+  background: #fff;
+  cursor: pointer;
+}
+
+.pf-sku-input {
+  width: 90px;
+  font-family: monospace;
+}
+
+.pf-width-input {
+  width: 48px;
+  text-align: right;
+}
+
+.pf-height-input {
+  width: 48px;
+  text-align: right;
+}
+
+.pf-readonly {
+  font-size: 11px;
+  color: #999;
+  white-space: nowrap;
+}
+
+/* ---- 第2行：叠放物品 ---- */
+
+.pf-stacked {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+
+.pf-stacked-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 10px;
+  color: #777;
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 2px;
+  padding: 1px 4px;
+  font-family: monospace;
+}
+
+.pf-stacked-height {
+  color: #4a90d9;
+  font-weight: 600;
+}
+
+.pf-stacked-remove {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #ccc;
+  font-size: 11px;
+  padding: 0 1px;
+  line-height: 1;
+  border-radius: 2px;
+}
+
+.pf-stacked-remove:hover {
+  color: #c00;
+  background: #fee;
+}
+
+.pf-stacked-add {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.pf-stacked-add-input {
+  width: 90px;
+  font-family: monospace;
+}
+
+.pf-stacked-add-height {
+  width: 48px;
+  text-align: right;
+}
+
+.pf-stacked-add-btn {
+  font-size: 10px;
+  background: none;
+  border: 1px dashed #aaa;
+  border-radius: 2px;
+  cursor: pointer;
+  color: #888;
+  padding: 1px 6px;
+}
+
+.pf-stacked-add-btn:hover {
+  border-color: #4a90d9;
+  color: #4a90d9;
+}
+
+/* ---- 第3行：操作按钮 ---- */
+
+.pf-btn-ok {
+  background: #4a90d9;
+  border: 1px solid #3a7bc8;
+  cursor: pointer;
+  color: #fff;
+  font-size: 12px;
+  padding: 2px 6px;
+  line-height: 1;
+  border-radius: 3px;
+}
+
+.pf-btn-ok:hover {
+  background: #3a7bc8;
+}
+
+.pf-btn-delete {
+  background: none;
+  border: 1px solid #ddd;
+  cursor: pointer;
+  color: #aaa;
+  font-size: 12px;
+  padding: 2px 6px;
+  line-height: 1;
+  border-radius: 3px;
+}
+
+.pf-btn-delete-dynamic:hover {
+  color: #c00;
+  background: #fee;
+  border-color: #e0b4b4;
+}
+
+.pf-btn-delete-static:hover {
+  color: #e67e22;
+  background: #fff3e0;
+  border-color: #e0c4a0;
+}
+
+.pf-btn-close {
+  margin-left: auto;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #888;
+  font-size: 11px;
+  padding: 2px 4px;
+  line-height: 1;
+  border-radius: 2px;
+}
+
+.pf-btn-close:hover {
+  color: #333;
+  background: #e8e8e8;
+}
+
+/* 双轨徽标（BlockInfoBar 专用，但放在共用文件中以便集中管理） */
+
+.pf-dual-badge {
+  font-size: 10px;
+  color: #4a90d9;
+}

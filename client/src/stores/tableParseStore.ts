@@ -7,6 +7,7 @@ import { create } from 'zustand';
 import type { ColorEntry, ParsedItem, TableParseResponse, ProductEntry, GenerateProductsResponse, ConversationEntry } from '../types';
 import { tOutside, getLang } from '../i18n/context';
 import { fetchWithAuth } from '../lib/fetchWithAuth';
+import type { SSEEvent } from '../lib/sse';
 
 // Shape types whose color field can be N/A (not tied to any specific color/finish)
 export const SHAPE_TYPES_COLOR_NA = new Set(['GD', 'TCR']);
@@ -161,9 +162,9 @@ interface TableParseState {
   /** 最近一次解析的输入行数（ChatPanel 显示缩写消息用） */
   parseInputLineCount: number;
   /** 解析过程中产生的事件回调（ChatPanel 在 useEffect 中设置） */
-  parseEventCallback: ((event: { type: string; data: Record<string, unknown> }) => void) | null;
+  parseEventCallback: ((event: SSEEvent) => void) | null;
   /** 供 ChatPanel 注册事件回调 */
-  setParseEventCallback: (cb: ((event: { type: string; data: Record<string, unknown> }) => void) | null) => void;
+  setParseEventCallback: (cb: ((event: SSEEvent) => void) | null) => void;
 
   // ---- 图片模式操作 ----
 
@@ -234,6 +235,9 @@ export const useTableParseStore = create<TableParseState>((set, get) => {
   },
 
   fetchColors: async () => {
+    // 已缓存则跳过请求
+    const { availableColors } = get();
+    if (availableColors.length > 0) return;
     try {
       const res = await fetchWithAuth('/api/colors');
       if (!res.ok) throw new Error('获取颜色列表失败');

@@ -43,9 +43,16 @@ export default function LoginPage() {
   const [mgmtError, setMgmtError] = useState('');
   const [mgmtSuccess, setMgmtSuccess] = useState('');
 
-  const { login, register, loading, error, user, logout } = useAuthStore();
+  const { login, register, loading, error, user, logout, accessToken, userVerified, loadMe } = useAuthStore();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+
+  // 页面刷新后 user 不在 localStorage，需通过 /api/me 从服务端恢复身份
+  useEffect(() => {
+    if (accessToken && !userVerified) {
+      loadMe();
+    }
+  }, [accessToken, userVerified, loadMe]);
 
   const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
@@ -200,6 +207,17 @@ export default function LoginPage() {
   /** 判断是否为种子管理员（当前登录者） */
   const isSelfAdmin = (u: { role: string; username: string }) =>
     u.role === 'admin' && u.username === user?.username;
+
+  // 待服务端验证身份（页面刷新后 user 不在 localStorage）
+  if (accessToken && !userVerified) {
+    return (
+      <div className="login-page">
+        <div className="login-card">
+          <p>正在验证身份...</p>
+        </div>
+      </div>
+    );
+  }
 
   // 已登录状态：显示用户信息 + 可选的注册面板 + 管理员用户管理
   if (user) {

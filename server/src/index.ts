@@ -29,6 +29,7 @@ import { debugRouter } from './routes/debug.js';
 import { authRouter, meHandler } from './routes/auth.js';
 import { historyRouter, adminHistoryRouter } from './routes/history.js';
 import { notesRouter } from './routes/notes.js';
+import { layoutGenerateListRouter } from './routes/layoutGenerateList.js';
 import { traceRouter } from './routes/trace.js';
 import { authenticateToken } from './middleware/auth.js';
 import { authLimiter, apiLimiter, llmLimiter } from './middleware/rateLimit.js';
@@ -128,6 +129,7 @@ app.use('/api', tableParseRouter);    // GET /api/colors / POST /api/check-expos
 app.use('/api', debugRouter);         // POST /api/debug/tool —— 工具测试接口（debug 用）
 app.use('/api', historyRouter);       // GET/POST/DELETE /api/history[/:id] —— 历史记录
 app.use('/api', notesRouter);         // GET/POST /api/notes —— 用户笔记
+app.use('/api', layoutGenerateListRouter); // POST /api/layout/generate-list —— 物料清单
 
 // ---- 前端静态文件（生产模式） ----
 const clientDist = path.resolve(__dirname, '../../client/dist');

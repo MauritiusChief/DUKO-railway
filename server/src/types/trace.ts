@@ -20,7 +20,7 @@ export interface TraceContext {
   userId: number;
   /** 用户名快照 */
   username: string;
-  /** 顶层入口 Agent（如 MainAgent / ChatAgent / ImageParseAgent / LayoutAgent） */
+  /** 顶层入口 Agent（如 TableParseAgent / ChatAgent / ImageParseAgent / LayoutAgent） */
   mainAgent: string;
   /** 实际执行的 Agent 类名 */
   agentName: string;
