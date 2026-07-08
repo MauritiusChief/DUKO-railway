@@ -562,7 +562,7 @@ describe('generateMaterialList', () => {
   it('高柜+吊柜 CM：进深升级为 24', () => {
     const tallItem = makeItem({ category: 'tall_cabinet', sku: '14UT', height: 96 });
     const wall = makeWall({
-      width: 60,
+      width: 36,
       airBlocks: [
         makeBlock({ width: 18, colorCode: '14', items: [tallItem] }),
         makeBlock({ width: 18, colorCode: '14', items: [makeItem({ category: 'wall_cabinet', sku: '14W30', height: 30 })] }),
