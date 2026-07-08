@@ -150,6 +150,9 @@ function isVanityBlock(block: SectionBlock): boolean {
 function isAllVanityBlock(posBlocks: PosBlock[]): boolean {
   return posBlocks.every(posBlock => isVanityBlock(posBlock.block))
 }
+function isAnyTallBlock(posBlocks: PosBlock[]): boolean {
+  return posBlocks.some(posBlock => isTallObject(posBlock.cat))
+}
 
 /** block 是否含 tall 物体（高柜/高电器）—— 用于识别叠放吊柜场景 */
 function hasTallItem(block: SectionBlock): boolean {
@@ -842,20 +845,15 @@ function processCm(
     const item = pos.block.items[0];
     if (!item) continue;
 
+    const depth = isAnyTallBlock(air) ? TALL_DEPTH : WALL_DEPTH;
+    const color = blockColor(pos.block);
+
     // 高电器已在 processRrp 中处理
     if (isTallAppliance(cat)) continue;
 
-    // 吊柜（独立，非叠放）/ filler
-    if ((isWallCabinet(cat) && !hasTallItem(pos.block)) || isFiller(cat)) {
-      const color = blockColor(pos.block);
-      processCmForAirBlock(pos, air, wall, WALL_DEPTH, color, acc);
-      continue;
-    }
-
-    // 高柜
-    if (isTallCabinet(cat)) {
-      const color = blockColor(pos.block);
-      processCmForAirBlock(pos, air, wall, TALL_DEPTH, color, acc);
+    // 吊柜（独立，非叠放）/ filler / 高柜
+    if ((isWallCabinet(cat) && !hasTallItem(pos.block)) || isFiller(cat) || isTallCabinet(cat)) {
+      processCmForAirBlock(pos, air, wall, depth, color, acc);
       continue;
     }
   }
