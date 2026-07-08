@@ -291,7 +291,7 @@ function cabinetSideExposed(
   wall: LayoutWall,
   side: Side,
 ): boolean {
-  if (frameSideExposed(pos, blocks, wall, side)) return true;
+  if (atEdge(pos, wall, side)) return edgeFlag(wall, side);
   const neighbor = getNonFillerNeighbor(pos, blocks, side);
   if (!neighbor) return false;
   const ncat = neighbor.cat;
