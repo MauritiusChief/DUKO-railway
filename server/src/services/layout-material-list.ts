@@ -977,6 +977,22 @@ export function generateMaterialList(layout: LayoutDocument): MaterialListResult
 
   // 2. 逐墙处理辅料
   for (const wall of layout.walls) {
+    // 空中块宽度检查
+    const airWidth = wall.airBlocks.reduce((sum, b) => sum + b.width, 0);
+    if (wall.airBlocks.length > 0 && Math.abs(airWidth - wall.width) > 0.001) {
+      acc.warnings.push(
+        `墙"${wall.name}"空中块总宽度(${airWidth}")与墙宽(${wall.width}")不一致`
+      );
+    }
+
+    // 地面块宽度检查
+    const groundWidth = wall.groundBlocks.reduce((sum, b) => sum + b.width, 0);
+    if (wall.groundBlocks.length > 0 && Math.abs(groundWidth - wall.width) > 0.001) {
+      acc.warnings.push(
+        `墙"${wall.name}"地面块总宽度(${groundWidth}")与墙宽(${wall.width}")不一致`
+      );
+    }
+
     const ground = positionBlocks(wall.groundBlocks);
     const air = positionBlocks(wall.airBlocks);
 
