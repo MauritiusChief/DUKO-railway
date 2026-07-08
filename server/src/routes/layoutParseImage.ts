@@ -210,6 +210,8 @@ layoutParseImageRouter.post('/', validate(layoutParseSchema), async (req: Reques
     sse.send('reply_done', {});
 
     sse.send('result', { updatedLayout });
+
+    sse.send('done', {});
   } catch (err) {
     console.error('[layout-parse] error:', err);
     if (traceContext) {

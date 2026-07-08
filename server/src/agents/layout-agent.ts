@@ -343,7 +343,7 @@ export class LayoutAgent extends BaseAgent<ChatMessage> {
   private buildPrompt(viewType: string, associatedNames: string[]): string {
     const wallHint = associatedNames.length > 0
       ? `此图描述以下墙: ${associatedNames.join(', ')}。`
-      : '';
+      : '此图片不与已有的布局相关联，请新建墙以容纳此图片描述的布局。';
     const shapeTable = this.shapeTypeTable || '（暂无数据）';
     const colorTable = this.colorTable || '（暂无数据）';
 

@@ -26,7 +26,7 @@ export function ImageUploadPanel({ layout, onLayoutUpdated }: ImageUploadPanelPr
 
   const [imageData, setImageData] = useState<string | null>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
-  const [viewType, setViewType] = useState<'top' | 'elevation' | '3d'>('top');
+  const [viewType, setViewType] = useState<'top' | 'elevation' | '3d'>('elevation');
   const [associatedWallIds, setAssociatedWallIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -214,8 +214,8 @@ export function ImageUploadPanel({ layout, onLayoutUpdated }: ImageUploadPanelPr
       <div className="iup-row">
         <label className="iup-label">{t('视图类型')}:</label>
         <select className="iup-select" value={viewType} onChange={(e) => setViewType(e.target.value as 'top' | 'elevation' | '3d')}>
-          <option value="top">{t('俯视图')}</option>
           <option value="elevation">{t('正视图')}</option>
+          <option value="top">{t('俯视图')}</option>
           <option value="3d">{t('立体图')}</option>
         </select>
       </div>

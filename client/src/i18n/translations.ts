@@ -551,8 +551,8 @@ export const messages = {
     en: '3D View',
   },
   关联墙面岛台: {
-    zh: '关联墙/岛台',
-    en: 'Associated Wall/Island',
+    zh: '此图片描述的墙/岛台',
+    en: 'Wall/Island described by this picture',
   },
   识别中: {
     zh: '识别中...',
