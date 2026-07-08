@@ -30,7 +30,7 @@ const CATEGORY_T_KEY: Record<BlockItemCategory, string> = {
 
 /** 无需颜色信息的分类 */
 const NO_COLOR_CATEGORIES: ReadonlySet<BlockItemCategory> = new Set([
-  'gap', 'stuffed_gap', 'gaplike_item',
+  'gap', 'stuffed_gap',
   'tall_appliance', 'base_appliance_need_top', 'base_appliance_without_top',
 ]);
 

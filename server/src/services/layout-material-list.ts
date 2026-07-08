@@ -334,8 +334,11 @@ function addLength(acc: Accumulator, sku: string, len: number): void {
 
 function warnMissingColor(acc: Accumulator, wallName: string, idx: number, block?: SectionBlock): void {
   // 无需颜色的分类不报警
-  if (block && block.items[0] && NO_COLOR_CATEGORIES.has(block.items[0].category)) return;
-  acc.warnings.push(`墙"${wallName}"第 ${idx + 1} 个块缺少颜色信息`);
+  const category = block?.items[0].category
+  const sku = block?.items[0].sku
+  if (category && NO_COLOR_CATEGORIES.has(category)) return;
+  const info = !category || isGroundObject(category) ? `墙"${wallName}"地面[${idx + 1}]${sku}缺少颜色信息` : `墙"${wallName}"空中[${idx + 1}]${sku}缺少颜色信息`
+  acc.warnings.push(info);
 }
 
 // ==================================================================
@@ -389,7 +392,6 @@ function processDwp(
   for (const pos of ground) {
     if (!isBaseApplianceNeedTop(pos.cat)) continue;
     const color = blockColor(pos.block);
-    if (!color) warnMissingColor(acc, wall.name, ground.indexOf(pos), pos.block);
 
     // 左右两侧是否需要 DWP（贴墙且不外露则省去）
     const leftOmit = atEdge(pos, wall, 'left') && !wall.exposedLeft;
@@ -485,7 +487,6 @@ function processRrp(
     if (!info.hasStacked) continue; // 无叠放 → 无 RRP
     const pos = info.airPos!;
     const color = blockColor(pos.block);
-    if (!color) warnMissingColor(acc, wall.name, air.indexOf(pos), pos.block);
 
     // 左右两侧是否需要 RRP
     const leftOmit = atEdge(pos, wall, 'left') && !wall.exposedLeft;
@@ -544,7 +545,6 @@ function processSidePanels(
     const cat = pos.cat;
     if (!isBaseCabinet(cat) && !isTallCabinet(cat)) continue;
     const color = blockColor(pos.block);
-    if (!color) warnMissingColor(acc, wall.name, ground.indexOf(pos), pos.block);
     // UNIPACK 颜色跳过柜体侧板
     if (isUnicolor(color)) continue;
 
@@ -582,7 +582,6 @@ function processSidePanels(
     // 叠放吊柜（与 tall 物体同 block）跳过，由 tall 物体侧板覆盖
     if (hasTallItem(pos.block)) continue;
     const color = blockColor(pos.block);
-    if (!color) warnMissingColor(acc, wall.name, air.indexOf(pos), pos.block);
     if (isUnicolor(color)) continue;
 
     const leftExposed = cabinetSideExposed(pos.cat, pos, air, wall, 'left');
@@ -919,6 +918,13 @@ export function generateMaterialList(layout: LayoutDocument): MaterialListResult
 
     // CM
     processCm(wall, air, tallApps, acc);
+
+    // 添加缺颜色信息警告
+    for (const pos of [...ground, ...air]) {
+      const color = blockColor(pos.block);
+      const index = ground.includes(pos) ? ground.indexOf(pos) : air.includes(pos) ? air.indexOf(pos) : -1
+      if (!color) warnMissingColor(acc, wall.name, index, pos.block);
+    }
   }
 
   // 2.5. 清除紧邻高电器/需台面电器的 filler（OCR 误识别的 DWP/RRP）
