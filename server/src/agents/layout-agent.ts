@@ -316,7 +316,7 @@ export class LayoutAgent extends BaseAgent<ChatMessage> {
       {
         role: 'user',
         content:
-          `请根据以下 OCR 识别结果更新当前布局，使其与图片一致。\n\n## 初始 OCR 结果\n\n${args.initialOcrText}`,
+          `请根据以下 OCR 识别结果，更新当前布局中**此图所关联的墙**上的物品，使关联墙的布局与图片一致。其他与此图无关的墙仅供参考，**保持原样，不要删改**。\n\n## 初始 OCR 结果\n\n${args.initialOcrText}`,
       },
     ];
 
@@ -342,14 +342,14 @@ export class LayoutAgent extends BaseAgent<ChatMessage> {
 
   private buildPrompt(viewType: string, associatedNames: string[]): string {
     const wallHint = associatedNames.length > 0
-      ? `此图描述以下墙: ${associatedNames.join(', ')}。`
+      ? `此图**仅**描述以下 ${associatedNames.length} 面墙: ${associatedNames.join(', ')}。`
       : '此图片不与已有的布局相关联，请新建墙以容纳此图片描述的布局。';
     const shapeTable = this.shapeTypeTable || '（暂无数据）';
     const colorTable = this.colorTable || '（暂无数据）';
 
     return `你是一个厨房橱柜布局编排助手。系统已经通过 OCR 预处理识别了图片中的橱柜结构，
 你的任务是根据 OCR 结果和当前布局，调用工具进行编排修改。
-${wallHint}
+${wallHint}布局中**其他墙与此图无关**，不得修改或删除。
 
 ## 形状代码对照表
 
@@ -448,6 +448,7 @@ connectedWallIds 表示 L 形转角连接关系。connectIslands 用于设置背
 - **同一布局可能由多张不同视角/区域的图片逐步完善**，本次请求仅处理当前 OCR 呈现的信息
 - dispatch 类工具（dispatchLayoutOcr / dispatchBatchSearch / dispatchPreciseSearch）可以并发调用
 - layout 修改工具会串行执行，每次修改后无需再次 readLayout
+- **严禁删除、修改或重命名未关联的墙**：只能修改关联墙上的物品。非关联墙即使看起来与 OCR/图片不完全匹配，也必须原封不动地保留，因为它们由其他图片负责
 - **仅使用中文回复**，简洁告知用户做了哪些修改`;
   }
 }
