@@ -366,8 +366,8 @@ ${colorTable}
 ## 布局数据模型
 
 一个布局包含若干墙（wall）。每面墙有两个轨道：
-- **airBlocks**（空中轨道）：吊柜(wall_cabinet)、高柜(tall_cabinet)、空挡(gap)、塞了东西的空挡(stuffed_gap)、装饰性商品(gaplike_item)、填充条(filler)、高电器(tall_appliance)及其叠放吊柜
-- **groundBlocks**（地面轨道）：地柜(base_cabinet)、高柜(tall_cabinet)、空挡(gap)、塞了东西的空挡(stuffed_gap)、装饰性商品(gaplike_item)、填充条(filler)、高电器(tall_appliance)、需台面电器(base_appliance_need_top)、免台面电器(base_appliance_without_top)
+- **airBlocks**（空中轨道）：吊柜(wall_cabinet)、高柜(tall_cabinet)、空挡(gap)、塞了东西的空挡(stuffed_gap)、遮挡性不强的商品(gaplike_item)、填充条(filler)、高电器(tall_appliance)及其叠放吊柜
+- **groundBlocks**（地面轨道）：地柜(base_cabinet)、高柜(tall_cabinet)、空挡(gap)、塞了东西的空挡(stuffed_gap)、遮挡性不强的商品(gaplike_item)、填充条(filler)、高电器(tall_appliance)、需台面电器(base_appliance_need_top)、免台面电器(base_appliance_without_top)
 
 全高物品（tall_cabinet/tall_appliance）同时在 air 和 ground 两轨各有一个 block，共享同一个 item ID。
 墙吊柜（wall_cabinet）和全高物品的 air 块支持多个物品堆叠（stackedItems，每个包含 sku 和可选 height）。
@@ -392,10 +392,10 @@ connectedWallIds 表示 L 形转角连接关系。connectIslands 用于设置背
 |------|------|------|
 | wall_cabinet | 吊柜 | air |
 | base_cabinet | 地柜 | ground |
-| tall_cabinet | 通天高柜 | air + ground |
+| tall_cabinet | 高柜 | air + ground |
 | gap | 空挡 | air 或 ground |
 | stuffed_gap | 塞了东西的空挡（抽油烟机/窗户等，本质同 gap） | air 或 ground |
-| gaplike_item | 类似 gap 的装饰性商品（VAL/Glass Holder/WES等），进清单但两侧不遮挡 | air 或 ground |
+| gaplike_item | 遮挡性不强的商品（VAL/Glass Holder/WES等），进清单但两侧不遮挡 | air 或 ground |
 | filler | 填充条/窄条（窄填板等），进清单 | air 或 ground 或 air + ground |
 | tall_appliance | 高电器（冰箱等） | air + ground |
 | base_appliance_need_top | 需台面电器（洗碗机等） | ground |
@@ -403,8 +403,8 @@ connectedWallIds 表示 L 形转角连接关系。connectIslands 用于设置背
 
 ## 颜色规则
 
-- 以下分类**不需要颜色**，colorCode 留空即可，不要强行添加颜色代码：gap、stuffed_gap、gaplike_item、tall_appliance、base_appliance_need_top、base_appliance_without_top
-- 以下分类**需要颜色**（如果 OCR/图片中有标注）：wall_cabinet、base_cabinet、tall_cabinet、filler
+- 以下分类**不需要颜色**，colorCode 留空即可，不要强行添加颜色代码：gap、stuffed_gap、tall_appliance、base_appliance_need_top、base_appliance_without_top
+- 以下分类**需要颜色**（如果 OCR/图片中有标注）：wall_cabinet、base_cabinet、tall_cabinet、filler、gaplike_item
 - 如果没有提供颜色标注信息，colorCode 留空，SKU 也只填型号（如 "B15" 而非 "02B15"），不要猜测颜色
 
 ## 工具集

@@ -80,7 +80,6 @@ const GAP_LIKE: ReadonlySet<BlockItemCategory> = new Set([
 const NO_COLOR_CATEGORIES: ReadonlySet<BlockItemCategory> = new Set([
   'gap',
   'stuffed_gap',
-  'gaplike_item',
   'tall_appliance',
   'base_appliance_need_top',
   'base_appliance_without_top',
@@ -125,7 +124,7 @@ function isTallObject(cat: BlockItemCategory): boolean {
   return cat === 'tall_cabinet' || cat === 'tall_appliance';
 }
 /** 两类电器：tall_appliance / base_appliance_need_top —— filler 紧邻时需清除 */
-function isHighApplianceOrDwp(cat: BlockItemCategory): boolean {
+function isFramedAppliance(cat: BlockItemCategory): boolean {
   return cat === 'tall_appliance' || cat === 'base_appliance_need_top';
 }
 
@@ -404,8 +403,8 @@ function processDwp(
       if (omitted) continue;
       if (!frameSideExposed(pos, ground, wall, side)) continue;
 
-      // 框侧板：UNIPACK 或缺色 → PNL3696Q；非 UNIPACK 有色 → BEP
-      const panelSku = isUnicolor(color) || !color
+      // 框侧板：UNIPACK → PNL3696Q；非 UNIPACK 有色或缺色 → BEP
+      const panelSku = isUnicolor(color)
         ? withColor(color, 'PNL3696Q')
         : withColor(color, 'BEP');
       addDiscrete(acc, panelSku, 1);
@@ -852,8 +851,8 @@ function removeAdjacentFillers(layout: LayoutDocument, acc: Accumulator): void {
       const rightNeighbor = getNeighbor(pos, positioned, 'right');
 
       const adjacentToHighAppliance =
-        (leftNeighbor && isHighApplianceOrDwp(leftNeighbor.cat)) ||
-        (rightNeighbor && isHighApplianceOrDwp(rightNeighbor.cat));
+        (leftNeighbor && isFramedAppliance(leftNeighbor.cat)) ||
+        (rightNeighbor && isFramedAppliance(rightNeighbor.cat));
 
       if (adjacentToHighAppliance) {
         for (const item of pos.block.items) {

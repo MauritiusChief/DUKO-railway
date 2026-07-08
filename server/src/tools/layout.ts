@@ -74,9 +74,9 @@ function isDualTrackCategory(category: BlockItemCategory): boolean {
 
 /**
  * ChatGPT 加的自动调整目标轨道的函数，有点用，所以留着吧
- * @param category 
- * @param requestedTrack 
- * @returns 
+ * @param category
+ * @param requestedTrack
+ * @returns
  */
 function actualTrackForCategory(category: BlockItemCategory, requestedTrack: TrackSpan): TrackSpan {
   const tracks = targetTracks(category);
@@ -511,7 +511,7 @@ export function executeDeleteWall(state: MutableLayout, args: Record<string, unk
 
 const CATEGORY_DESC =
   '物品分类: wall_cabinet(吊柜), base_cabinet(地柜), tall_cabinet(高柜-通天), gap(空挡), ' +
-  'stuffed_gap(抽油烟机/窗户等，本质同 gap), gaplike_item(类似 gap 的装饰性商品), filler(填充条/窄条), tall_appliance(高电器如冰箱), ' +
+  'stuffed_gap(抽油烟机/窗户等，本质同 gap), gaplike_item(遮挡性不强的商品), filler(填充条/窄条), tall_appliance(高电器如冰箱), ' +
   'base_appliance_need_top(需台面电器如洗碗机), base_appliance_without_top(免台面电器如灶台)';
 
 export const INSERT_ITEM_TOOL = {

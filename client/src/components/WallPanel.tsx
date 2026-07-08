@@ -35,8 +35,8 @@ const RULER_INTERVALS = [30, 15, 9, 6, 3];
 
 /**
  * 计算给定的墙宽度使用哪个标尺 intervel
- * @param wallWidth 
- * @returns 
+ * @param wallWidth
+ * @returns
  */
 function pickRulerInterval(wallWidth: number): number {
   for (const iv of RULER_INTERVALS) {
@@ -60,7 +60,7 @@ const GROUND_CATEGORIES: BlockItemCategory[] = [
 
 /** 无需颜色信息的分类 */
 const NO_COLOR_CATEGORIES: ReadonlySet<BlockItemCategory> = new Set([
-  'gap', 'stuffed_gap', 'gaplike_item',
+  'gap', 'stuffed_gap',
   'tall_appliance', 'base_appliance_need_top', 'base_appliance_without_top',
 ]);
 
