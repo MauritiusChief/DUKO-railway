@@ -147,6 +147,9 @@ function blockCategory(block: SectionBlock): BlockItemCategory {
 function isVanityBlock(block: SectionBlock): boolean {
   return block.items[0]?.isVanity === true;
 }
+function isAllVanityBlock(posBlocks: PosBlock[]): boolean {
+  return posBlocks.every(posBlock => isVanityBlock(posBlock.block))
+}
 
 /** block 是否含 tall 物体（高柜/高电器）—— 用于识别叠放吊柜场景 */
 function hasTallItem(block: SectionBlock): boolean {
@@ -700,7 +703,7 @@ function processQr(wall: LayoutWall, ground: PosBlock[], acc: Accumulator): void
     // 仅地柜 / 高柜参与（电器框侧 QR 在 DWP/RRP 处理中累计）
     if (!isBaseCabinet(cat) && !isTallCabinet(cat) && !isFiller(cat)) continue;
     const color = blockColor(pos.block);
-    const depth = isVanityBlock(pos.block) ? VANITY_DEPTH : BASE_DEPTH;
+    const depth = isAllVanityBlock(ground) ? VANITY_DEPTH : BASE_DEPTH;
 
     // 正面始终计入
     addLength(acc, withColor(color, 'QR'), pos.block.width);

@@ -370,6 +370,14 @@ describe('generateMaterialList', () => {
     // 左侧外露 → RRP 存在；右侧贴墙 exposedRight=false → 省去
     expect(qty(result, '14RRP')).toBe(1);
     expect(qty(result, 'REF')).toBe(0);
+    // 无TK
+    expect(lenOf(result, '14TK')).toBe(0)
+    // QR: 仅侧面
+    expect(lenOf(result, '14QR')).toBe(24)
+    // SM: 仅一个侧面的整个高
+    expect(lenOf(result, '14SM')).toBe(84+12)
+    // 仅一个侧板
+    expect(qty(result, '14PNL3696Q')).toBe(1);
   });
 
   it('电器缺色不报警', () => {
