@@ -88,6 +88,9 @@ const NO_COLOR_CATEGORIES: ReadonlySet<BlockItemCategory> = new Set([
 function isGapLike(cat: BlockItemCategory): boolean {
   return GAP_LIKE.has(cat);
 }
+function isAppliance(cat: BlockItemCategory): boolean {
+  return cat === 'base_appliance_need_top' || cat === 'tall_appliance' || cat === 'base_appliance_without_top'
+}
 /** 两侧均遮挡不住的物体（gap-like + gaplike_item），用于外露判定 */
 function isBothSidesUnblocked(cat: BlockItemCategory): boolean {
   return GAP_LIKE.has(cat) || cat === 'gaplike_item';
@@ -350,8 +353,10 @@ function collectOriginalItems(layout: LayoutDocument, acc: Accumulator): void {
   for (const wall of layout.walls) {
     for (const block of [...wall.airBlocks, ...wall.groundBlocks]) {
       for (const item of block.items) {
-        // gap / window / range_hood / stuffed_gap 不作为产品行
+        // gap / stuffed_gap 不作为产品行
         if (isGapLike(item.category)) continue;
+        // 电器也不是产品
+        if (isAppliance(item.category)) continue
         // 双轨物品（tall_cabinet / tall_appliance）按 id 去重
         if (acc.seenItemIds.has(item.id)) continue;
         acc.seenItemIds.add(item.id);

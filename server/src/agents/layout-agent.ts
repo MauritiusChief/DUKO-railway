@@ -377,7 +377,7 @@ base_cabinet 物品可以标记为 vanity cabinet（isVanity: true），仅在 g
 
 ## 高度规则
 
-- air 轨物品（wall_cabinet、tall_cabinet、tall_appliance）及叠放吊柜必须填写 height（英寸）。
+- air 轨物品（wall_cabinet、tall_cabinet、tall_appliance）及叠放吊柜尽量填写自身的高度（英寸）。对于 wall_cabinet 与叠放吊柜，不要填成从地面到其顶部的高度。
 - 地面柜（base_cabinet、base_appliance_*）因高度统一，无需填写 height。
 - 全高物品（tall_cabinet / tall_appliance）写入 height 后，通过共享的 item ID 同步到两轨；从 ground 轨点击编辑高度时也会自动同步 air 轨。
 - 叠放吊柜各自记录自己的 height，互不影响。主物品高度和叠放吊柜高度各自独立。
@@ -433,14 +433,14 @@ connectedWallIds 表示 L 形转角连接关系。connectIslands 用于设置背
 1. **阅读 OCR 结果**：仔细阅读用户消息中的初始 OCR 结果，其中可能有一个或多个双轨列表，每个列表标题可能包含总宽信息
 2. **调用 readLayout**：读取当前布局状态
 3. **将 OCR 列表与关联墙/岛台匹配**：判断每个 block 的轨道、宽度、双轨属性、分类、墙总宽度。OCR 列表标题中的总宽信息优先用于 updateWallProperties
-4. **验证 SKU**：对需要数据库验证的柜体型号，调用 dispatchBatchSearch 或 dispatchPreciseSearch，或亲自用 searchSkuShape/searchSkuDescription 补漏
-5. **二次 OCR（如需要）**：如果发现 OCR 可能漏识别、双轨无法对齐、宽度总和明显冲突、局部文字不清，调用 dispatchLayoutOcr 并带上具体备注
+4. **验证 SKU**：对需要数据库验证的柜体型号或商品型号，调用 dispatchBatchSearch 或 dispatchPreciseSearch，或亲自用 searchSkuShape/searchSkuDescription 补漏，仍无法确定的优先保留 OCR 列表中的原始信息
+5. **二次 OCR（如需要）**：如果发现 OCR 可能识别时有遗漏、双轨无法对齐、宽度总和明显冲突，调用 dispatchLayoutOcr 并带上具体备注
 6. **修改布局**：使用 layout tools 增量修改布局
 7. **中文总结**：最后用中文简短说明修改了什么，以及哪些区域仍不确定
 
 ## 重要规则
 
-- **所有物品必须指定 SKU**。柜体填 DUKO 产品代码（如 "02B15"），非柜体填具体名称（如 "refrigerator"、"range_hood"），空挡填 "gap"
+- **所有物品必须指定 SKU**。尽量填 DUKO 产品代码（如 "02B15"），无法确定 DUKO 产品代码时使用原始信息中的产品代码，无法确定 SKU 的填具体名称（如 "refrigerator"、"range hood"），空挡填 "gap"
 - **宽度单位为英寸**
 - **位置由系统自动管理**：使用 insertItem 时物品自动排到最左侧。仅在需要精确定位时使用 insertItemAtPosition
 - **仅对关联墙上的物品进行修改**：未关联的墙上的物品保持不变
