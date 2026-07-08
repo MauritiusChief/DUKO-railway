@@ -232,12 +232,13 @@ describe('generateMaterialList', () => {
 
     // 左侧贴墙且 exposedLeft=false → 省去左 DWP；右侧朝柜 → DWP 存在但框侧不外露
     expect(qty(result, '14DWP')).toBe(1);
+    expect(qty(result, '14DWPA')).toBe(0);
   });
   // #endregion
 
   // #region 8. 高电器无叠放
   it('8. 高电器无叠放：无 RRP', () => {
-    const tallApp = makeItem({ category: 'tall_appliance', sku: '14TF', height: 84 });
+    const tallApp = makeItem({ category: 'tall_appliance', sku: 'REF', height: 84 });
     const wall = makeWall({
       width: 30,
       airBlocks: [makeBlock({ width: 30, colorCode: '14', items: [tallApp] })],
@@ -245,7 +246,7 @@ describe('generateMaterialList', () => {
     });
     const result = generateMaterialList(makeLayout([wall]));
 
-    expect(qty(result, '14TF')).toBe(1);
+    expect(qty(result, 'REF')).toBe(0);
     expect(qty(result, '14RRP')).toBe(0);
     expect(result.text).not.toContain('RRP');
   });
@@ -253,7 +254,7 @@ describe('generateMaterialList', () => {
 
   // #region 9. 高电器 + 叠放吊柜 + 贴右墙
   it('9. 高电器 + 叠放吊柜 + 贴右墙：仅 1 个 RRP', () => {
-    const tallApp = makeItem({ category: 'tall_appliance', sku: '14TF', height: 84 });
+    const tallApp = makeItem({ category: 'tall_appliance', sku: 'REF', height: 84 });
     const stacked = makeItem({ category: 'wall_cabinet', sku: '14W24', height: 12 });
     const wall = makeWall({
       width: 30,
@@ -266,6 +267,7 @@ describe('generateMaterialList', () => {
 
     // 左侧外露 → RRP 存在；右侧贴墙 exposedRight=false → 省去
     expect(qty(result, '14RRP')).toBe(1);
+    expect(qty(result, 'REF')).toBe(0);
   });
   // #endregion
 
@@ -370,6 +372,52 @@ describe('generateMaterialList', () => {
     // filler 进清单
     expect(qty(result, 'BF3')).toBe(1);
   });
+
+  it('14a. 边缘 filler 后的地柜按有效边缘生成 BEP', () => {
+    const wall = makeWall({
+      width: 60,
+      groundBlocks: [
+        makeBlock({ width: 30, colorCode: '14', items: [makeItem({ category: 'filler', sku: 'BF3' })] }),
+        makeBlock({ width: 30, colorCode: '14', items: [makeItem({ category: 'base_cabinet', sku: '14B15' })] }),
+      ],
+    });
+    const result = generateMaterialList(makeLayout([wall]));
+
+    // filler 在侧板判断中透明：地柜左侧经 filler 到外露墙边，右侧本身在外露墙边
+    expect(qty(result, '14BEP')).toBe(2);
+  });
+
+  it('14b. filler 夹在普通地柜和 vanity 之间时普通地柜侧生成 BEP', () => {
+    const wall = makeWall({
+      width: 90,
+      groundBlocks: [
+        makeBlock({ width: 30, colorCode: '14', items: [makeItem({ sku: '14B15', isVanity: false })] }),
+        makeBlock({ width: 30, colorCode: '14', items: [makeItem({ category: 'filler', sku: 'BF3' })] }),
+        makeBlock({ width: 30, colorCode: '14', items: [makeItem({ sku: '14V30', isVanity: true })] }),
+      ],
+    });
+    const result = generateMaterialList(makeLayout([wall]));
+
+    // 普通地柜：左边缘 + 右侧经 filler 邻 vanity
+    expect(qty(result, '14BEP')).toBe(2);
+    // vanity：右边缘；左侧经 filler 邻普通地柜不算外露
+    expect(qty(result, '14VEP')).toBe(1);
+  });
+
+  it('14c. filler 夹在地柜和 gap 之间时地柜朝 gap 侧生成 BEP', () => {
+    const wall = makeWall({
+      width: 90,
+      groundBlocks: [
+        makeBlock({ width: 30, colorCode: '14', items: [makeItem({ sku: '14B15' })] }),
+        makeBlock({ width: 30, colorCode: '14', items: [makeItem({ category: 'filler', sku: 'BF3' })] }),
+        makeBlock({ width: 30, items: [makeItem({ category: 'gap', sku: 'gap' })] }),
+      ],
+    });
+    const result = generateMaterialList(makeLayout([wall]));
+
+    // 地柜：左边缘 + 右侧经 filler 朝 gap 外露
+    expect(qty(result, '14BEP')).toBe(2);
+  });
   // #endregion
 
   // #region 15. filler 紧邻 tall_appliance 被清除
@@ -390,8 +438,8 @@ describe('generateMaterialList', () => {
 
     // 原始产品行不应用 filler 出现
     expect(qty(result, 'TF3')).toBe(0);
-    // 高电器应在清单中（去重后 1 条）
-    expect(qty(result, 'refrigerator')).toBe(1);
+    // 高电器不应在清单中，因为其不是实际售卖的产品
+    expect(qty(result, 'refrigerator')).toBe(0);
   });
   // #endregion
 
