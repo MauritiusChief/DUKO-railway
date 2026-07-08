@@ -86,7 +86,7 @@ function lenOf(result: MaterialListResult, sku: string): number {
 // ==================================================================
 
 describe('generateMaterialList', () => {
-  // #region 连续地柜 run
+  // #region 地柜辅料
   it('连续地柜 run：原始行 + TK + QR + SM + BEP', () => {
     const wall = makeWall({
       width: 90,
@@ -113,165 +113,7 @@ describe('generateMaterialList', () => {
     expect(lenOf(result, '14QR')).toBe(138);
     expect(lenOf(result, '14SM')).toBe(69);
   });
-  // #endregion
 
-  // #region 地柜中间夹 gap
-  it('地柜中间夹 gap：QR 含 4 个侧深，SM 含 4 个地柜高', () => {
-    const wall = makeWall({
-      width: 90,
-      groundBlocks: [
-        makeBlock({ width: 30, colorCode: '14', items: [makeItem({ sku: '14B15' })] }),
-        makeBlock({ width: 30, items: [makeItem({ category: 'gap', sku: 'gap' })] }),
-        makeBlock({ width: 30, colorCode: '14', items: [makeItem({ sku: '14B15' })] }),
-      ],
-    });
-    const result = generateMaterialList(makeLayout([wall]));
-
-    expect(qty(result, '14B15')).toBe(2);
-    // QR：正面 60 + 4 侧 4×24 = 156 → ceil = 2
-    expect(qty(result, '14QR')).toBe(2);
-    // SM：4 侧 4×34.5 = 138 → ceil = 2
-    expect(qty(result, '14SM')).toBe(2);
-    // BEP：4 个外露侧
-    expect(qty(result, '14BEP')).toBe(4);
-  });
-  // #endregion
-
-  // #region 吊柜夹 window
-  it('吊柜夹 window：WEP 朝窗侧 + SM 侧高', () => {
-    const wall = makeWall({
-      width: 90,
-      airBlocks: [
-        makeBlock({ width: 30, colorCode: '14', items: [makeItem({ category: 'wall_cabinet', sku: '14W30', height: 30 })] }),
-        makeBlock({ width: 30, items: [makeItem({ category: 'stuffed_gap', sku: 'window' })] }),
-        makeBlock({ width: 30, colorCode: '14', items: [makeItem({ category: 'wall_cabinet', sku: '14W30', height: 30 })] }),
-      ],
-    });
-    const result = generateMaterialList(makeLayout([wall]));
-
-    expect(qty(result, '14W30')).toBe(2);
-    // WEP：4 个外露侧（两端边缘 + 两侧朝窗）
-    expect(qty(result, '14WEP')).toBe(4);
-    // SM：4 侧 4×30 = 120 → ceil = 2
-    expect(qty(result, '14SM')).toBe(2);
-  });
-  // #endregion
-
-  // #region vanity 邻接
-  it('vanity 邻接：普通地柜侧加 BEP，vanity 外侧加 VEP', () => {
-    const wall = makeWall({
-      width: 60,
-      groundBlocks: [
-        makeBlock({ width: 30, colorCode: '14', items: [makeItem({ sku: '14B15', isVanity: false })] }),
-        makeBlock({ width: 30, colorCode: '14', items: [makeItem({ sku: '14V30', isVanity: true })] }),
-      ],
-    });
-    const result = generateMaterialList(makeLayout([wall]));
-
-    // 普通地柜：左（边缘）+ 右（vanity 邻接）→ 2 BEP
-    expect(qty(result, '14BEP')).toBe(2);
-    // vanity：左（邻普通地柜，不外露）+ 右（边缘）→ 1 VEP
-    expect(qty(result, '14VEP')).toBe(1);
-  });
-  // #endregion
-
-  // #region UNIPACK 柜体侧板跳过
-  it('UNIPACK 颜色高柜侧板跳过（PNL3696Q 不产生）', () => {
-    const tallItem = makeItem({ category: 'tall_cabinet', sku: '02T96', height: 96 });
-    const wall = makeWall({
-      width: 30,
-      exposedLeft: true,
-      exposedRight: true,
-      airBlocks: [makeBlock({ width: 30, colorCode: '02', items: [tallItem] })],
-      groundBlocks: [makeBlock({ width: 30, colorCode: '02', items: [{ ...tallItem }] })],
-    });
-    const result = generateMaterialList(makeLayout([wall]));
-
-    // UNIPACK 颜色 → 柜体侧板跳过
-    expect(qty(result, '02PNL3696Q')).toBe(0);
-    expect(qty(result, 'PNL3696Q')).toBe(0);
-    expect(result.text).not.toContain('PNL3696Q');
-  });
-  // #endregion
-
-  // #region UNIPACK DWP 框侧仍用 PNL3696Q
-  it('UNIPACK 颜色 DWP 框侧仍用 PNL3696Q', () => {
-    const wall = makeWall({
-      width: 30,
-      exposedLeft: true,
-      exposedRight: true,
-      groundBlocks: [
-        makeBlock({
-          width: 30,
-          colorCode: '02',
-          items: [makeItem({ category: 'base_appliance_need_top', sku: '02DWPA' })],
-        }),
-      ],
-    });
-    const result = generateMaterialList(makeLayout([wall]));
-
-    // DWP：两侧均存在 → 2
-    expect(qty(result, '02DWP')).toBe(2);
-    // 框侧板：UNIPACK → PNL3696Q，两侧外露 → 2
-    expect(qty(result, '02PNL3696Q')).toBe(2);
-  });
-  // #endregion
-
-  // #region DWP 贴墙边缘省略
-  it('DWP 贴墙边缘省略：exposedLeft=false → 仅 1 个 DWP', () => {
-    const wall = makeWall({
-      width: 60,
-      exposedLeft: false,
-      exposedRight: true,
-      groundBlocks: [
-        makeBlock({ width: 30, colorCode: '14', items: [makeItem({ category: 'base_appliance_need_top', sku: '14DWPA' })] }),
-        makeBlock({ width: 30, colorCode: '14', items: [makeItem({ sku: '14B15' })] }),
-      ],
-    });
-    const result = generateMaterialList(makeLayout([wall]));
-
-    // 左侧贴墙且 exposedLeft=false → 省去左 DWP；右侧朝柜 → DWP 存在但框侧不外露
-    expect(qty(result, '14DWP')).toBe(1);
-    expect(qty(result, '14DWPA')).toBe(0);
-  });
-  // #endregion
-
-  // #region 高电器无叠放
-  it('高电器无叠放：无 RRP', () => {
-    const tallApp = makeItem({ category: 'tall_appliance', sku: 'REF', height: 84 });
-    const wall = makeWall({
-      width: 30,
-      airBlocks: [makeBlock({ width: 30, colorCode: '14', items: [tallApp] })],
-      groundBlocks: [makeBlock({ width: 30, colorCode: '14', items: [{ ...tallApp }] })],
-    });
-    const result = generateMaterialList(makeLayout([wall]));
-
-    expect(qty(result, 'REF')).toBe(0);
-    expect(qty(result, '14RRP')).toBe(0);
-    expect(result.text).not.toContain('RRP');
-  });
-  // #endregion
-
-  // #region 高电器 + 叠放吊柜 + 贴右墙
-  it('高电器 + 叠放吊柜 + 贴右墙：仅 1 个 RRP', () => {
-    const tallApp = makeItem({ category: 'tall_appliance', sku: 'REF', height: 84 });
-    const stacked = makeItem({ category: 'wall_cabinet', sku: '14W24', height: 12 });
-    const wall = makeWall({
-      width: 30,
-      exposedLeft: true,
-      exposedRight: false,
-      airBlocks: [makeBlock({ width: 30, colorCode: '14', items: [tallApp, stacked] })],
-      groundBlocks: [makeBlock({ width: 30, colorCode: '14', items: [{ ...tallApp }] })],
-    });
-    const result = generateMaterialList(makeLayout([wall]));
-
-    // 左侧外露 → RRP 存在；右侧贴墙 exposedRight=false → 省去
-    expect(qty(result, '14RRP')).toBe(1);
-    expect(qty(result, 'REF')).toBe(0);
-  });
-  // #endregion
-
-  // #region 96 英寸取整
   it('96 英寸取整：长度 97 → 数量 2', () => {
     const wall = makeWall({
       width: 97,
@@ -286,9 +128,7 @@ describe('generateMaterialList', () => {
     // TK：97" → ceil(97/96) = 2
     expect(qty(result, '14TK')).toBe(2);
   });
-  // #endregion
 
-  // #region 缺色行为
   it('缺色：BEP 无颜色前缀，不按 UNIPACK 跳过', () => {
     const wall = makeWall({
       width: 30,
@@ -315,7 +155,27 @@ describe('generateMaterialList', () => {
   });
   // #endregion
 
-  // #region stuffed_gap 不进清单但触发外露
+  // #region 隔断与空白
+  it('地柜中间夹 gap：QR 含 4 个侧深，SM 含 4 个地柜高', () => {
+    const wall = makeWall({
+      width: 90,
+      groundBlocks: [
+        makeBlock({ width: 30, colorCode: '14', items: [makeItem({ sku: '14B15' })] }),
+        makeBlock({ width: 30, items: [makeItem({ category: 'gap', sku: 'gap' })] }),
+        makeBlock({ width: 30, colorCode: '14', items: [makeItem({ sku: '14B15' })] }),
+      ],
+    });
+    const result = generateMaterialList(makeLayout([wall]));
+
+    expect(qty(result, '14B15')).toBe(2);
+    // QR：正面 60 + 4 侧 4×24 = 156 → ceil = 2
+    expect(qty(result, '14QR')).toBe(2);
+    // SM：4 侧 4×34.5 = 138 → ceil = 2
+    expect(qty(result, '14SM')).toBe(2);
+    // BEP：4 个外露侧
+    expect(qty(result, '14BEP')).toBe(4);
+  });
+
   it('stuffed_gap 不进清单但触发外露', () => {
     const wall = makeWall({
       width: 90,
@@ -334,9 +194,7 @@ describe('generateMaterialList', () => {
     // BEP：两端边缘 + 两侧朝 stuffed_gap = 4 外露侧
     expect(qty(result, '14BEP')).toBe(4);
   });
-  // #endregion
 
-  // #region gaplike_item 进清单且两侧不遮挡
   it('gaplike_item 进清单且两侧不遮挡', () => {
     const wall = makeWall({
       width: 90,
@@ -358,7 +216,152 @@ describe('generateMaterialList', () => {
   });
   // #endregion
 
-  // #region filler 默认进清单
+  // #region 吊柜
+  it('吊柜夹 window：WEP 朝窗侧 + SM 侧高', () => {
+    const wall = makeWall({
+      width: 90,
+      airBlocks: [
+        makeBlock({ width: 30, colorCode: '14', items: [makeItem({ category: 'wall_cabinet', sku: '14W30', height: 30 })] }),
+        makeBlock({ width: 30, items: [makeItem({ category: 'stuffed_gap', sku: 'window' })] }),
+        makeBlock({ width: 30, colorCode: '14', items: [makeItem({ category: 'wall_cabinet', sku: '14W30', height: 30 })] }),
+      ],
+    });
+    const result = generateMaterialList(makeLayout([wall]));
+
+    expect(qty(result, '14W30')).toBe(2);
+    // WEP：4 个外露侧（两端边缘 + 两侧朝窗）
+    expect(qty(result, '14WEP')).toBe(4);
+    // SM：4 侧 4×30 = 120 → ceil = 2
+    expect(qty(result, '14SM')).toBe(2);
+  });
+  // #endregion
+
+  // #region Vanity
+  it('vanity 邻接：普通地柜侧加 BEP，vanity 外侧加 VEP', () => {
+    const wall = makeWall({
+      width: 60,
+      groundBlocks: [
+        makeBlock({ width: 30, colorCode: '14', items: [makeItem({ sku: '14B15', isVanity: false })] }),
+        makeBlock({ width: 30, colorCode: '14', items: [makeItem({ sku: '14V30', isVanity: true })] }),
+      ],
+    });
+    const result = generateMaterialList(makeLayout([wall]));
+
+    // 普通地柜：左（边缘）+ 右（vanity 邻接）→ 2 BEP
+    expect(qty(result, '14BEP')).toBe(2);
+    // vanity：左（邻普通地柜，不外露）+ 右（边缘）→ 1 VEP
+    expect(qty(result, '14VEP')).toBe(1);
+  });
+  // #endregion
+
+  // #region UNIPACK
+  it('UNIPACK 颜色高柜侧板跳过（PNL3696Q 不产生）', () => {
+    const tallItem = makeItem({ category: 'tall_cabinet', sku: '02T96', height: 96 });
+    const wall = makeWall({
+      width: 30,
+      exposedLeft: true,
+      exposedRight: true,
+      airBlocks: [makeBlock({ width: 30, colorCode: '02', items: [tallItem] })],
+      groundBlocks: [makeBlock({ width: 30, colorCode: '02', items: [{ ...tallItem }] })],
+    });
+    const result = generateMaterialList(makeLayout([wall]));
+
+    // UNIPACK 颜色 → 柜体侧板跳过
+    expect(qty(result, '02PNL3696Q')).toBe(0);
+    expect(qty(result, 'PNL3696Q')).toBe(0);
+    expect(result.text).not.toContain('PNL3696Q');
+  });
+
+  it('UNIPACK 颜色 DWP 框侧仍用 PNL3696Q', () => {
+    const wall = makeWall({
+      width: 30,
+      exposedLeft: true,
+      exposedRight: true,
+      groundBlocks: [
+        makeBlock({
+          width: 30,
+          colorCode: '02',
+          items: [makeItem({ category: 'base_appliance_need_top', sku: '02DWPA' })],
+        }),
+      ],
+    });
+    const result = generateMaterialList(makeLayout([wall]));
+
+    // DWP：两侧均存在 → 2
+    expect(qty(result, '02DWP')).toBe(2);
+    // 框侧板：UNIPACK → PNL3696Q，两侧外露 → 2
+    expect(qty(result, '02PNL3696Q')).toBe(2);
+  });
+  // #endregion
+
+  // #region 电器与框架
+  it('DWP 贴墙边缘省略：exposedLeft=false → 仅 1 个 DWP', () => {
+    const wall = makeWall({
+      width: 60,
+      exposedLeft: false,
+      exposedRight: true,
+      groundBlocks: [
+        makeBlock({ width: 30, colorCode: '14', items: [makeItem({ category: 'base_appliance_need_top', sku: '14DWPA' })] }),
+        makeBlock({ width: 30, colorCode: '14', items: [makeItem({ sku: '14B15' })] }),
+      ],
+    });
+    const result = generateMaterialList(makeLayout([wall]));
+
+    // 左侧贴墙且 exposedLeft=false → 省去左 DWP；右侧朝柜 → DWP 存在但框侧不外露
+    expect(qty(result, '14DWP')).toBe(1);
+    expect(qty(result, '14DWPA')).toBe(0);
+  });
+
+  it('高电器无叠放：无 RRP', () => {
+    const tallApp = makeItem({ category: 'tall_appliance', sku: 'REF', height: 84 });
+    const wall = makeWall({
+      width: 30,
+      airBlocks: [makeBlock({ width: 30, colorCode: '14', items: [tallApp] })],
+      groundBlocks: [makeBlock({ width: 30, colorCode: '14', items: [{ ...tallApp }] })],
+    });
+    const result = generateMaterialList(makeLayout([wall]));
+
+    expect(qty(result, 'REF')).toBe(0);
+    expect(qty(result, '14RRP')).toBe(0);
+    expect(result.text).not.toContain('RRP');
+  });
+
+  it('高电器 + 叠放吊柜 + 贴右墙：仅 1 个 RRP', () => {
+    const tallApp = makeItem({ category: 'tall_appliance', sku: 'REF', height: 84 });
+    const stacked = makeItem({ category: 'wall_cabinet', sku: '14W24', height: 12 });
+    const wall = makeWall({
+      width: 30,
+      exposedLeft: true,
+      exposedRight: false,
+      airBlocks: [makeBlock({ width: 30, colorCode: '14', items: [tallApp, stacked] })],
+      groundBlocks: [makeBlock({ width: 30, colorCode: '14', items: [{ ...tallApp }] })],
+    });
+    const result = generateMaterialList(makeLayout([wall]));
+
+    // 左侧外露 → RRP 存在；右侧贴墙 exposedRight=false → 省去
+    expect(qty(result, '14RRP')).toBe(1);
+    expect(qty(result, 'REF')).toBe(0);
+  });
+
+  it('电器缺色不报警', () => {
+    const wall = makeWall({
+      width: 30,
+      groundBlocks: [
+        makeBlock({ width: 30, colorCode: '', items: [makeItem({ category: 'tall_appliance', sku: 'refrigerator', height: 84 })] }),
+      ],
+      airBlocks: [
+        makeBlock({ width: 30, colorCode: '', items: [makeItem({ category: 'tall_appliance', sku: 'refrigerator', height: 84 })] }),
+      ],
+    });
+    const result = generateMaterialList(makeLayout([wall]));
+
+    // 电器缺色不应产生 warning
+    const colorWarnings = result.warnings.filter((w) => w.includes('颜色'));
+    expect(colorWarnings.length).toBe(0);
+  });
+  // #endregion
+
+  // #region Filler 填充条
   it('filler 正常进清单（不紧邻电器时）', () => {
     const wall = makeWall({
       width: 60,
@@ -432,9 +435,7 @@ describe('generateMaterialList', () => {
     // 地柜：左边缘 + 右侧经 filler 朝 gap 外露
     expect(qty(result, '14BEP')).toBe(2);
   });
-  // #endregion
 
-  // #region filler 紧邻 tall_appliance 被清除
   it('filler 紧邻 tall_appliance 被清除', () => {
     const tallApp = makeItem({ category: 'tall_appliance', sku: 'refrigerator', height: 84 });
     const wall = makeWall({
@@ -455,9 +456,7 @@ describe('generateMaterialList', () => {
     // 高电器不应在清单中，因为其不是实际售卖的产品
     expect(qty(result, 'refrigerator')).toBe(0);
   });
-  // #endregion
 
-  // #region filler 紧邻 base_appliance_need_top 被清除
   it('filler 紧邻 base_appliance_need_top 被清除', () => {
     const wall = makeWall({
       width: 60,
@@ -472,25 +471,6 @@ describe('generateMaterialList', () => {
     expect(qty(result, 'BF3')).toBe(0);
     // DWP 辅料应正常生成
     expect(qty(result, '14DWP')).toBeGreaterThan(0);
-  });
-  // #endregion
-
-  // #region 电器缺色不报警
-  it('电器缺色不报警', () => {
-    const wall = makeWall({
-      width: 30,
-      groundBlocks: [
-        makeBlock({ width: 30, colorCode: '', items: [makeItem({ category: 'tall_appliance', sku: 'refrigerator', height: 84 })] }),
-      ],
-      airBlocks: [
-        makeBlock({ width: 30, colorCode: '', items: [makeItem({ category: 'tall_appliance', sku: 'refrigerator', height: 84 })] }),
-      ],
-    });
-    const result = generateMaterialList(makeLayout([wall]));
-
-    // 电器缺色不应产生 warning
-    const colorWarnings = result.warnings.filter((w) => w.includes('颜色'));
-    expect(colorWarnings.length).toBe(0);
   });
   // #endregion
 });
