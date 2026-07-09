@@ -206,7 +206,7 @@ export function generateItemsTable(
     }
 
     // —— 跳过过时的一体 OV ——
-    if (NONE_EURO_STYLE_CODES.includes(prefix) && rest.startsWith('OV') && !rest.endsWith('24')) {
+    if (UNIPACK_STYLE_CODES.includes(prefix) && rest.startsWith('OV') && !rest.endsWith('24')) {
       continue;
     }
 
