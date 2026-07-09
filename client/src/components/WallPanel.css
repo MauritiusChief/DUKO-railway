@@ -188,6 +188,30 @@
   opacity: 0.4;
 }
 
+/* 标尺线 */
+
+.wp-ruler-mark {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  border-left: 1px dashed #ddd;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.wp-ruler-label {
+  position: absolute;
+  top: 0;
+  left: 2px;
+  font-size: 9px;
+  color: #bbb;
+  white-space: nowrap;
+  background: rgba(255, 255, 255, 0.8);
+  padding: 0 2px;
+  border-radius: 2px;
+}
+
 /* 拖拽指示线 */
 
 .wp-drop-indicator {
@@ -198,104 +222,6 @@
   background: #4a90d9;
   z-index: 10;
   pointer-events: none;
-}
-
-/* 添加表单 */
-
-.wp-add-form {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin-top: 6px;
-  padding: 4px 0;
-}
-
-.wp-add-select {
-  border: 1px solid #ccc;
-  border-radius: 3px;
-  padding: 3px 6px;
-  font-size: 11px;
-  font-family: inherit;
-  background: #fff;
-  cursor: pointer;
-}
-
-.wp-add-input {
-  border: 1px solid #ccc;
-  border-radius: 3px;
-  padding: 3px 6px;
-  font-size: 11px;
-  font-family: inherit;
-  width: 55px;
-}
-
-.wp-add-sku {
-  width: 80px;
-}
-
-.wp-add-ok {
-  font-size: 11px;
-  background: #4a90d9;
-  color: #fff;
-  border: 1px solid #3a7bc8;
-  border-radius: 3px;
-  cursor: pointer;
-  padding: 2px 8px;
-}
-
-.wp-add-ok:hover {
-  background: #3a7bc8;
-}
-
-.wp-add-cancel {
-  font-size: 11px;
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: #888;
-  padding: 2px 4px;
-}
-
-.wp-add-cancel:hover {
-  color: #333;
-}
-
-/* 叠放吊柜表单 */
-
-.wp-stacked-form {
-  margin-top: 2px;
-  padding-left: 4px;
-  border-left: 2px solid #ddd;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.wp-stacked-row {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.wp-stacked-label {
-  font-size: 10px;
-  color: #999;
-}
-
-.wp-stacked-add {
-  font-size: 10px;
-  background: none;
-  border: 1px dashed #ccc;
-  border-radius: 2px;
-  cursor: pointer;
-  color: #888;
-  padding: 1px 6px;
-  align-self: flex-start;
-}
-
-.wp-stacked-add:hover {
-  border-color: #4a90d9;
-  color: #4a90d9;
 }
 
 /* 折叠状态 */

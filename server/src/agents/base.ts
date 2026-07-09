@@ -10,10 +10,19 @@
  */
 
 import type { ToolDefinition, ToolCall } from '../types/tool.js';
-import type { ChatMessage, MultimodalChatMessage } from '../types/message.js';
+import type { ChatMessage, MultimodalChatMessage, MultimodalContent } from '../types/message.js';
 import type { LlmProvider, ResponseFormat } from '../llm/provider.js';
+import type { TraceContext } from '../types/trace.js';
 import { injectBudgetInfo } from '../tools/budget.js';
 import { ToolName } from '../tools/index.js';
+import {
+  insertClientSent,
+  insertClientReceived,
+  insertTraceSession,
+  markSessionCompleted,
+  markSessionError,
+} from '../services/trace.js';
+import { randomUUID } from 'crypto';
 
 // ==================================================================
 //  AgentStepEvent —— Agent 步进事件（SSE 推送用）
@@ -44,8 +53,8 @@ export interface AgentContext {
 // ==================================================================
 
 export interface BaseAgentConfig {
-  /** 搜索工具预算上限（如 5 轮） */
-  searchBudgetLimit: number;
+  /** 受限工具预算上限（限制搜索和 dispatch 等耗时工具的总调用次数） */
+  budgetLimit: number;
   /** 最大总对话轮数（兜底） */
   maxRounds: number;
   /** 回复语言提示，如 '中文' 或 '英文' */
@@ -77,10 +86,55 @@ export abstract class BaseAgent<
 
   protected llm: LlmProvider<TMessage>;
   protected config: BaseAgentConfig;
+  /** 当前对话的 trace 上下文（仅 traceLog 启用时非空，由路由层设置） */
+  trace?: TraceContext;
 
   constructor(llm: LlmProvider<TMessage>, config: BaseAgentConfig) {
     this.llm = llm;
     this.config = config;
+  }
+
+  /**
+   * 为子 agent 创建并注册 trace session。
+   * 从父级 trace 上下文克隆，生成新的 conversation_id，设置 agent_name 和 parent_tool_call_id。
+   *
+   * @param parentTrace 父级 trace 上下文
+   * @param agentName 子 agent 类名（如 'BatchSearchAgent'）
+   * @param parentToolCallId 触发此子 agent 的父级工具调用 ID
+   * @param providerOverride 可选，覆盖父级 trace 的 provider/model（如 OCR 子 agent 使用 OpenRouter 而非 DeepSeek）
+   */
+  protected initSubTrace(
+    parentTrace: TraceContext,
+    agentName: string,
+    parentToolCallId: string,
+    providerOverride?: { provider: string; model: string },
+  ): TraceContext | undefined {
+    if (!parentTrace.enabled) return undefined;
+    const conversationId = randomUUID();
+    const trace: TraceContext = {
+      conversationId,
+      userId: parentTrace.userId,
+      username: parentTrace.username,
+      mainAgent: parentTrace.mainAgent,
+      agentName,
+      parentToolCallId,
+      route: parentTrace.route,
+      provider: providerOverride?.provider ?? parentTrace.provider,
+      model: providerOverride?.model ?? parentTrace.model,
+      enabled: true,
+    };
+    insertTraceSession(
+      conversationId,
+      trace.userId,
+      trace.username,
+      trace.mainAgent,
+      trace.agentName,
+      parentToolCallId,
+      trace.route,
+      trace.provider,
+      trace.model,
+    );
+    return trace;
   }
 
   // ================================================================
@@ -134,9 +188,9 @@ export abstract class BaseAgent<
 
   /**
    * 子类可覆盖此方法，返回 true 的工具可在同一轮 LLM 响应中与其他可并发工具并行执行。
-   * 默认所有工具串行执行。典型用法：MainAgent 将 dispatchBatchSearch / dispatchPreciseSearch /
+   * 默认所有工具串行执行。典型用法：TableParseAgent 将 dispatchBatchSearch / dispatchPreciseSearch /
    * dispatchGlassDoorCalc 标记为可并发，使多个委派子 agent 的调用并行执行，显著缩短总耗时。
-   * 
+   *
    * 注意：不要将存在共享可变状态依赖的工具标记为可并发（如 manifest 编辑工具）。
    */
   protected canExecuteInParallel(toolName: ToolName): boolean {
@@ -189,17 +243,76 @@ export abstract class BaseAgent<
     initialMessages: TMessage[],
     context: AgentContext = {},
   ): Promise<AgentResult<TMessage>> {
+    const traceCtx = this.trace?.enabled ? this.trace : undefined;
+
+    try {
+      return await this.runInternal(initialMessages, context, traceCtx);
+    } catch (err) {
+      // ---- Trace：标记 session 错误（保留不完整 trace） ----
+      if (traceCtx) {
+        try {
+          markSessionError(traceCtx.conversationId, err instanceof Error ? err.message : String(err));
+        } catch {
+          // 静默
+        }
+      }
+      throw err;
+    }
+  }
+
+  private async runInternal(
+    initialMessages: TMessage[],
+    context: AgentContext,
+    traceCtx: TraceContext | undefined,
+  ): Promise<AgentResult<TMessage>> {
     const messages: TMessage[] = [...initialMessages];
     let searchBudgetUsed = 0;
+    let msgIdx = 0;
+    let lastSchemaJson: string | null = null;
+
+    // ---- Trace：记录 system / user 初始消息 ----
+    if (traceCtx) {
+      for (const m of initialMessages) {
+        const contentText = extractTraceText(m.content);
+        const isMarkdown = typeof contentText === 'string' && hasMarkdownHeadings(contentText);
+        const fmt = isMarkdown ? 'markdown' : 'text';
+        insertClientSent({
+          conversationId: traceCtx.conversationId,
+          messageIndex: msgIdx++,
+          role: m.role as 'system' | 'user',
+          contentText,
+          contentFormat: fmt,
+        });
+      }
+    }
 
     for (let round = 0; round < this.config.maxRounds; round++) {
       this.config.onStep?.({ type: 'round_start', round: round + 1 });
 
-      const remainingBudget = this.config.searchBudgetLimit - searchBudgetUsed;
+      const remainingBudget = this.config.budgetLimit - searchBudgetUsed;
       const budgetedNames = this.getBudgetedToolNames();
 
       // 搜索预算 > 0 → 提供全部工具；预算耗尽 → 仅非搜索工具
       const availableTools = this.computeAvailableTools(remainingBudget, budgetedNames);
+
+      // ---- Trace：记录 tool schema（首次或变化时） ----
+      if (traceCtx && availableTools && availableTools.length > 0) {
+        const schemaJson = JSON.stringify(availableTools);
+        if (schemaJson !== lastSchemaJson) {
+          lastSchemaJson = schemaJson;
+          for (const toolDef of availableTools) {
+            insertClientSent({
+              conversationId: traceCtx.conversationId,
+              messageIndex: msgIdx,
+              role: 'tool_schema',
+              name: toolDef.function.name,
+              contentJson: JSON.stringify(toolDef),
+              contentFormat: 'json',
+            });
+          }
+          msgIdx++;
+        }
+      }
 
       // 流式调用 LLM：实时吐出 reply_chunk 事件，最终拿到完整 ChatMessage
       const { stream, message } = await this.llm.sendChatStream(
@@ -216,6 +329,27 @@ export abstract class BaseAgent<
 
       const response = await message;
       messages.push(response);
+
+      // ---- Trace：记录 LLM 返回的 assistant 消息 ----
+      if (traceCtx) {
+        try {
+          const assistantContent = extractTraceText(response.content);
+          insertClientReceived({
+            conversationId: traceCtx.conversationId,
+            messageIndex: msgIdx++,
+            finishReason: response.finish_reason,
+            reply: assistantContent,
+            reasoning: response.reasoning_content ?? null,
+            toolCallsJson: response.tool_calls?.length ? JSON.stringify(response.tool_calls) : null,
+            toolCallIdsJson: response.tool_calls?.length
+              ? JSON.stringify(response.tool_calls.map((tc) => tc.id))
+              : null,
+            source: 'llm',
+          });
+        } catch {
+          // trace 记录失败不影响主流程
+        }
+      }
 
       // 清理 LLM 幻觉生成的 _budget_info 工具调用（非本系统注入的）
       this.cleanHallucinatedBudgetInfo(response);
@@ -278,30 +412,82 @@ export abstract class BaseAgent<
             // 单个工具或不可并发工具 → 串行执行
             const tc = group[0];
             this.config.onStep?.({ type: 'tool_call', tool: tc.function.name });
-            const result = await this.executeTool(tc, context);
+            let result: string;
+            let toolError: string | undefined;
+            try {
+              result = await this.executeTool(tc, context);
+            } catch (err: unknown) {
+              const msg = err instanceof Error ? err.message : String(err);
+              result = `工具执行错误: ${msg}`;
+              toolError = msg;
+            }
             messages.push({
               role: 'tool',
               content: result,
               tool_call_id: tc.id,
               name: tc.function.name,
             } as TMessage);
+            // ---- Trace：记录 tool result ----
+            if (traceCtx) {
+              try {
+                insertClientSent({
+                  conversationId: traceCtx.conversationId,
+                  messageIndex: msgIdx,
+                  role: 'tool',
+                  name: tc.function.name,
+                  toolCallId: tc.id,
+                  contentText: result,
+                  contentFormat: isJsonString(result) ? 'json' : 'text',
+                  error: toolError ?? null,
+                });
+                msgIdx++;
+              } catch {
+                // 静默
+              }
+            }
           } else {
             // 可并发工具组 → Promise.all 并行执行
             const toolResults = await Promise.all(
               group.map(async (tc) => {
                 // 通知 SSE 前端正在调用此工具（ChatPanel 展示工具调用过程）
                 this.config.onStep?.({ type: 'tool_call', tool: tc.function.name });
-                const result = await this.executeTool(tc, context);
-                return { tc, result } as const;
+                let result: string;
+                let toolError: string | undefined;
+                try {
+                  result = await this.executeTool(tc, context);
+                } catch (err: unknown) {
+                  const msg = err instanceof Error ? err.message : String(err);
+                  result = `工具执行错误: ${msg}`;
+                  toolError = msg;
+                }
+                return { tc, result, toolError } as const;
               }),
             );
-            for (const { tc, result } of toolResults) {
+            for (const { tc, result, toolError } of toolResults) {
               messages.push({
                 role: 'tool',
                 content: result,
                 tool_call_id: tc.id,
                 name: tc.function.name,
               } as TMessage);
+              // ---- Trace：记录 tool result ----
+              if (traceCtx) {
+                try {
+                  insertClientSent({
+                    conversationId: traceCtx.conversationId,
+                    messageIndex: msgIdx,
+                    role: 'tool',
+                    name: tc.function.name,
+                    toolCallId: tc.id,
+                    contentText: result,
+                    contentFormat: isJsonString(result) ? 'json' : 'text',
+                    error: toolError ?? null,
+                  });
+                  msgIdx++;
+                } catch {
+                  // 静默
+                }
+              }
             }
           }
         }
@@ -310,16 +496,46 @@ export abstract class BaseAgent<
 
         // 注入搜索预算虚拟 tool pair（仅告知搜索预算，不在工具 schema 中注册）
         if (budgetedNames.size > 0) {
-          const newRemaining = this.config.searchBudgetLimit - searchBudgetUsed;
+          const newRemaining = this.config.budgetLimit - searchBudgetUsed;
           injectBudgetInfo(
             messages as (ChatMessage | MultimodalChatMessage)[],
             round,
             newRemaining,
-            this.config.searchBudgetLimit,
+            this.config.budgetLimit,
             this.config.langHint,
             undefined,
             this.getBudgetedToolListText(),
           );
+          // ---- Trace：记录 _budget_info 虚拟消息对 ----
+          if (traceCtx) {
+            try {
+              insertClientReceived({
+                conversationId: traceCtx.conversationId,
+                messageIndex: msgIdx++,
+                finishReason: 'tool_calls',
+                toolCallsJson: JSON.stringify([{
+                  id: `_budget_info_${round}`,
+                  type: 'function',
+                  function: { name: '_budget_info', arguments: '{}' },
+                }]),
+                toolCallIdsJson: JSON.stringify([`_budget_info_${round}`]),
+                source: 'injected',
+              });
+              insertClientSent({
+                conversationId: traceCtx.conversationId,
+                messageIndex: msgIdx++,
+                role: 'tool',
+                name: '_budget_info',
+                toolCallId: `_budget_info_${round}`,
+                contentText: messages[messages.length - 1].content
+                  ? String(messages[messages.length - 1].content)
+                  : '',
+                contentFormat: 'text',
+              });
+            } catch {
+              // 静默
+            }
+          }
         }
 
         if (!this.shouldContinueAfterRound(messages, round)) {
@@ -350,6 +566,15 @@ export abstract class BaseAgent<
     }
 
     reply = this.postprocessReply(reply);
+
+    // ---- Trace：标记 session 完成 ----
+    if (traceCtx) {
+      try {
+        markSessionCompleted(traceCtx.conversationId);
+      } catch {
+        // 静默
+      }
+    }
 
     return { reply, messages };
   }
@@ -405,5 +630,44 @@ export abstract class BaseAgent<
       (!response.content || !String(response.content).trim()) &&
       (!response.tool_calls || response.tool_calls.length === 0)
     );
+  }
+}
+
+// ==================================================================
+//  Trace 辅助函数
+// ==================================================================
+
+/**
+ * 从消息 content 中提取纯文本（用于 trace 存储）。
+ * 多模态消息中的 image_url 替换为 [image] 占位符。
+ */
+function extractTraceText(content: unknown): string | null {
+  if (content === null || content === undefined) return null;
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => {
+        if (typeof part === 'string') return part;
+        if (part && typeof part === 'object' && 'type' in part) {
+          if (part.type === 'text' && 'text' in part) return String(part.text);
+          if (part.type === 'image_url') return '[image]';
+        }
+        return String(part);
+      })
+      .join('');
+  }
+  return String(content);
+}
+
+function hasMarkdownHeadings(text: string): boolean {
+  return /^#/m.test(text);
+}
+
+function isJsonString(text: string): boolean {
+  try {
+    JSON.parse(text);
+    return true;
+  } catch {
+    return false;
   }
 }

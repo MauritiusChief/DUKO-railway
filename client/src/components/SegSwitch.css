@@ -1,0 +1,36 @@
+/* ====== 通用分段切换组件 SegSwitch ====== */
+
+.seg-switch {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  font-size: 12px;
+}
+
+.seg-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #888;
+  font-size: 12px;
+  padding: 2px 4px;
+}
+
+.seg-btn:hover {
+  color: #333;
+}
+
+.seg-active {
+  color: #333;
+  font-weight: bold;
+}
+
+.seg-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.seg-sep {
+  color: #ccc;
+  font-size: 12px;
+}

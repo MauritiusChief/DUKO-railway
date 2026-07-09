@@ -74,7 +74,7 @@ export const chatSchema = z.object({
   products: z.array(z.unknown()).optional(),
   history: z.array(z.unknown()).optional(),
   notes: z.array(z.unknown()).optional(),
-  mainAgentReply: z.string().optional(),
+  tableParseAgentReply: z.string().optional(),
   initialInput: z.string().optional(),
   colorHints: z.array(z.string()).optional(),
 });
@@ -103,8 +103,34 @@ export const layoutParseSchema = z.object({
   layout: z.object({}).passthrough(),
 });
 
+/** PATCH /api/auth/users/:id/username —— 管理员修改用户名 */
+export const adminUpdateUsernameSchema = z.object({
+  username: z
+    .string()
+    .min(2, '用户名至少 2 个字符')
+    .max(32, '用户名最长 32 个字符')
+    .regex(/^[a-zA-Z0-9_-]+$/, '用户名只能包含字母、数字、下划线和连字符'),
+  adminPassword: z.string().min(1, '请输入管理员密码'),
+});
+
+/** PATCH /api/auth/users/:id/password —— 管理员修改密码 */
+export const adminUpdatePasswordSchema = z.object({
+  password: z.string().min(6, '密码至少 6 个字符').max(128, '密码最长 128 个字符'),
+  adminPassword: z.string().min(1, '请输入管理员密码'),
+});
+
+/** DELETE /api/auth/users/:id —— 管理员删除用户 */
+export const adminDeleteUserSchema = z.object({
+  adminPassword: z.string().min(1, '请输入管理员密码'),
+});
+
 /** POST /api/debug/tool */
 export const debugToolSchema = z.object({
   tool: z.string().min(1, '工具名称不能为空'),
   args: z.record(z.unknown()).optional(),
+});
+
+/** POST /api/layout/generate-list —— 根据布局生成完整物料清单 */
+export const layoutGenerateListSchema = z.object({
+  layout: z.object({}).passthrough(),
 });

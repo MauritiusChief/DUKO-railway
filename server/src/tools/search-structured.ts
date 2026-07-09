@@ -1,21 +1,25 @@
 /**
  * searchSkuStructured 工具 —— 结构化多维度精确检索
  *
- * 通过四个独立参数实现顺序集合过滤。shapeFilter 等效 searchSkuShape（编辑距离匹配），
- * descriptionFilter 等效 searchSkuDescription（BM25 文本检索），二者都支持递归 JSON 过滤树
- * 表达的并集/交集/补集操作。向量检索层与前面过滤结果取交集。
+ * 通过三个独立参数实现顺序集合过滤：colorCode → shapeFilter → descriptionFilter，
+ * 所有过滤均为集合交集运算，逐步缩窄候选集。最后按 vectorQuery 语义相似度
+ * 对候选集排序（无 vectorQuery 时回退至 BM25 得分排序）。
+ *
+ * shapeFilter 等效 searchSkuShape（编辑距离模糊匹配），
+ * descriptionFilter 等效 searchSkuDescription（BM25 文本检索），
+ * 二者都支持递归 JSON 过滤树表达的并集/交集/补集操作。
  *
  * 四个参数：
  *   1. shapeFilter       —— 递归 JSON 过滤树，叶子用编辑距离模糊匹配（等效 searchSkuShape）
  *   2. descriptionFilter —— 递归 JSON 过滤树，叶子用 BM25 文本检索（等效 searchSkuDescription）
- *   3. vectorQuery       —— 向量语义检索内容（生成 embedding → LanceDB 相似度搜索）
+ *   3. vectorQuery       —— 向量语义检索内容，仅用于排序（非过滤），未命中记录排在末尾
  *   4. colorCode         —— 颜色限定（* 为通配符）
  *
- * 过滤流程（集合运算）：
+ * 过滤流程：
  *   getAllRecords() → colorCode 过滤 → shapeFilter 集合运算 → descriptionFilter 集合运算
- *   → vectorQuery 集合取交集 → 排序 → topK
+ *   → 向量排序（vectorQuery 距离排序，无则 BM25 得分降序）→ topK
  *
- * 任意参数为空/为 null 则跳过对应过滤步骤。
+ * 任意参数为空/为 null 则跳过对应过滤/排序步骤。
  *
  * 供 PreciseSearchAgent 使用。
  */
@@ -85,11 +89,16 @@ function isOperatorNode<T>(node: FilterNode<T>): node is OrNode<T> | AndNode<T> 
  *
  * 编辑距离阈值为 ceil(code.length / 2)（"GD"→1, "BLS"→2, "B"→1）。
  * "*" 表示该维度不做限制。
+ * 若叶子节点格式不合法（非 object / 缺少有效的 shapeTypeCode），返回空集。
  */
 function evaluateShapeLeaf(
   leaf: ShapeFilterLeaf,
   records: SkuRecord[],
 ): Set<string> {
+  if (!leaf || typeof leaf !== 'object' || typeof leaf.shapeTypeCode !== 'string') {
+    return new Set();
+  }
+
   const typeThreshold =
     leaf.shapeTypeCode === '*'
       ? 0
@@ -127,11 +136,16 @@ function evaluateShapeLeaf(
  *
  * 调用 searchBm25All 获取全部命中记录（不做颜色过滤和 topK 截断，
  * 颜色过滤由外层统一处理）。同时将得分写入外部累加器供最终排序使用。
+ * 若叶子节点格式不合法（非 object / 缺少有效的 text 字段），返回空集。
  */
 function evaluateDescriptionLeaf(
   leaf: DescriptionFilterLeaf,
   scoreAccumulator: Map<string, number>,
 ): Set<string> {
+  if (!leaf || typeof leaf !== 'object' || typeof leaf.text !== 'string' || !leaf.text.trim()) {
+    return new Set();
+  }
+
   const scores = searchBm25All(leaf.text);
   // 将得分写入累加器（取最大值，因为同一记录可能被多个叶子命中）
   for (const [id, score] of scores) {
@@ -150,6 +164,10 @@ function evaluateDescriptionLeaf(
 /**
  * 对过滤树递归求值，返回通过过滤的记录 ID 集合。
  *
+ * 对所有节点做防御性校验：若叶子节点为 null/非 object，返回空集；
+ * or / and 节点若 conditions 不是数组，返回空集；
+ * not 节点若缺少 condition，返回全集（无排除条件）。
+ *
  * @param node     - 过滤树根节点
  * @param leafEval - 叶子求值函数（返回叶子节点对应的 ID 集合）
  * @param allIds   - 全集 ID（用于 and 的起始集和 not 的补集运算）
@@ -161,11 +179,15 @@ function evaluateFilterTree<T>(
   allIds: Set<string>,
 ): Set<string> {
   if (!isOperatorNode(node)) {
+    if (node === null || node === undefined || typeof node !== 'object') {
+      return new Set();
+    }
     return leafEval(node as T);
   }
 
   switch (node.operator) {
     case 'or': {
+      if (!Array.isArray(node.conditions)) return new Set();
       const result = new Set<string>();
       for (const cond of node.conditions) {
         const condResult = evaluateFilterTree(cond, leafEval, allIds);
@@ -174,6 +196,7 @@ function evaluateFilterTree<T>(
       return result;
     }
     case 'and': {
+      if (!Array.isArray(node.conditions)) return new Set();
       if (node.conditions.length === 0) return new Set(allIds);
       let result = new Set(allIds);
       for (const cond of node.conditions) {
@@ -185,6 +208,7 @@ function evaluateFilterTree<T>(
       return result;
     }
     case 'not': {
+      if (!node.condition) return new Set(allIds);
       const condResult = evaluateFilterTree(node.condition, leafEval, allIds);
       return new Set([...allIds].filter((id) => !condResult.has(id)));
     }
@@ -272,7 +296,8 @@ export const SEARCH_SKU_STRUCTURED_TOOL = {
     description:
       '结构化多维度精确检索 DUKO 产品数据库。shapeFilter 等效 searchSkuShape（编辑距离模糊匹配），' +
       'descriptionFilter 等效 searchSkuDescription（BM25 文本检索），均支持递归 JSON 过滤树表达并/交/补集操作。' +
-      '外加向量语义检索与颜色限定。最终结果 = 四个过滤步骤的累进交集。适用于单条条目的精确深度查询。',
+      '外加颜色限定与向量语义排序。过滤链：colorCode → shapeFilter → descriptionFilter（集合交集），' +
+      '最后按 vectorQuery 语义相似度排序（未命中记录排在末尾，无 vectorQuery 时按 BM25 得分降序）。',
     parameters: {
       type: 'object',
       properties: {
@@ -296,8 +321,9 @@ export const SEARCH_SKU_STRUCTURED_TOOL = {
         vectorQuery: {
           type: 'string',
           description:
-            '向量语义查询文本（可选）。生成 embedding 后在 LanceDB 中做相似度搜索，与前面过滤结果取交集。' +
-            '传入空字符串跳过此过滤。',
+            '向量语义查询文本（可选）。生成 embedding 后在 LanceDB 中做相似度搜索，' +
+            '仅用于对过滤结果进行排序（距离近的排前面），不参与过滤——未命中的记录排在末尾。' +
+            '传入空字符串跳过向量排序，回退至 BM25 得分降序。',
         },
         colorCode: {
           type: 'string',

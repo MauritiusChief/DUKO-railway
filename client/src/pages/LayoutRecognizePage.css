@@ -13,38 +13,6 @@
   min-height: 0;
 }
 
-/* ====== 空状态 ====== */
-
-.lr-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  gap: 16px;
-}
-
-.lr-empty-title {
-  font-size: 18px;
-  font-weight: bold;
-  color: #333;
-}
-
-.lr-empty-desc {
-  font-size: 12px;
-  color: #888;
-  text-align: center;
-  max-width: 400px;
-}
-
-.lr-empty-actions {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  flex-wrap: wrap;
-  justify-content: center;
-}
-
 /* ====== 标题栏 ====== */
 
 .lr-header {
@@ -82,34 +50,182 @@
   flex-wrap: wrap;
 }
 
-/* ====== 主区域（左画布 + 右侧栏） ====== */
+/* ====== 主区域（左区 + 拖拽杆 + 右区） ====== */
 
 .lr-main {
   flex: 1;
   display: flex;
+  flex-direction: row;
   min-height: 0;
-  gap: 12px;
+  overflow: hidden;
+}
+
+/* ====== 左列 ====== */
+
+.lr-left-column {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ====== 左上方面板区 ====== */
+
+.lr-top-area {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: row;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.lr-top-left {
+  flex: 1 1 0;
+  min-width: 0;
+  padding-right: 6px;
+}
+
+.lr-top-placeholder {
+  flex: 1 1 0;
+  min-width: 0;
+  padding-left: 6px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background: #fafafa;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.lr-placeholder-header {
+  font-size: 13px;
+  font-weight: 600;
+  color: #555;
+}
+
+.lr-placeholder-body {
+  font-size: 12px;
+  color: #aaa;
+}
+
+/* ====== 物料清单面板 ====== */
+
+.lr-material-panel {
+  align-items: stretch;
+  justify-content: flex-start;
+  padding: 8px;
+  gap: 6px;
+}
+
+.lr-material-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #555;
+  flex-shrink: 0;
+}
+
+.lr-material-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.lr-material-body {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  gap: 6px;
+}
+
+.lr-material-info {
+  flex: 0 0 32%;
+  min-width: 0;
+  overflow: auto;
+  border: 1px solid #e0e0e0;
+  border-radius: 3px;
+  background: #fff;
+  padding: 4px 6px;
+  font-size: 11px;
+  font-family: 'Consolas', 'Monaco', monospace;
+  line-height: 1.6;
+  color: #333;
+}
+
+.lr-material-info-warn {
+  color: #9a6a00;
+}
+
+.lr-material-textarea {
+  flex: 1 1 0;
+  min-height: 0;
+  min-width: 0;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  padding: 6px 8px;
+  font-size: 12px;
+  font-family: 'Consolas', 'Monaco', monospace;
+  resize: none;
+  outline: none;
+  background: #fff;
+  color: #333;
+  line-height: 1.5;
+  white-space: pre;
+  overflow: auto;
+}
+
+.lr-material-error {
+  font-size: 11px;
+  color: #c00;
+  flex-shrink: 0;
+}
+
+/* ====== 横向拖拽杆（上下面板调高度） ====== */
+
+.lr-horizontal-handle {
+  height: 4px;
+  cursor: row-resize;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+
+.lr-horizontal-handle:hover {
+  background: #4a90d9;
 }
 
 /* ====== 画布区 ====== */
 
 .lr-canvas-wrap {
-  flex: 1;
+  flex: 1 1 0;
   overflow-y: auto;
   min-height: 0;
   min-width: 0;
 }
 
-/* ====== 右侧栏 ====== */
+/* ====== 竖向拖拽杆（调节右区宽度） ====== */
 
-.lr-sidebar {
-  width: 320px;
+.lr-resize-handle {
+  width: 4px;
+  cursor: col-resize;
   flex-shrink: 0;
+  transition: background 0.15s;
+}
+
+.lr-resize-handle:hover {
+  background: #4a90d9;
+}
+
+/* ====== 右区对话列 ====== */
+
+.lr-chat-column {
+  flex-shrink: 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  overflow-y: auto;
-  min-height: 0;
+  overflow: hidden;
+  border-left: 1px solid #ddd;
 }
 
 /* ====== 通用组件 ====== */

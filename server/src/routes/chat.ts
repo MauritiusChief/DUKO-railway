@@ -20,6 +20,7 @@
  */
 
 import { Router, type Request, type Response } from 'express';
+import { randomUUID } from 'crypto';
 import { createDeepSeekProvider } from '../llm/index.js';
 import { config } from '../config/env.js';
 import { ChatAgent } from '../agents/chat-agent.js';
@@ -27,6 +28,8 @@ import { SSEConnection } from '../middleware/sse.js';
 import { validate } from '../middleware/validate.js';
 import { chatSchema } from '../validation/schemas.js';
 import { insertRecord } from '../db/users.js';
+import { insertTraceSession, markSessionCompleted, markSessionError } from '../services/trace.js';
+import type { TraceContext } from '../types/trace.js';
 import type { ParsedItem, ProductEntry, ChatNote, ChatHistoryEntry } from '../types/manifest.js';
 
 export const chatRouter = Router();
@@ -49,13 +52,13 @@ interface ChatRequest {
   products?: ProductEntry[];
   history?: ChatHistoryEntry[];
   notes?: ChatNote[];
-  mainAgentReply?: string;
+  tableParseAgentReply?: string;
   initialInput?: string;
   colorHints?: string[];
 }
 
 chatRouter.post('/', validate(chatSchema), async (req: Request, res: Response) => {
-  const { message, lang, items, products, history, notes, mainAgentReply, initialInput, colorHints } = req.body as ChatRequest;
+  const { message, lang, items, products, history, notes, tableParseAgentReply, initialInput, colorHints } = req.body as ChatRequest;
 
   if (!message || typeof message !== 'string') {
     res.status(400).json({ error: 'message is required' });
@@ -76,8 +79,37 @@ chatRouter.post('/', validate(chatSchema), async (req: Request, res: Response) =
     apiKey: config.deepseekApiKey,
   });
 
+  // ---- Trace：创建 session ----
+  const traceEnabled = config.traceLog;
+  let traceContext: TraceContext | undefined;
+  if (traceEnabled) {
+    const conversationId = randomUUID();
+    traceContext = {
+      conversationId,
+      userId: req.user!.userId,
+      username: req.user!.username,
+      mainAgent: 'ChatAgent',
+      agentName: 'ChatAgent',
+      route: '/api/chat',
+      provider: llm.providerName,
+      model: llm.model,
+      enabled: true,
+    };
+    insertTraceSession(
+      conversationId,
+      traceContext.userId,
+      traceContext.username,
+      traceContext.mainAgent,
+      traceContext.agentName,
+      null,
+      traceContext.route,
+      traceContext.provider,
+      traceContext.model,
+    );
+  }
+
   const agent = new ChatAgent(llm, {
-    searchBudgetLimit: 5,
+    budgetLimit: 5,
     maxRounds: 20,
     maxHistoryPairs: 8,
     langHint: lang ?? '英文',
@@ -92,6 +124,10 @@ chatRouter.post('/', validate(chatSchema), async (req: Request, res: Response) =
     },
   });
 
+  if (traceContext) {
+    agent.trace = traceContext;
+  }
+
   try {
     const result = await agent.chat({
       message,
@@ -100,10 +136,14 @@ chatRouter.post('/', validate(chatSchema), async (req: Request, res: Response) =
       products,
       history,
       notes,
-      mainAgentReply,
+      tableParseAgentReply,
       initialInput,
       colorHints,
     });
+
+    if (traceContext) {
+      markSessionCompleted(traceContext.conversationId);
+    }
 
     sse.send('reply_done', {});
 
@@ -133,6 +173,9 @@ chatRouter.post('/', validate(chatSchema), async (req: Request, res: Response) =
     sse.send('done', {});
   } catch (err) {
     console.error('Chat error:', err);
+    if (traceContext) {
+      markSessionError(traceContext.conversationId, err instanceof Error ? err.message : 'LLM 请求失败');
+    }
     sse.send('error', { message: err instanceof Error ? err.message : 'LLM 请求失败' });
   } finally {
     sse.close();

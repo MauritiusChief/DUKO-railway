@@ -16,7 +16,6 @@ import type {
   BlockItem,
   SectionBlock,
   LayoutWall,
-  LayoutIsland,
   LayoutDocument,
   PositionedBlock,
   MutableLayout,
@@ -28,7 +27,6 @@ export type {
   BlockItem,
   SectionBlock,
   LayoutWall,
-  LayoutIsland,
   LayoutDocument,
   PositionedBlock,
   MutableLayout,
@@ -49,9 +47,9 @@ function sumWidths(blocks: SectionBlock[]): number {
 function targetTracks(category: BlockItemCategory): TrackSpan[] {
   switch (category) {
     case 'wall_cabinet':
-    case 'range_hood':
-    case 'window':
       return ['air'];
+    case 'stuffed_gap':
+      return ['air', 'ground'];
     case 'base_cabinet':
     case 'base_appliance_need_top':
     case 'base_appliance_without_top':
@@ -61,9 +59,28 @@ function targetTracks(category: BlockItemCategory): TrackSpan[] {
       return ['air', 'ground'];
     case 'gap':
       return ['air', 'ground'];
+    case 'gaplike_item':
+      return ['air', 'ground']; // 进清单但不挡两侧
+    case 'filler':
+      return ['air', 'ground']; // 填充条可 air / ground（BF / WF），TK 联动（TF）由 agent 手动双轨插入
     default:
       return ['air'];
   }
+}
+
+function isDualTrackCategory(category: BlockItemCategory): boolean {
+  return category === 'tall_cabinet' || category === 'tall_appliance';
+}
+
+/**
+ * ChatGPT 加的自动调整目标轨道的函数，有点用，所以留着吧
+ * @param category
+ * @param requestedTrack
+ * @returns
+ */
+function actualTrackForCategory(category: BlockItemCategory, requestedTrack: TrackSpan): TrackSpan {
+  const tracks = targetTracks(category);
+  return tracks.includes(requestedTrack) ? requestedTrack : tracks[0];
 }
 
 // ==================================================================
@@ -86,15 +103,13 @@ export function computePositions(blocks: SectionBlock[]): PositionedBlock[] {
 function findWallInLayout(
   layout: LayoutDocument,
   wallId: string,
-): { wall: LayoutWall | LayoutIsland; index: number; isIsland: boolean } | null {
-  const wIdx = layout.walls.findIndex((w) => w.id === wallId);
-  if (wIdx !== -1) return { wall: layout.walls[wIdx], index: wIdx, isIsland: false };
-  const iIdx = layout.islands.findIndex((i) => i.id === wallId);
-  if (iIdx !== -1) return { wall: layout.islands[iIdx], index: iIdx, isIsland: true };
+): { wall: LayoutWall; index: number } | null {
+  const idx = layout.walls.findIndex((w) => w.id === wallId);
+  if (idx !== -1) return { wall: layout.walls[idx], index: idx };
   return null;
 }
 
-function getTrackBlocks(wall: LayoutWall | LayoutIsland, track: TrackSpan): SectionBlock[] {
+function getTrackBlocks(wall: LayoutWall, track: TrackSpan): SectionBlock[] {
   return track === 'air' ? wall.airBlocks : wall.groundBlocks;
 }
 
@@ -109,7 +124,7 @@ function findBlocksByItemId(blocks: SectionBlock[], itemId: string): { block: Se
 }
 
 function findAllBlocksByItemId(
-  wall: LayoutWall | LayoutIsland,
+  wall: LayoutWall,
   itemId: string,
 ): { track: TrackSpan; block: SectionBlock; index: number }[] {
   const result: { track: TrackSpan; block: SectionBlock; index: number }[] = [];
@@ -243,7 +258,7 @@ function deleteBlockStatic(blocks: SectionBlock[], blockIndex: number): void {
 //  空挡对齐
 // ==================================================================
 
-function alignAirGround(wall: LayoutWall | LayoutIsland): void {
+function alignAirGround(wall: LayoutWall): void {
   const dualItemIds: string[] = [];
   for (const block of wall.airBlocks) {
     for (const item of block.items) {
@@ -262,19 +277,67 @@ function alignAirGround(wall: LayoutWall | LayoutIsland): void {
     const groundBefore = sumWidths(wall.groundBlocks.slice(0, groundIdx));
 
     if (airBefore > groundBefore) {
-      const gapWidth = airBefore - groundBefore;
-      wall.groundBlocks.splice(groundIdx, 0, {
-        id: uuid(),
-        width: gapWidth,
-        items: [{ id: uuid(), category: 'gap', sku: 'gap' }],
-      });
+      const diff = airBefore - groundBefore;
+
+      // 尝试从 air（长轨）左侧紧邻的 gap 削减
+      const airLeftIdx = airIdx - 1;
+      const airLeftBlock = airLeftIdx >= 0 ? wall.airBlocks[airLeftIdx] : null;
+      const airLeftIsGap = airLeftBlock && airLeftBlock.items[0]?.category === 'gap';
+
+      if (airLeftIsGap && airLeftBlock!.width > 0) {
+        if (airLeftBlock!.width >= diff) {
+          airLeftBlock!.width -= diff;
+          if (airLeftBlock!.width === 0) {
+            wall.airBlocks.splice(airLeftIdx, 1);
+          }
+        } else {
+          const consumed = airLeftBlock!.width;
+          wall.airBlocks.splice(airLeftIdx, 1);
+          const remaining = diff - consumed;
+          wall.groundBlocks.splice(groundIdx, 0, {
+            id: uuid(),
+            width: remaining,
+            items: [{ id: uuid(), category: 'gap', sku: 'gap' }],
+          });
+        }
+      } else {
+        wall.groundBlocks.splice(groundIdx, 0, {
+          id: uuid(),
+          width: diff,
+          items: [{ id: uuid(), category: 'gap', sku: 'gap' }],
+        });
+      }
     } else if (groundBefore > airBefore) {
-      const gapWidth = groundBefore - airBefore;
-      wall.airBlocks.splice(airIdx, 0, {
-        id: uuid(),
-        width: gapWidth,
-        items: [{ id: uuid(), category: 'gap', sku: 'gap' }],
-      });
+      const diff = groundBefore - airBefore;
+
+      // 尝试从 ground（长轨）左侧紧邻的 gap 削减
+      const groundLeftIdx = groundIdx - 1;
+      const groundLeftBlock = groundLeftIdx >= 0 ? wall.groundBlocks[groundLeftIdx] : null;
+      const groundLeftIsGap = groundLeftBlock && groundLeftBlock.items[0]?.category === 'gap';
+
+      if (groundLeftIsGap && groundLeftBlock!.width > 0) {
+        if (groundLeftBlock!.width >= diff) {
+          groundLeftBlock!.width -= diff;
+          if (groundLeftBlock!.width === 0) {
+            wall.groundBlocks.splice(groundLeftIdx, 1);
+          }
+        } else {
+          const consumed = groundLeftBlock!.width;
+          wall.groundBlocks.splice(groundLeftIdx, 1);
+          const remaining = diff - consumed;
+          wall.airBlocks.splice(airIdx, 0, {
+            id: uuid(),
+            width: remaining,
+            items: [{ id: uuid(), category: 'gap', sku: 'gap' }],
+          });
+        }
+      } else {
+        wall.airBlocks.splice(airIdx, 0, {
+          id: uuid(),
+          width: diff,
+          items: [{ id: uuid(), category: 'gap', sku: 'gap' }],
+        });
+      }
     }
   }
 }
@@ -283,16 +346,14 @@ function alignAirGround(wall: LayoutWall | LayoutIsland): void {
 //  序列化（布局 → Markdown 表格）
 // ==================================================================
 
-function serializeWall(wall: LayoutWall | LayoutIsland, isIsland: boolean): string {
-  const label = isIsland ? '岛台' : '墙';
-  const connected = isIsland
-    ? (wall as LayoutIsland).backToBackIslandIds
-    : (wall as LayoutWall).connectedWallIds;
-
-  let text = `### ${label}: "${wall.name}" (ID: ${wall.id})\n`;
+function serializeWall(wall: LayoutWall): string {
+  let text = `### 墙: "${wall.name}" (ID: ${wall.id})\n`;
   text += `- 总宽度: ${wall.width}" | 左侧暴露: ${wall.exposedLeft ? '是' : '否'} | 右侧暴露: ${wall.exposedRight ? '是' : '否'} | 后侧暴露: ${wall.exposedBack ? '是' : '否'}\n`;
-  if (connected.length > 0) {
-    text += `- 连接: ${connected.join(', ')}\n`;
+  if (wall.connectedWallIds.length > 0) {
+    text += `- L 形连接: ${wall.connectedWallIds.join(', ')}\n`;
+  }
+  if (wall.backToBackIslandIds.length > 0) {
+    text += `- 背靠背: ${wall.backToBackIslandIds.join(', ')}\n`;
   }
   text += '\n';
 
@@ -304,8 +365,15 @@ function serializeWall(wall: LayoutWall | LayoutIsland, isIsland: boolean): stri
     text += '(空)\n';
   } else {
     const airRows = airPos.map((p, i) => {
-      const items = p.block.items.map((it) => `${it.category}:${it.sku}`).join(' + ');
-      return [String(i + 1), String(p.block.width), String(p.distanceFromLeft), items];
+      const items = p.block.items.map((it) => {
+        let label = `${it.category}:${it.sku}[id:${it.id}]`;
+        if (it.height != null) label += `[H:${it.height}"]`;
+        if (it.isVanity) label += ' [vanity]';
+        return label;
+      }).join(' + ');
+      let itemText = p.block.colorCode ? `${items} [颜色: ${p.block.colorCode}]` : items;
+      itemText += ` [blockId:${p.block.id}]`;
+      return [String(i + 1), String(p.block.width), String(p.distanceFromLeft), itemText];
     });
     text += markdownTable([header, ...airRows]) + '\n';
   }
@@ -316,8 +384,15 @@ function serializeWall(wall: LayoutWall | LayoutIsland, isIsland: boolean): stri
     text += '(空)\n';
   } else {
     const groundRows = groundPos.map((p, i) => {
-      const items = p.block.items.map((it) => `${it.category}:${it.sku}`).join(' + ');
-      return [String(i + 1), String(p.block.width), String(p.distanceFromLeft), items];
+      const items = p.block.items.map((it) => {
+        let label = `${it.category}:${it.sku}[id:${it.id}]`;
+        if (it.height != null) label += `[H:${it.height}"]`;
+        if (it.isVanity) label += ' [vanity]';
+        return label;
+      }).join(' + ');
+      let itemText = p.block.colorCode ? `${items} [颜色: ${p.block.colorCode}]` : items;
+      itemText += ` [blockId:${p.block.id}]`;
+      return [String(i + 1), String(p.block.width), String(p.distanceFromLeft), itemText];
     });
     text += markdownTable([header, ...groundRows]) + '\n';
   }
@@ -326,16 +401,13 @@ function serializeWall(wall: LayoutWall | LayoutIsland, isIsland: boolean): stri
 }
 
 function serializeLayout(layout: LayoutDocument): string {
-  if (layout.walls.length === 0 && layout.islands.length === 0) {
-    return '当前布局中没有墙或岛台。请使用 createWall 工具添加。';
+  if (layout.walls.length === 0) {
+    return '当前布局中没有任何墙。请使用 createWall 工具添加。';
   }
 
-  let text = `## 布局: "${layout.name}" (ID: ${layout.id})\n\n`;
+  let text = `## 布局 (ID: ${layout.id})\n\n`;
   for (const wall of layout.walls) {
-    text += serializeWall(wall, false) + '\n';
-  }
-  for (const island of layout.islands) {
-    text += serializeWall(island, true) + '\n';
+    text += serializeWall(wall) + '\n';
   }
   return text;
 }
@@ -367,57 +439,40 @@ export const CREATE_WALL_TOOL = {
   function: {
     name: 'createWall',
     description:
-      '在布局中创建一面新墙或一个新岛台。name 若不提供则自动编号。width 为总宽度（英寸）。',
+      '在布局中创建一面新墙/岛台。name 若不提供则自动编号。width 为总宽度（英寸）。',
     parameters: {
       type: 'object',
       properties: {
-        type: { type: 'string', description: '创建类型："wall"（墙）或 "island"（岛台）', enum: ['wall', 'island'] },
-        name: { type: 'string', description: '墙/岛台的名称（可选，不填则自动编号）' },
+        name: { type: 'string', description: '墙的名称（可选，不填则自动编号）' },
         width: { type: 'number', description: '总宽度（英寸）' },
       },
-      required: ['type', 'width'],
+      required: ['width'],
     },
   },
 } as const satisfies ToolDefinition;
 
 export function executeCreateWall(state: MutableLayout, args: Record<string, unknown>): string {
-  const type = String(args.type ?? 'wall') as 'wall' | 'island';
   const providedName = typeof args.name === 'string' && args.name.trim() ? args.name.trim() : '';
   const width = typeof args.width === 'number' && args.width > 0 ? args.width : 0;
   if (width <= 0) return '错误: width 必须为正数。';
 
-  const num = (type === 'wall' ? state.layout.walls.length : state.layout.islands.length) + 1;
-  const name = providedName || (type === 'wall' ? `Wall ${num}` : `Island ${num}`);
+  const num = state.layout.walls.length + 1;
+  const name = providedName || `Wall ${num}`;
 
-  if (type === 'wall') {
-    const wall: LayoutWall = {
-      id: uuid(),
-      name,
-      width,
-      exposedLeft: false,
-      exposedRight: false,
-      exposedBack: false,
-      airBlocks: [],
-      groundBlocks: [],
-      connectedWallIds: [],
-    };
-    state.layout.walls.push(wall);
-    return `已创建墙 "${name}" (ID: ${wall.id})，宽度 ${width}"。`;
-  } else {
-    const island: LayoutIsland = {
-      id: uuid(),
-      name,
-      width,
-      exposedLeft: false,
-      exposedRight: false,
-      exposedBack: false,
-      airBlocks: [],
-      groundBlocks: [],
-      backToBackIslandIds: [],
-    };
-    state.layout.islands.push(island);
-    return `已创建岛台 "${name}" (ID: ${island.id})，宽度 ${width}"。`;
-  }
+  const wall: LayoutWall = {
+    id: uuid(),
+    name,
+    width,
+    exposedLeft: false,
+    exposedRight: false,
+    exposedBack: false,
+    airBlocks: [],
+    groundBlocks: [],
+    connectedWallIds: [],
+    backToBackIslandIds: [],
+  };
+  state.layout.walls.push(wall);
+  return `已创建墙 "${name}" (ID: ${wall.id})，宽度 ${width}"。`;
 }
 
 // ==================================================================
@@ -443,13 +498,11 @@ export function executeDeleteWall(state: MutableLayout, args: Record<string, unk
   const wallId = String(args.wallId ?? '').trim();
   if (!wallId) return '错误: wallId 为必填项。';
 
-  const wallFound = state.layout.walls.some((w) => w.id === wallId);
-  const islandFound = state.layout.islands.some((i) => i.id === wallId);
-  if (!wallFound && !islandFound) return `错误: 未找到 ID 为 "${wallId}" 的墙或岛台。`;
+  const found = state.layout.walls.some((w) => w.id === wallId);
+  if (!found) return `错误: 未找到 ID 为 "${wallId}" 的墙。`;
 
   state.layout.walls = state.layout.walls.filter((w) => w.id !== wallId);
-  state.layout.islands = state.layout.islands.filter((i) => i.id !== wallId);
-  return `已删除 ID 为 "${wallId}" 的墙/岛台。`;
+  return `已删除 ID 为 "${wallId}" 的墙。`;
 }
 
 // ==================================================================
@@ -458,7 +511,7 @@ export function executeDeleteWall(state: MutableLayout, args: Record<string, unk
 
 const CATEGORY_DESC =
   '物品分类: wall_cabinet(吊柜), base_cabinet(地柜), tall_cabinet(高柜-通天), gap(空挡), ' +
-  'range_hood(抽油烟机), window(窗户), tall_appliance(通天电器如冰箱), ' +
+  'stuffed_gap(抽油烟机/窗户等，本质同 gap), gaplike_item(遮挡性不强的商品), filler(填充条/窄条), tall_appliance(高电器如冰箱), ' +
   'base_appliance_need_top(需台面电器如洗碗机), base_appliance_without_top(免台面电器如灶台)';
 
 export const INSERT_ITEM_TOOL = {
@@ -469,7 +522,10 @@ export const INSERT_ITEM_TOOL = {
       `在指定墙/岛台的最左侧（轨道末尾）插入一个或多个物品。` +
       `会自动将物品推到最左侧可插入位置。${CATEGORY_DESC}。` +
       `全高物品（tall_cabinet/tall_appliance）会自动同时在 air 和 ground 轨道插入。` +
-      `墙吊柜（wall_cabinet）支持通过 stackedSkus 堆叠。`,
+      `墙吊柜（wall_cabinet）支持通过 stackedItems 堆叠。` +
+      `isVanity 仅对 base_cabinet 有效，标记为 vanity cabinet。` +
+      `colorCode 设置该 block 的颜色代码。` +
+      `height 设置主物品高度（英寸），仅 air 轨物品（wall_cabinet / tall_cabinet / tall_appliance）及叠放吊柜需要填写。`,
     parameters: {
       type: 'object',
       properties: {
@@ -478,10 +534,20 @@ export const INSERT_ITEM_TOOL = {
         category: { type: 'string', description: CATEGORY_DESC },
         sku: { type: 'string', description: 'SKU 代码（柜体如 "02B15"）或具体名称（电器如 "refrigerator"）' },
         width: { type: 'number', description: '宽度（英寸）' },
-        stackedSkus: {
+        height: { type: 'number', description: '主物品高度（英寸），仅 wall_cabinet / tall_cabinet / tall_appliance 需要' },
+        isVanity: { type: 'boolean', description: '是否为 vanity cabinet（仅 base_cabinet 有效）' },
+        colorCode: { type: 'string', description: '颜色代码（如 "02"），可选' },
+        stackedItems: {
           type: 'array',
-          items: { type: 'string' },
-          description: '叠放吊柜的 SKU 列表（仅 wall_cabinet/tall_cabinet/tall_appliance 支持，仅加在 air 轨）',
+          items: {
+            type: 'object',
+            properties: {
+              sku: { type: 'string', description: '叠放吊柜的 SKU' },
+              height: { type: 'number', description: '叠放吊柜的高度（英寸）' },
+            },
+            required: ['sku'],
+          },
+          description: '叠放吊柜列表（仅 wall_cabinet/tall_cabinet/tall_appliance 支持，仅加在 air 轨）',
         },
       },
       required: ['wallId', 'category', 'sku', 'width'],
@@ -495,8 +561,17 @@ export function executeInsertItem(state: MutableLayout, args: Record<string, unk
   const category = String(args.category ?? '') as BlockItemCategory;
   const sku = String(args.sku ?? '').trim() || category;
   const width = typeof args.width === 'number' && args.width > 0 ? args.width : 0;
-  const stackedSkus: string[] = Array.isArray(args.stackedSkus)
-    ? args.stackedSkus.filter((s) => typeof s === 'string' && s.trim())
+  const height = typeof args.height === 'number' && args.height > 0 ? args.height : undefined;
+  const isVanity = typeof args.isVanity === 'boolean' ? args.isVanity : undefined;
+  const colorCode = typeof args.colorCode === 'string' ? args.colorCode.trim() : undefined;
+  const stackedItemsRaw: { sku: string; height?: number }[] = Array.isArray(args.stackedItems)
+    ? args.stackedItems.filter(
+        (s: unknown) => typeof s === 'object' && s !== null && typeof (s as Record<string, unknown>).sku === 'string' && (s as Record<string, unknown>).sku !== '',
+      ).map((s: unknown) => {
+        const obj = s as Record<string, unknown>;
+        const stackedHeight = typeof obj.height === 'number' && obj.height > 0 ? obj.height : undefined;
+        return { sku: String(obj.sku).trim(), height: stackedHeight };
+      })
     : [];
 
   if (width <= 0) return '错误: width 必须为正数。';
@@ -504,22 +579,29 @@ export function executeInsertItem(state: MutableLayout, args: Record<string, unk
   const ref = findWallInLayout(state.layout, wallId);
   if (!ref) return `错误: 未找到 ID 为 "${wallId}" 的墙或岛台。`;
 
-  const tracks = targetTracks(category);
-  const isDual = tracks.length === 2 && category !== 'gap';
+  const isDual = isDualTrackCategory(category);
+  const cc = colorCode || undefined;
+  const heightRelevant =
+    category === 'wall_cabinet' || category === 'tall_cabinet' || category === 'tall_appliance';
 
   if (isDual) {
     const sharedMainItem: BlockItem = { id: uuid(), category, sku };
-    const stackedItems: BlockItem[] = stackedSkus.map((s) => ({
-      id: uuid(), category: 'wall_cabinet' as const, sku: s,
-    }));
+    if (height && heightRelevant) sharedMainItem.height = height;
+    const stackedItems: BlockItem[] = stackedItemsRaw.map((si) => {
+      const item: BlockItem = { id: uuid(), category: 'wall_cabinet' as const, sku: si.sku };
+      if (si.height) item.height = si.height;
+      return item;
+    });
 
     const airBlock: SectionBlock = {
       id: uuid(), width,
       items: [{ ...sharedMainItem }, ...stackedItems],
+      colorCode: cc,
     };
     const groundBlock: SectionBlock = {
       id: uuid(), width,
       items: [{ ...sharedMainItem }],
+      colorCode: cc,
     };
 
     insertBlocksAtEnd(ref.wall.airBlocks, [airBlock]);
@@ -527,21 +609,35 @@ export function executeInsertItem(state: MutableLayout, args: Record<string, unk
     alignAirGround(ref.wall);
 
     return `已在 "${ref.wall.name}" 同时插入 ${category}（${width}"）到 air 和 ground 轨道。` +
-      (stackedItems.length > 0 ? ` 附带 ${stackedItems.length} 个叠放吊柜。` : '');
+      ` itemId: ${sharedMainItem.id}; airBlockId: ${airBlock.id}; groundBlockId: ${groundBlock.id}。` +
+      (height ? ` 高度: ${height}"` : '') +
+      (colorCode ? ` 颜色: ${colorCode}` : '') +
+      (stackedItems.length > 0 ? ` 附带 ${stackedItems.length} 个叠放吊柜: ${stackedItems.map((item) => `${item.sku}[id:${item.id}]`).join(', ')}。` : '');
   } else {
-    const actualTrack = category === 'gap' ? track : tracks[0];
-    const items: BlockItem[] = [{ id: uuid(), category, sku }];
-    for (const s of stackedSkus) {
-      items.push({ id: uuid(), category: 'wall_cabinet', sku: s });
+    const actualTrack = actualTrackForCategory(category, track);
+    const mainItem: BlockItem & { isVanity?: boolean } = { id: uuid(), category, sku };
+    if (category === 'base_cabinet' && isVanity === true) {
+      mainItem.isVanity = true;
+    }
+    if (height && heightRelevant) mainItem.height = height;
+    const items: BlockItem[] = [mainItem];
+    for (const si of stackedItemsRaw) {
+      const item: BlockItem = { id: uuid(), category: 'wall_cabinet', sku: si.sku };
+      if (si.height) item.height = si.height;
+      items.push(item);
     }
 
-    const newBlock: SectionBlock = { id: uuid(), width, items };
+    const newBlock: SectionBlock = { id: uuid(), width, items, colorCode: cc };
     const blocks = getTrackBlocks(ref.wall, actualTrack);
     insertBlocksAtEnd(blocks, [newBlock]);
     alignAirGround(ref.wall);
 
     return `已在 "${ref.wall.name}" 的 ${actualTrack} 轨道插入 ${category}（${width}"）。` +
-      (stackedSkus.length > 0 ? ` 附带 ${stackedSkus.length} 个叠放吊柜。` : '');
+      ` itemId: ${mainItem.id}; blockId: ${newBlock.id}。` +
+      (height ? ` 高度: ${height}"` : '') +
+      (isVanity ? ' (vanity cabinet)' : '') +
+      (colorCode ? ` 颜色: ${colorCode}` : '') +
+      (stackedItemsRaw.length > 0 ? ` 附带 ${stackedItemsRaw.length} 个叠放吊柜: ${items.slice(1).map((item) => `${item.sku}[id:${item.id}]`).join(', ')}。` : '');
   }
 }
 
@@ -626,7 +722,9 @@ export const INSERT_ITEM_AT_POSITION_TOOL = {
     description:
       '在指定墙/岛台的指定距左距离（英寸）处精确插入一个物品。' +
       '如果目标位置是 gap，会拆分或替换 gap；如果不是 gap，会将右侧物品挤开。' +
-      '全高物品会自动同时在 air 和 ground 两轨的相同距离插入。',
+      '全高物品会自动同时在 air 和 ground 两轨的相同距离插入。' +
+      'isVanity 仅对 base_cabinet 有效。colorCode 设置该 block 的颜色代码。' +
+      'height 设置主物品高度（英寸），仅 air 轨物品（wall_cabinet / tall_cabinet / tall_appliance）及叠放吊柜需要填写。',
     parameters: {
       type: 'object',
       properties: {
@@ -635,8 +733,11 @@ export const INSERT_ITEM_AT_POSITION_TOOL = {
         category: { type: 'string', description: CATEGORY_DESC },
         sku: { type: 'string', description: 'SKU 代码或具体名称' },
         width: { type: 'number', description: '宽度（英寸）' },
+        height: { type: 'number', description: '主物品高度（英寸），仅 wall_cabinet / tall_cabinet / tall_appliance 需要' },
         distanceFromLeft: { type: 'number', description: '距左距离（英寸）' },
-        stackedSkus: { type: 'array', items: { type: 'string' }, description: '叠放吊柜的 SKU 列表（仅加在 air 轨）' },
+        isVanity: { type: 'boolean', description: '是否为 vanity cabinet（仅 base_cabinet 有效）' },
+        colorCode: { type: 'string', description: '颜色代码（如 "02"），可选' },
+        stackedItems: { type: 'array', items: { type: 'object', properties: { sku: { type: 'string', description: '叠放吊柜的 SKU' }, height: { type: 'number', description: '叠放吊柜的高度（英寸）' } }, required: ['sku'] }, description: '叠放吊柜列表（仅加在 air 轨）' },
       },
       required: ['wallId', 'category', 'sku', 'width', 'distanceFromLeft'],
     },
@@ -649,9 +750,18 @@ export function executeInsertItemAtPosition(state: MutableLayout, args: Record<s
   const category = String(args.category ?? '') as BlockItemCategory;
   const sku = String(args.sku ?? '').trim() || category;
   const width = typeof args.width === 'number' && args.width > 0 ? args.width : 0;
+  const height = typeof args.height === 'number' && args.height > 0 ? args.height : undefined;
   const distanceFromLeft = typeof args.distanceFromLeft === 'number' ? args.distanceFromLeft : 0;
-  const stackedSkus: string[] = Array.isArray(args.stackedSkus)
-    ? args.stackedSkus.filter((s) => typeof s === 'string' && s.trim())
+  const isVanity = typeof args.isVanity === 'boolean' ? args.isVanity : undefined;
+  const colorCode = typeof args.colorCode === 'string' ? args.colorCode.trim() : undefined;
+  const stackedItemsRaw: { sku: string; height?: number }[] = Array.isArray(args.stackedItems)
+    ? args.stackedItems.filter(
+        (s: unknown) => typeof s === 'object' && s !== null && typeof (s as Record<string, unknown>).sku === 'string' && (s as Record<string, unknown>).sku !== '',
+      ).map((s: unknown) => {
+        const obj = s as Record<string, unknown>;
+        const stackedHeight = typeof obj.height === 'number' && obj.height > 0 ? obj.height : undefined;
+        return { sku: String(obj.sku).trim(), height: stackedHeight };
+      })
     : [];
 
   if (width <= 0) return '错误: width 必须为正数。';
@@ -659,36 +769,57 @@ export function executeInsertItemAtPosition(state: MutableLayout, args: Record<s
   const ref = findWallInLayout(state.layout, wallId);
   if (!ref) return `错误: 未找到 ID 为 "${wallId}" 的墙或岛台。`;
 
-  const tracks = targetTracks(category);
-  const isDual = tracks.length === 2 && category !== 'gap';
+  const isDual = isDualTrackCategory(category);
+  const cc = colorCode || undefined;
+  const heightRelevant =
+    category === 'wall_cabinet' || category === 'tall_cabinet' || category === 'tall_appliance';
 
   if (isDual) {
     const sharedMainItem: BlockItem = { id: uuid(), category, sku };
-    const stackedItems: BlockItem[] = stackedSkus.map((s) => ({
-      id: uuid(), category: 'wall_cabinet' as const, sku: s,
-    }));
+    if (height && heightRelevant) sharedMainItem.height = height;
+    const stackedItems: BlockItem[] = stackedItemsRaw.map((si) => {
+      const item: BlockItem = { id: uuid(), category: 'wall_cabinet' as const, sku: si.sku };
+      if (si.height) item.height = si.height;
+      return item;
+    });
 
-    const airBlock: SectionBlock = { id: uuid(), width, items: [{ ...sharedMainItem }, ...stackedItems] };
-    const groundBlock: SectionBlock = { id: uuid(), width, items: [{ ...sharedMainItem }] };
+    const airBlock: SectionBlock = { id: uuid(), width, items: [{ ...sharedMainItem }, ...stackedItems], colorCode: cc };
+    const groundBlock: SectionBlock = { id: uuid(), width, items: [{ ...sharedMainItem }], colorCode: cc };
 
     insertBlockAtPosition(ref.wall.airBlocks, airBlock, distanceFromLeft);
     insertBlockAtPosition(ref.wall.groundBlocks, groundBlock, distanceFromLeft);
     alignAirGround(ref.wall);
 
-    return `已在 "${ref.wall.name}" 的 air+ground 两轨距左 ${distanceFromLeft}" 处插入 ${category}（${width}"）。`;
+    return `已在 "${ref.wall.name}" 的 air+ground 两轨距左 ${distanceFromLeft}" 处插入 ${category}（${width}"）。` +
+      ` itemId: ${sharedMainItem.id}; airBlockId: ${airBlock.id}; groundBlockId: ${groundBlock.id}。` +
+      (height ? ` 高度: ${height}"` : '') +
+      (colorCode ? ` 颜色: ${colorCode}` : '') +
+      (stackedItems.length > 0 ? ` 附带 ${stackedItems.length} 个叠放吊柜: ${stackedItems.map((item) => `${item.sku}[id:${item.id}]`).join(', ')}。` : '');
   } else {
-    const actualTrack = category === 'gap' ? track : tracks[0];
-    const items: BlockItem[] = [{ id: uuid(), category, sku }];
-    for (const s of stackedSkus) {
-      items.push({ id: uuid(), category: 'wall_cabinet', sku: s });
+    const actualTrack = actualTrackForCategory(category, track);
+    const mainItem: BlockItem & { isVanity?: boolean } = { id: uuid(), category, sku };
+    if (category === 'base_cabinet' && isVanity === true) {
+      mainItem.isVanity = true;
+    }
+    if (height && heightRelevant) mainItem.height = height;
+    const items: BlockItem[] = [mainItem];
+    for (const si of stackedItemsRaw) {
+      const item: BlockItem = { id: uuid(), category: 'wall_cabinet', sku: si.sku };
+      if (si.height) item.height = si.height;
+      items.push(item);
     }
 
-    const newBlock: SectionBlock = { id: uuid(), width, items };
+    const newBlock: SectionBlock = { id: uuid(), width, items, colorCode: cc };
     const blocks = getTrackBlocks(ref.wall, actualTrack);
     insertBlockAtPosition(blocks, newBlock, distanceFromLeft);
     alignAirGround(ref.wall);
 
-    return `已在 "${ref.wall.name}" 的 ${actualTrack} 轨距左 ${distanceFromLeft}" 处插入 ${category}（${width}"）。`;
+    return `已在 "${ref.wall.name}" 的 ${actualTrack} 轨距左 ${distanceFromLeft}" 处插入 ${category}（${width}"）。` +
+      ` itemId: ${mainItem.id}; blockId: ${newBlock.id}。` +
+      (height ? ` 高度: ${height}"` : '') +
+      (isVanity ? ' (vanity cabinet)' : '') +
+      (colorCode ? ` 颜色: ${colorCode}` : '') +
+      (stackedItemsRaw.length > 0 ? ` 附带 ${stackedItemsRaw.length} 个叠放吊柜: ${items.slice(1).map((item) => `${item.sku}[id:${item.id}]`).join(', ')}。` : '');
   }
 }
 
@@ -839,14 +970,14 @@ export function executeConnectIslands(state: MutableLayout, args: Record<string,
   const id1 = String(args.islandId1 ?? '').trim();
   const id2 = String(args.islandId2 ?? '').trim();
 
-  const i1 = state.layout.islands.find((i) => i.id === id1);
-  const i2 = state.layout.islands.find((i) => i.id === id2);
-  if (!i1) return `错误: 未找到 ID "${id1}" 的岛台。`;
-  if (!i2) return `错误: 未找到 ID "${id2}" 的岛台。`;
+  const w1 = state.layout.walls.find((w) => w.id === id1);
+  const w2 = state.layout.walls.find((w) => w.id === id2);
+  if (!w1) return `错误: 未找到 ID "${id1}" 的墙。`;
+  if (!w2) return `错误: 未找到 ID "${id2}" 的墙。`;
 
-  if (!i1.backToBackIslandIds.includes(id2)) i1.backToBackIslandIds.push(id2);
-  if (!i2.backToBackIslandIds.includes(id1)) i2.backToBackIslandIds.push(id1);
-  return `已建立岛台 "${i1.name}" ↔ "${i2.name}" 的相背关系。`;
+  if (!w1.backToBackIslandIds.includes(id2)) w1.backToBackIslandIds.push(id2);
+  if (!w2.backToBackIslandIds.includes(id1)) w2.backToBackIslandIds.push(id1);
+  return `已建立墙 "${w1.name}" ↔ "${w2.name}" 的背靠背关系。`;
 }
 
 export const DISCONNECT_ISLANDS_TOOL = {
@@ -869,12 +1000,12 @@ export function executeDisconnectIslands(state: MutableLayout, args: Record<stri
   const id1 = String(args.islandId1 ?? '').trim();
   const id2 = String(args.islandId2 ?? '').trim();
 
-  const i1 = state.layout.islands.find((i) => i.id === id1);
-  const i2 = state.layout.islands.find((i) => i.id === id2);
+  const w1 = state.layout.walls.find((w) => w.id === id1);
+  const w2 = state.layout.walls.find((w) => w.id === id2);
 
-  if (i1) i1.backToBackIslandIds = i1.backToBackIslandIds.filter((id) => id !== id2);
-  if (i2) i2.backToBackIslandIds = i2.backToBackIslandIds.filter((id) => id !== id1);
-  return `已解除相背关系。`;
+  if (w1) w1.backToBackIslandIds = w1.backToBackIslandIds.filter((id) => id !== id2);
+  if (w2) w2.backToBackIslandIds = w2.backToBackIslandIds.filter((id) => id !== id1);
+  return `已解除背靠背关系。`;
 }
 
 // ==================================================================

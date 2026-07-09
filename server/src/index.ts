@@ -27,14 +27,17 @@ import { imageParseRouter } from './routes/imageParse.js';
 import { layoutParseImageRouter } from './routes/layoutParseImage.js';
 import { debugRouter } from './routes/debug.js';
 import { authRouter, meHandler } from './routes/auth.js';
-import { historyRouter } from './routes/history.js';
+import { historyRouter, adminHistoryRouter } from './routes/history.js';
 import { notesRouter } from './routes/notes.js';
+import { layoutGenerateListRouter } from './routes/layoutGenerateList.js';
+import { traceRouter } from './routes/trace.js';
 import { authenticateToken } from './middleware/auth.js';
 import { authLimiter, apiLimiter, llmLimiter } from './middleware/rateLimit.js';
 import { config, validateSecrets } from './config/env.js';
 import { initDB } from './db/lance.js';
 import { initSkuDB, getRecordCount } from './db/sku.js';
-import { initUserDB, seedAdminUser } from './db/users.js';
+import { initUserDB, seedAdminUser, getUserDb } from './db/users.js';
+import { initTraceDB, cleanupOldTraces } from './services/trace.js';
 import { ingestFromFile, loadAllReferenceData } from './services/sku-ingest.js';
 import { initBm25Index } from './services/bm25.js';
 import { runAllSteps } from './process-cli.js';
@@ -88,6 +91,12 @@ app.use('/api/table-parse', llmLimiter, authenticateToken, tableParseLlmRouter);
 app.use('/api/image-parse', llmLimiter, authenticateToken, imageParseRouter);              // POST /api/image-parse
 app.use('/api/layout/parse-image', llmLimiter, authenticateToken, layoutParseImageRouter); // POST /api/layout/parse-image
 
+// ---- Trace 路由（管理员只读，使用 apiLimiter）----
+app.use('/api/trace', apiLimiter, authenticateToken, traceRouter);                          // GET /api/trace[/:conversationId]
+
+// ---- 管理员历史路由（管理员只读浏览所有用户历史）----
+app.use('/api/admin', apiLimiter, authenticateToken, adminHistoryRouter);                    // GET /api/admin/history[/:id]
+
 // ---- ScriptCat 脚本下载端点（无需登录）----
 // 供前端小按钮下载，文件名带构建时间戳以便用户确认是否为最新版本
 app.get('/api/script/download', apiLimiter, (_req, res) => {
@@ -120,6 +129,7 @@ app.use('/api', tableParseRouter);    // GET /api/colors / POST /api/check-expos
 app.use('/api', debugRouter);         // POST /api/debug/tool —— 工具测试接口（debug 用）
 app.use('/api', historyRouter);       // GET/POST/DELETE /api/history[/:id] —— 历史记录
 app.use('/api', notesRouter);         // GET/POST /api/notes —— 用户笔记
+app.use('/api', layoutGenerateListRouter); // POST /api/layout/generate-list —— 物料清单
 
 // ---- 前端静态文件（生产模式） ----
 const clientDist = path.resolve(__dirname, '../../client/dist');
@@ -139,6 +149,8 @@ app.get('*', (_req, res) => {
   // 初始化用户数据库并播种管理员账号
   const dbDir = config.dbDir;
   initUserDB(dbDir);
+  initTraceDB(getUserDb());
+  cleanupOldTraces();
   const adminHash = bcrypt.hashSync(config.adminPassword, 12);
   seedAdminUser(config.adminUsername, adminHash);
   console.log(`用户数据库已就绪 (管理员: ${config.adminUsername})`);

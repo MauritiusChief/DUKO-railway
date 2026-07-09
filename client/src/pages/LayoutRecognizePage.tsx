@@ -1,8 +1,8 @@
 /**
  * LayoutRecognizePage —— 布局识别主页面
  *
- * 提供布局文档管理（新建/切换/导入/导出/删除）、墙/岛台展示与编辑。
- * 通过 LayoutCanvas 渲染所有墙/岛台，每面墙含空中 + 地面两个轨道。
+ * 仅维护单个当前布局，通过保存/加载 JSON 文件进行备份与恢复。
+ * 通过 LayoutCanvas 渲染所有墙，每面墙含空中 + 地面两个轨道。
  */
 import { useState, useRef, useCallback } from 'react';
 import { useLayoutStore } from '../stores/layoutStore';
@@ -10,50 +10,42 @@ import { useI18n } from '../i18n/context';
 import { LayoutCanvas } from '../components/LayoutCanvas';
 import { ImageUploadPanel } from '../components/ImageUploadPanel';
 import { LayoutChatPanel } from '../components/LayoutChatPanel';
+import { SegSwitch } from '../components/SegSwitch';
+import { useSplitResize } from '../hooks/useSplitResize';
+import { fetchWithAuth } from '../lib/fetchWithAuth';
 import type { LayoutDocument } from '../types';
 import './LayoutRecognizePage.css';
 
 export default function LayoutRecognizePage() {
-  const { t } = useI18n();
+  const { t, lang, setLang } = useI18n();
   const store = useLayoutStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const activeLayout = store.getActiveLayout();
+  const activeLayout = store.activeLayout;
 
-  // ---- 新建布局 ----
-  const [newLayoutName, setNewLayoutName] = useState('');
-  const [showNewForm, setShowNewForm] = useState(false);
-
-  const openNewLayoutForm = useCallback(() => {
-    const num = store.layouts.length + 1;
-    setNewLayoutName(`Layout ${num}`);
-    setShowNewForm(true);
-  }, [store.layouts.length]);
-
-  const handleCreateLayout = useCallback(() => {
-    if (!newLayoutName.trim()) return;
-    store.createLayout(newLayoutName.trim());
-    setNewLayoutName('');
-    setShowNewForm(false);
-  }, [newLayoutName, store]);
-
-  // ---- 导出 ----
-  const handleExport = useCallback(() => {
-    const layout = store.exportActiveLayout();
-    if (!layout) return;
-    const blob = new Blob([JSON.stringify(layout, null, 2)], { type: 'application/json' });
+  // ---- 保存 ----
+  const handleSave = useCallback(() => {
+    const json = store.getActiveLayoutJson();
+    if (!json) return;
+    const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${layout.name.replace(/\s+/g, '_')}.json`;
+    // 文件名使用固定前缀 + 本地时间戳，格式：duko-layout-2026-06-25_21-53-51.json
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const ts =
+      `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}` +
+      `_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
+    a.download = `duko-layout-${ts}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   }, [store]);
 
-  // ---- 导入 ----
-  const handleImportClick = useCallback(() => {
+  // ---- 加载 ----
+  const handleLoadClick = useCallback(() => {
     fileInputRef.current?.click();
   }, []);
 
@@ -64,110 +56,113 @@ export default function LayoutRecognizePage() {
       const reader = new FileReader();
       reader.onload = () => {
         try {
-          const layout = JSON.parse(reader.result as string) as LayoutDocument;
-          store.importLayout(layout);
+          store.loadLayout(reader.result as string);
         } catch {
-          alert('Invalid layout JSON file');
+          alert(t('无效的布局文件'));
         }
       };
       reader.readAsText(file);
       e.target.value = '';
     },
-    [store],
+    [store, t],
   );
 
-  // ---- 添加墙面 / 岛台 ----
+  // ---- 新建 ----
+  const handleNew = useCallback(() => {
+    if (confirm(t('新建空白布局确认'))) {
+      store.newLayout();
+    }
+  }, [store, t]);
+
+  // ---- 添加墙面/岛台 ----
   const [showAddWall, setShowAddWall] = useState(false);
   const [wallName, setWallName] = useState('');
   const [wallWidth, setWallWidth] = useState('');
-  const [wallType, setWallType] = useState<'wall' | 'island'>('wall');
-
-  const computeWallDefaultName = useCallback(
-    (type: 'wall' | 'island') => {
-      const active = store.getActiveLayout();
-      const num = type === 'wall'
-        ? (active?.walls.length ?? 0) + 1
-        : (active?.islands.length ?? 0) + 1;
-      return `${type === 'wall' ? 'Wall' : 'Island'} ${num}`;
-    },
-    [store],
-  );
 
   const openAddWallForm = useCallback(() => {
-    setWallType('wall');
-    setWallName(computeWallDefaultName('wall'));
+    const active = store.getActiveLayout();
+    const num = (active?.walls.length ?? 0) + 1;
+    setWallName(`Wall ${num}`);
     setWallWidth('120');
     setShowAddWall(true);
-  }, [computeWallDefaultName]);
-
-  const handleWallTypeChange = useCallback(
-    (e: React.ChangeEvent<HTMLSelectElement>) => {
-      const type = e.target.value as 'wall' | 'island';
-      setWallType(type);
-      setWallName(computeWallDefaultName(type));
-    },
-    [computeWallDefaultName],
-  );
+  }, [store]);
 
   const handleAddWall = useCallback(() => {
     if (!wallName.trim() || !wallWidth.trim()) return;
     const width = parseFloat(wallWidth);
     if (isNaN(width) || width <= 0) return;
-    if (wallType === 'wall') {
-      store.addWall(wallName.trim(), width);
-    } else {
-      store.addIsland(wallName.trim(), width);
-    }
+    store.addWall(wallName.trim(), width);
     setWallName('');
     setWallWidth('');
     setShowAddWall(false);
-  }, [wallName, wallWidth, wallType, store]);
+  }, [wallName, wallWidth, store]);
 
-  // ---- 空状态 ----
-  if (store.layouts.length === 0) {
-    return (
-      <div className="lr-container">
-        <div className="lr-empty">
-          <h2 className="lr-empty-title">{t('布局识别')}</h2>
-          <p className="lr-empty-desc">{t('布局识别说明')}</p>
-          <div className="lr-empty-actions">
-            {showNewForm ? (
-              <div className="lr-inline-form">
-                <input
-                  className="lr-input"
-                  placeholder={t('布局名称')}
-                  value={newLayoutName}
-                  onChange={(e) => setNewLayoutName(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') handleCreateLayout(); }}
-                  autoFocus
-                />
-                <button className="lr-btn lr-btn-primary" onClick={handleCreateLayout}>
-                  {t('新建布局')}
-                </button>
-                <button className="lr-btn" onClick={() => { setShowNewForm(false); setNewLayoutName(''); }}>
-                  Cancel
-                </button>
-              </div>
-            ) : (
-              <button className="lr-btn lr-btn-primary" onClick={openNewLayoutForm}>
-                {t('新建布局')}
-              </button>
-            )}
-            <button className="lr-btn" onClick={handleImportClick}>
-              {t('导入布局')}
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".json"
-              style={{ display: 'none' }}
-              onChange={handleFileChange}
-            />
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // ---- 拖拽分隔条 ----
+  const [topAreaHeight, setTopAreaHeight] = useState(40);
+  const [chatColumnWidth, setChatColumnWidth] = useState(35);
+
+  const mainAreaRef = useRef<HTMLDivElement>(null);
+  const leftColumnRef = useRef<HTMLDivElement>(null);
+
+  const { startResize } = useSplitResize({
+    horizontal: {
+      cursor: 'row-resize',
+      getContainer: () => leftColumnRef.current,
+      onResize: (pct) => setTopAreaHeight(Math.max(15, Math.min(70, pct))),
+      getPercent: (e, rect) => ((e.clientY - rect.top) / rect.height) * 100,
+    },
+    'main-vertical': {
+      cursor: 'col-resize',
+      getContainer: () => mainAreaRef.current,
+      onResize: (pct) => setChatColumnWidth(100 - Math.max(40, Math.min(85, pct))),
+      getPercent: (e, rect) => ((e.clientX - rect.left) / rect.width) * 100,
+    },
+  });
+
+  // ---- 物料清单 ----
+  const [generatingList, setGeneratingList] = useState(false);
+  const [generatedListText, setGeneratedListText] = useState('');
+  const [lengthDetails, setLengthDetails] = useState<Array<{ sku: string; length: number }>>([]);
+  const [listWarnings, setListWarnings] = useState<string[]>([]);
+  const [generateListError, setGenerateListError] = useState('');
+  const [copyListSuccess, setCopyListSuccess] = useState(false);
+
+  // 调用后端生成完整物料清单
+  const handleGenerateList = useCallback(async () => {
+    setGeneratingList(true);
+    setGenerateListError('');
+    try {
+      const res = await fetchWithAuth('/api/layout/generate-list', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ layout: activeLayout }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || '生成失败');
+      }
+      const data = await res.json();
+      setGeneratedListText(data.text || '');
+      setLengthDetails(data.lengthDetails || []);
+      setListWarnings(data.warnings || []);
+    } catch (e) {
+      setGenerateListError(e instanceof Error ? e.message : '生成失败');
+    } finally {
+      setGeneratingList(false);
+    }
+  }, [activeLayout]);
+
+  // 复制清单到剪贴板
+  const handleCopyList = useCallback(async () => {
+    if (!generatedListText) return;
+    try {
+      await navigator.clipboard.writeText(generatedListText);
+      setCopyListSuccess(true);
+      setTimeout(() => setCopyListSuccess(false), 2000);
+    } catch {
+      setGenerateListError('复制失败');
+    }
+  }, [generatedListText]);
 
   // ---- 正常页面 ----
   return (
@@ -179,39 +174,21 @@ export default function LayoutRecognizePage() {
           <p className="lr-sub">{t('布局识别说明')}</p>
         </div>
         <div className="lr-header-right">
-          {/* 布局选择 */}
-          <select
-            className="lr-select"
-            value={activeLayout?.id ?? ''}
-            onChange={(e) => store.setActiveLayout(e.target.value)}
-          >
-            {store.layouts.map((l) => (
-              <option key={l.id} value={l.id}>{l.name}</option>
-            ))}
-          </select>
+          {/* 语言切换（取代原 layout 名称展示位） */}
+          <SegSwitch
+            options={[
+              { value: 'zh', label: '中文' },
+              { value: 'en', label: 'English' },
+            ]}
+            value={lang}
+            onChange={setLang}
+          />
 
-          {/* 新建 */}
-          {showNewForm ? (
-            <div className="lr-inline-form">
-              <input
-                className="lr-input lr-input-sm"
-                placeholder={t('布局名称')}
-                value={newLayoutName}
-                onChange={(e) => setNewLayoutName(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleCreateLayout(); }}
-                autoFocus
-              />
-              <button className="lr-btn lr-btn-primary lr-btn-sm" onClick={handleCreateLayout}>OK</button>
-              <button className="lr-btn lr-btn-sm" onClick={() => { setShowNewForm(false); setNewLayoutName(''); }}>X</button>
-            </div>
-          ) : (
-            <button className="lr-btn lr-btn-sm" onClick={openNewLayoutForm}>
-              {t('新建布局')}
-            </button>
-          )}
-
-          <button className="lr-btn lr-btn-sm" onClick={handleExport}>{t('导出布局')}</button>
-          <button className="lr-btn lr-btn-sm" onClick={handleImportClick}>{t('导入布局')}</button>
+          <button className="lr-btn lr-btn-sm" onClick={handleNew}>
+            {t('新建布局')}
+          </button>
+          <button className="lr-btn lr-btn-sm" onClick={handleSave}>{t('导出布局')}</button>
+          <button className="lr-btn lr-btn-sm" onClick={handleLoadClick}>{t('导入布局')}</button>
           <input
             ref={fileInputRef}
             type="file"
@@ -220,30 +197,9 @@ export default function LayoutRecognizePage() {
             onChange={handleFileChange}
           />
 
-          {activeLayout && store.layouts.length > 1 && (
-            <button
-              className="lr-btn lr-btn-sm lr-btn-danger"
-              onClick={() => {
-                if (confirm(`Delete layout "${activeLayout.name}"?`)) {
-                  store.deleteLayout(activeLayout.id);
-                }
-              }}
-            >
-              {t('删除布局')}
-            </button>
-          )}
-
-          {/* 添加墙/岛台 */}
+          {/* 添加墙面/岛台 */}
           {showAddWall ? (
             <div className="lr-inline-form">
-              <select
-                className="lr-select lr-select-sm"
-                value={wallType}
-                onChange={handleWallTypeChange}
-              >
-                <option value="wall">{t('添加墙面')}</option>
-                <option value="island">{t('添加岛台')}</option>
-              </select>
               <input
                 className="lr-input lr-input-sm"
                 placeholder={t('请输入名称')}
@@ -261,34 +217,86 @@ export default function LayoutRecognizePage() {
                 onChange={(e) => setWallWidth(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') handleAddWall(); }}
               />
-              <button className="lr-btn lr-btn-primary lr-btn-sm" onClick={handleAddWall}>OK</button>
-              <button className="lr-btn lr-btn-sm" onClick={() => { setShowAddWall(false); setWallName(''); setWallWidth(''); }}>X</button>
+              <button className="lr-btn lr-btn-primary lr-btn-sm" onClick={handleAddWall}>✓</button>
+              <button className="lr-btn lr-btn-sm" onClick={() => { setShowAddWall(false); setWallName(''); setWallWidth(''); }}>✕</button>
             </div>
           ) : (
             <button className="lr-btn lr-btn-sm lr-btn-primary" onClick={openAddWallForm}>
-              + Wall/Island
+              + {t('墙面岛台')}
             </button>
           )}
         </div>
       </div>
 
-      {/* 主区域：左画布 + 右侧栏 */}
-      {activeLayout && (
-        <div className="lr-main">
+      {/* 主区域：左区（上方面板 + 画布）| 竖向拖拽杆 | 右区（对话） */}
+      <div className="lr-main" ref={mainAreaRef}>
+        <div className="lr-left-column" ref={leftColumnRef}>
+          <div className="lr-top-area" style={{ height: `${topAreaHeight}%` }}>
+            <div className="lr-top-left">
+              <ImageUploadPanel
+                layout={activeLayout}
+                onLayoutUpdated={(updatedLayout: LayoutDocument) => {
+                  store.loadLayout(JSON.stringify(updatedLayout));
+                }}
+              />
+            </div>
+            <div className="lr-top-placeholder lr-material-panel">
+              <div className="lr-material-title">物料清单</div>
+              <div className="lr-material-actions">
+                <button
+                  className="lr-btn lr-btn-sm lr-btn-primary"
+                  onClick={handleGenerateList}
+                  disabled={generatingList}
+                >
+                  {generatingList ? '生成中…' : '生成完整清单'}
+                </button>
+                <button
+                  className="lr-btn lr-btn-sm"
+                  onClick={handleCopyList}
+                  disabled={!generatedListText || generatingList}
+                >
+                  {copyListSuccess ? '已复制' : '复制清单'}
+                </button>
+              </div>
+              <div className="lr-material-body">
+                <textarea
+                  className="lr-material-textarea"
+                  value={generatedListText}
+                  readOnly
+                  placeholder={'点击"生成完整清单"后在此显示物料清单…'}
+                />
+                {(lengthDetails.length > 0 || listWarnings.length > 0) && (
+                  <div className="lr-material-info">
+                    {lengthDetails.map((d) => (
+                      <div key={d.sku}>{d.sku} - {d.length}"</div>
+                    ))}
+                    {listWarnings.map((w, i) => (
+                      <div key={`w-${i}`} className="lr-material-info-warn">⚠ {w}</div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {generateListError && (
+                <div className="lr-material-error">{generateListError}</div>
+              )}
+            </div>
+          </div>
+          <div
+            className="lr-horizontal-handle"
+            onMouseDown={startResize('horizontal')}
+          />
           <div className="lr-canvas-wrap">
             <LayoutCanvas />
           </div>
-          <div className="lr-sidebar">
-            <ImageUploadPanel
-              layout={activeLayout}
-              onLayoutUpdated={(updatedLayout: LayoutDocument) => {
-                store.importLayout(updatedLayout);
-              }}
-            />
-            <LayoutChatPanel />
-          </div>
         </div>
-      )}
+        <div
+          className="lr-resize-handle"
+          onMouseDown={startResize('main-vertical')}
+        />
+        <div className="lr-chat-column" style={{ width: `${chatColumnWidth}%` }}>
+          <LayoutChatPanel />
+        </div>
+      </div>
     </div>
   );
 }

@@ -69,7 +69,68 @@ export function initUserDB(dbDir: string): void {
       created_at    TEXT    NOT NULL DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS idx_notes_user ON notes(user_id);
+
+    CREATE TABLE IF NOT EXISTS trace_sessions (
+      id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+      conversation_id     TEXT    NOT NULL UNIQUE,
+      user_id             INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      username            TEXT    NOT NULL,
+      main_agent          TEXT    NOT NULL,
+      agent_name          TEXT    NOT NULL,
+      parent_tool_call_id TEXT,
+      route               TEXT,
+      provider            TEXT,
+      model               TEXT,
+      status              TEXT    NOT NULL DEFAULT 'running',
+      error               TEXT,
+      created_at          TEXT    NOT NULL DEFAULT (datetime('now')),
+      completed_at        TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_trace_sessions_created_at ON trace_sessions(created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_trace_sessions_user_created ON trace_sessions(user_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_trace_sessions_parent_tool_call ON trace_sessions(parent_tool_call_id);
+    CREATE INDEX IF NOT EXISTS idx_trace_sessions_conversation_id ON trace_sessions(conversation_id);
+
+    CREATE TABLE IF NOT EXISTS client_sent (
+      id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+      conversation_id     TEXT    NOT NULL REFERENCES trace_sessions(conversation_id) ON DELETE CASCADE,
+      message_index       INTEGER NOT NULL,
+      role                TEXT    NOT NULL,
+      name                TEXT,
+      tool_call_id        TEXT,
+      parent_tool_call_id TEXT,
+      content_text        TEXT,
+      content_json        TEXT,
+      content_format      TEXT    NOT NULL DEFAULT 'text',
+      created_at          TEXT    NOT NULL DEFAULT (datetime('now')),
+      completed_at        TEXT,
+      error               TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_client_sent_conversation ON client_sent(conversation_id, message_index, id);
+    CREATE INDEX IF NOT EXISTS idx_client_sent_tool_call ON client_sent(tool_call_id);
+
+    CREATE TABLE IF NOT EXISTS client_received (
+      id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+      conversation_id     TEXT    NOT NULL REFERENCES trace_sessions(conversation_id) ON DELETE CASCADE,
+      message_index       INTEGER NOT NULL,
+      finish_reason       TEXT,
+      reply               TEXT,
+      reasoning           TEXT,
+      tool_calls_json     TEXT,
+      tool_call_ids_json  TEXT,
+      source              TEXT    NOT NULL DEFAULT 'llm',
+      created_at          TEXT    NOT NULL DEFAULT (datetime('now')),
+      completed_at        TEXT,
+      error               TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_client_received_conversation ON client_received(conversation_id, message_index, id);
+    CREATE INDEX IF NOT EXISTS idx_client_received_created ON client_received(created_at DESC);
   `);
+}
+
+/** 获取底层 SQLite 数据库连接（供 trace 等服务模块使用） */
+export function getUserDb(): Database.Database {
+  return db;
 }
 
 /** 从环境变量播种管理员账号（已存在则跳过） */
@@ -243,4 +304,70 @@ export function replaceNotesForUser(
   });
 
   tx();
+}
+
+// ==================================================================
+//  管理员功能 —— 全历史浏览 + 用户管理
+// ==================================================================
+
+/** 管理员专用：获取所有用户的全部历史记录摘要（按时间倒序，含归属用户信息） */
+export function getAllRecords(): {
+  id: number;
+  itemCount: number;
+  created_at: string;
+  user_id: number;
+  username: string;
+}[] {
+  const rows = db.prepare(`
+    SELECT pr.id, pr.items, pr.created_at, pr.user_id, u.username
+    FROM parse_records pr
+    JOIN users u ON pr.user_id = u.id
+    ORDER BY pr.created_at DESC
+  `).all() as { id: number; items: string; created_at: string; user_id: number; username: string }[];
+
+  return rows.map((r) => ({
+    id: r.id,
+    itemCount: JSON.parse(r.items).length,
+    created_at: r.created_at,
+    user_id: r.user_id,
+    username: r.username,
+  }));
+}
+
+/** 管理员专用：根据 ID 获取任意记录完整详情（不限用户） */
+export function getRecordByIdForAdmin(recordId: number): RecordFullRow | undefined {
+  return db.prepare(`
+    SELECT id, input, color_hints, items, conversation, lang, created_at
+    FROM parse_records
+    WHERE id = ?
+  `).get(recordId) as RecordFullRow | undefined;
+}
+
+/** 管理员专用：获取所有用户列表（不含密码哈希） */
+export function listUsers(): SafeUser[] {
+  return db.prepare(
+    'SELECT id, username, role, created_at FROM users ORDER BY id ASC',
+  ).all() as SafeUser[];
+}
+
+/** 管理员专用：按 ID 删除用户（外键级联删除其 parse_records / notes / trace_sessions） */
+export function deleteUserById(userId: number): boolean {
+  const result = db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+  return result.changes > 0;
+}
+
+/** 管理员专用：更新用户名 */
+export function updateUsername(userId: number, username: string): boolean {
+  const result = db.prepare(
+    'UPDATE users SET username = ? WHERE id = ?',
+  ).run(username, userId);
+  return result.changes > 0;
+}
+
+/** 管理员专用：更新用户密码哈希 */
+export function updateUserPassword(userId: number, passwordHash: string): boolean {
+  const result = db.prepare(
+    'UPDATE users SET password_hash = ? WHERE id = ?',
+  ).run(passwordHash, userId);
+  return result.changes > 0;
 }

@@ -105,6 +105,15 @@ export interface HistoryRecordSummary {
   created_at: string;
 }
 
+/** 管理员全量历史记录摘要（含归属用户信息） */
+export interface AllHistoryRecordSummary {
+  id: number;
+  itemCount: number;
+  created_at: string;
+  user_id: number;
+  username: string;
+}
+
 /** 历史记录完整详情 */
 export interface HistoryRecordFull {
   id: number;
@@ -153,9 +162,10 @@ export type BlockItemCategory =
   | 'base_cabinet'            // 地柜
   | 'tall_cabinet'            // 高柜（通天，占双轨）
   | 'gap'                      // 空挡
-  | 'range_hood'              // 抽油烟机
-  | 'window'                  // 窗户
-  | 'tall_appliance'          // 通天电器（冰箱等，占双轨）
+  | 'stuffed_gap'              // 塞了东西的空挡（hood/window 等），本质同 gap
+  | 'gaplike_item'             // 类似 gap 的商品（VAL/GH/WES），进清单但两侧遮挡不住
+  | 'filler'                   // 填充条（BF/WF/TF），进清单但紧邻高电器时自动清除
+  | 'tall_appliance'          // 高电器（冰箱等，占双轨）
   | 'base_appliance_need_top'  // 需台面电器（洗碗机等）
   | 'base_appliance_without_top'; // 免台面电器（灶台等）
 
@@ -166,6 +176,10 @@ export interface BlockItem {
   category: BlockItemCategory;
   /** 必填。柜体填 DUKO SKU（如 "02B15"），非柜体填具体名称（如 "refrigerator"） */
   sku: string;
+  /** 是否为 vanity cabinet（仅 base_cabinet 有效） */
+  isVanity?: boolean;
+  /** 物品高度（英寸），地面柜无需记录。air 轨 wall_cabinet / tall_cabinet / tall_appliance 及叠放吊柜均需填写 */
+  height?: number;
 }
 
 /** 轨道中的一个排列单元 */
@@ -175,9 +189,11 @@ export interface SectionBlock {
   width: number;
   /** items 中多 item = 吊柜垂直叠放 */
   items: BlockItem[];
+  /** 该块的颜色代码（如 "02"），空字符串表示未选 */
+  colorCode?: string;
 }
 
-/** 墙 */
+/** 墙（统一定义，岛台视为特殊墙面） */
 export interface LayoutWall {
   id: string;
   name: string;
@@ -190,28 +206,14 @@ export interface LayoutWall {
   groundBlocks: SectionBlock[];
   /** L 形连接的其他墙 id（仅 Agent 可编辑） */
   connectedWallIds: string[];
-}
-
-/** 岛台 */
-export interface LayoutIsland {
-  id: string;
-  name: string;
-  width: number;
-  exposedLeft: boolean;
-  exposedRight: boolean;
-  exposedBack: boolean;
-  airBlocks: SectionBlock[];
-  groundBlocks: SectionBlock[];
-  /** 相背关系的其他岛台 id（仅 Agent 可编辑） */
+  /** 背靠背岛台关系（仅 Agent 可编辑） */
   backToBackIslandIds: string[];
 }
 
 /** 布局文档 */
 export interface LayoutDocument {
   id: string;
-  name: string;
   walls: LayoutWall[];
-  islands: LayoutIsland[];
   createdAt: string;
   updatedAt: string;
 }
@@ -230,4 +232,74 @@ export interface PositionedBlock {
   block: SectionBlock;
   /** 距轨道最左侧距离（英寸），实时计算，不存储 */
   distanceFromLeft: number;
+}
+
+// ==================================================================
+//  Trace —— LLM 对话追踪（仅管理员可见）
+// ==================================================================
+
+/** GET /api/trace 列表项 */
+export interface TraceSessionSummary {
+  conversation_id: string;
+  username: string;
+  user_id: number;
+  main_agent: string;
+  agent_name: string;
+  parent_tool_call_id: string | null;
+  route: string;
+  provider: string;
+  model: string;
+  status: 'running' | 'completed' | 'error';
+  error: string | null;
+  created_at: string;
+  completed_at: string | null;
+}
+
+export interface ClientSentMessage {
+  id: number;
+  conversation_id: string;
+  message_index: number;
+  role: 'system' | 'user' | 'tool' | 'tool_schema';
+  name: string | null;
+  tool_call_id: string | null;
+  parent_tool_call_id: string | null;
+  content_text: string | null;
+  content_json: string | null;
+  content_format: 'text' | 'markdown' | 'json' | 'multimodal_placeholder';
+  created_at: string;
+  completed_at: string | null;
+  error: string | null;
+}
+
+export interface ClientReceivedMessage {
+  id: number;
+  conversation_id: string;
+  message_index: number;
+  finish_reason: string | null;
+  reply: string | null;
+  reasoning: string | null;
+  tool_calls_json: string | null;
+  tool_call_ids_json: string | null;
+  source: 'llm' | 'injected';
+  created_at: string;
+  completed_at: string | null;
+  error: string | null;
+}
+
+export type TraceMessage = ClientSentMessage | ClientReceivedMessage;
+
+export interface TraceSessionDetail {
+  session: TraceSessionSummary;
+  messages: TraceMessage[];
+}
+
+/** 分组后的消息块（前端渲染用） */
+export interface TraceGroup {
+  kind: 'sent' | 'assistant';
+  sent?: ClientSentMessage;
+  assistant?: ClientReceivedMessage;
+  /** 归属于此 assistant 的 tool 结果 */
+  tools: ClientSentMessage[];
+  /** 归属于此 assistant 的 _budget_info（source=injected） */
+  budget?: { received: ClientReceivedMessage; sent: ClientSentMessage };
 }

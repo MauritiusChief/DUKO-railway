@@ -283,7 +283,11 @@ export const messages = {
   },
   布局识别说明: {
     zh: '通过图片或手工编辑橱柜布局，识别墙/岛台上柜体之间的关系',
-    en: 'Recognize cabinet layout relationships on walls/islands via images or manual editing',
+    en: 'Recognize cabinet layout relationships on walls via images or manual editing',
+  },
+  布局识别对话提示: {
+    zh: '上传 layout 图片后，我会实时显示识别过程和工具调用。',
+    en: 'After uploading a layout image, I will show the recognition process and tool calls in real time.',
   },
   新建布局: {
     zh: '新建布局',
@@ -313,6 +317,18 @@ export const messages = {
     zh: '暂无布局，请新建一个',
     en: 'No layouts yet, create one',
   },
+  无效的布局文件: {
+    zh: '无效的布局 JSON 文件',
+    en: 'Invalid layout JSON file',
+  },
+  新建空白布局确认: {
+    zh: '新建一个空白布局？未保存的更改将丢失。',
+    en: 'Create a new blank layout? Unsaved changes will be lost.',
+  },
+  墙面岛台: {
+    zh: '墙面/岛台',
+    en: 'Wall/Island',
+  },
   添加墙面: {
     zh: '添加墙面',
     en: 'Add Wall',
@@ -329,6 +345,10 @@ export const messages = {
     zh: '删除岛台',
     en: 'Delete Island',
   },
+  删除墙面确认: {
+    zh: '确认删除墙面 "{name}"？',
+    en: 'Delete wall "{name}"?',
+  },
   总宽度: {
     zh: '总宽度',
     en: 'Total Width',
@@ -338,11 +358,11 @@ export const messages = {
     en: 'Left Exposed',
   },
   右侧暴露: {
-    zh: 'Right Exposed',
+    zh: '右侧暴露',
     en: 'Right Exposed',
   },
   后侧暴露: {
-    zh: 'Back Exposed',
+    zh: '后侧暴露',
     en: 'Back Exposed',
   },
   空中: {
@@ -350,7 +370,7 @@ export const messages = {
     en: 'Air',
   },
   地面: {
-    zh: 'Ground',
+    zh: '地面',
     en: 'Ground',
   },
   距左: {
@@ -360,6 +380,10 @@ export const messages = {
   宽度: {
     zh: '宽度',
     en: 'Width',
+  },
+  高度: {
+    zh: '高度',
+    en: 'Height',
   },
   添加物品: {
     zh: '添加物品',
@@ -388,6 +412,34 @@ export const messages = {
   连接墙面: {
     zh: '连接墙面',
     en: 'Connected Walls',
+  },
+  背靠背: {
+    zh: '背靠背',
+    en: 'Back-to-back',
+  },
+  L形连接提示: {
+    zh: 'L 形连接',
+    en: 'L-shaped connection',
+  },
+  背靠背连接提示: {
+    zh: '背靠背连接',
+    en: 'Back-to-back connection',
+  },
+  拖拽提示: {
+    zh: '拖拽以重新定位',
+    en: 'Drag to reposition',
+  },
+  移除叠放物品: {
+    zh: '移除叠放物品',
+    en: 'Remove stacked item',
+  },
+  叠放吊柜: {
+    zh: '叠放吊柜',
+    en: 'Stack Wall Cabinet',
+  },
+  无墙面提示: {
+    zh: '暂无墙面。点击 "+ 墙面/岛台" 添加一面。',
+    en: 'No walls yet. Click "+ Wall/Island" to add one.',
   },
   请输入名称: {
     zh: '请输入名称',
@@ -426,8 +478,8 @@ export const messages = {
     zh: '窗户',
     en: 'Window',
   },
-  通天电器: {
-    zh: '通天电器',
+  高电器: {
+    zh: '高电器',
     en: 'Tall Appliance',
   },
   需台面电器: {
@@ -437,6 +489,90 @@ export const messages = {
   免台面电器: {
     zh: '免台面电器',
     en: 'Appliance w/o Countertop',
+  },
+
+  /* ---- BlockInfoBar ---- */
+  双轨联动: {
+    zh: '双轨联动（空中+地面）',
+    en: 'Dual-track (Air + Ground)',
+  },
+  叠放提示: {
+    zh: '叠放 {n} 个吊柜',
+    en: '{n} stacked cabinet(s)',
+  },
+  物品信息: {
+    zh: '物品信息',
+    en: 'Item Info',
+  },
+  关闭: {
+    zh: '关闭',
+    en: 'Close',
+  },
+  添加叠放: {
+    zh: '+ 叠放',
+    en: '+ Stack',
+  },
+  选择颜色: {
+    zh: '颜色',
+    en: 'Color',
+  },
+  无颜色: {
+    zh: '(无)',
+    en: '(None)',
+  },
+  浴室柜: {
+    zh: 'Vanity Cabinet',
+    en: 'Vanity Cabinet',
+  },
+
+  /* ---- ImageUploadPanel ---- */
+  图片识别: {
+    zh: '图片识别',
+    en: 'Image Recognition',
+  },
+  拖拽图片提示: {
+    zh: '拖拽图片到此处或点击选择',
+    en: 'Drag image here or click to select',
+  },
+  视图类型: {
+    zh: '视图类型',
+    en: 'View Type',
+  },
+  俯视图: {
+    zh: '俯视图',
+    en: 'Top View',
+  },
+  正视图: {
+    zh: '正视图',
+    en: 'Elevation View',
+  },
+  立体图: {
+    zh: '立体图',
+    en: '3D View',
+  },
+  关联墙面岛台: {
+    zh: '此图片描述的墙/岛台',
+    en: 'Wall/Island described by this picture',
+  },
+  识别中: {
+    zh: '识别中...',
+    en: 'Recognizing...',
+  },
+  识别此图片: {
+    zh: '识别此图片',
+    en: 'Recognize This Image',
+  },
+  识别失败: {
+    zh: '识别失败',
+    en: 'Recognition failed',
+  },
+  布局更新成功: {
+    zh: '布局更新成功',
+    en: 'Layout updated successfully',
+  },
+  网络请求失败: {
+    zh: '网络请求失败，请检查连接',
+    en: 'Network request failed, please check connection',
   },
 
   /* ---- Auth ---- */
@@ -545,5 +681,65 @@ export const messages = {
   选择记录提示: {
     zh: '选择左侧记录查看详情',
     en: 'Select a record on the left',
+  },
+
+  /* ---- AllHistoryPage ---- */
+  全部历史记录: {
+    zh: '全部历史记录',
+    en: 'All History',
+  },
+  归属用户: {
+    zh: '归属用户',
+    en: 'Owner',
+  },
+
+  /* ---- Admin User Management ---- */
+  用户管理: {
+    zh: '用户管理',
+    en: 'User Management',
+  },
+  管理员密码: {
+    zh: '管理员密码',
+    en: 'Admin Password',
+  },
+  确认删除: {
+    zh: '确认删除',
+    en: 'Confirm Delete',
+  },
+  修改用户名: {
+    zh: '修改用户名',
+    en: 'Change Username',
+  },
+  修改密码: {
+    zh: '修改密码',
+    en: 'Change Password',
+  },
+  新用户名: {
+    zh: '新用户名',
+    en: 'New Username',
+  },
+  新密码: {
+    zh: '新密码',
+    en: 'New Password',
+  },
+  保存: {
+    zh: '保存',
+    en: 'Save',
+  },
+  取消: {
+    zh: '取消',
+    en: 'Cancel',
+  },
+  删除成功: {
+    zh: '删除成功',
+    en: 'Delete successful',
+  },
+  修改成功: {
+    zh: '修改成功',
+    en: 'Update successful',
+  },
+  种子管理员保护: {
+    zh: '种子管理员账户不允许此操作',
+    en: 'Seed admin account is protected',
   },
 } as const;

@@ -14,28 +14,14 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useTableParseStore } from '../stores/tableParseStore';
 import { fetchWithAuth } from '../lib/fetchWithAuth';
+import { parseSSEEvents, type SSEEvent } from '../lib/sse';
+import { useSSEEventHandler, type DisplayMessage, type DisplayRole } from '../hooks/useSSEEventHandler';
 import { useI18n } from '../i18n/context';
 import { getLang } from '../i18n/context';
 import type { TranslationKey } from '../i18n/translations';
 import type { ChatHistoryEntry, Note, ParsedItem, ProductEntry, ConversationEntry } from '../types';
 import { PaletteIcon, TableIcon } from './ChatIcons';
 import './ChatPanel.css';
-
-// ==================================================================
-// #region Types
-// ==================================================================
-
-type DisplayRole = 'user' | 'assistant' | 'tool' | 'streaming' | 'parse_start';
-
-interface DisplayMessage {
-  role: DisplayRole;
-  content: string;
-  /** parse_start 等特殊消息的结构化元数据，渲染时通过 JSX 读取（天然跟随 i18n 切换） */
-  meta?: {
-    lineCount?: number;
-    colorCodes?: string[];
-  };
-}
 
 // ==================================================================
 // #region SSE result payload (from server)
@@ -46,200 +32,6 @@ interface SSEResultPayload {
   products?: ProductEntry[];
   history: ChatHistoryEntry[];
   notes?: Note[];
-}
-
-// ==================================================================
-// #region SSE parser
-// ==================================================================
-
-function parseSSEEvents(buffer: string): { events: Array<{ type: string; data: Record<string, unknown> }>; remaining: string } {
-  const events: Array<{ type: string; data: Record<string, unknown> }> = [];
-  let remaining = buffer;
-
-  while (true) {
-    const idx = remaining.indexOf('\n\n');
-    if (idx === -1) break;
-
-    const raw = remaining.slice(0, idx);
-    remaining = remaining.slice(idx + 2);
-
-    const match = raw.match(/^event: (.+)\ndata: (.+)$/s);
-    if (!match) continue;
-
-    try {
-      const data = JSON.parse(match[2].trim());
-      events.push({ type: match[1].trim(), data });
-    } catch {
-      // ignore malformed JSON
-    }
-  }
-
-  return { events, remaining };
-}
-
-// ==================================================================
-// #region SSE event handler hook —— 解析 & 聊天共享
-// ==================================================================
-
-/** 每个单独 SSE 流的业务差异回调 */
-interface PerCallCallbacks {
-  onResult?: (data: Record<string, unknown>) => void;
-  onDone?: () => void;
-  onError?: (message: string) => void;
-}
-
-function useSSEEventHandler(
-  setDisplayMessages: React.Dispatch<React.SetStateAction<DisplayMessage[]>>,
-  setHistory: React.Dispatch<React.SetStateAction<ChatHistoryEntry[]>>,
-) {
-  const { t } = useI18n();
-  const tRef = useRef(t);
-  tRef.current = t; // 始终保持最新 t 引用，避免 handleEvent 依赖闭包过期
-
-  // 以下三个 ref 是 SSE 流处理期间的局部可变状态 —— 解析和聊天各有自己的流，互不干扰
-  const streamingIndexRef = useRef(-1);
-  const lastToolNameRef = useRef('');
-  const toolDotCountRef = useRef(0);
-
-  const handleEvent = useCallback((
-    event: { type: string; data: Record<string, unknown> },
-    perCall?: PerCallCallbacks,
-  ) => {
-    const _t = tRef.current;
-
-    switch (event.type) {
-
-      case 'parse_start': {
-        // 每次点击"解析清单"代表新的解析过程，清空旧的对话记录
-        setDisplayMessages([]);
-        setHistory([]);
-
-        // 以结构化 meta 存储原始数据，JSX 渲染时调用 t() → 语言切换后自动更新
-        const d = event.data as { lineCount: number; colorHintCodes?: string[] };
-        setDisplayMessages((prev) => [
-          ...prev,
-          {
-            role: 'parse_start',
-            content: '',
-            meta: {
-              lineCount: d.lineCount || 0,
-              colorCodes: d.colorHintCodes?.length ? d.colorHintCodes : undefined,
-            },
-          },
-        ]);
-        break;
-      }
-
-      case 'tool_call': {
-        // 新 tool_call 覆盖上一条 tool 消息（不追加），只展示最新被调用的工具
-        // 同一工具连续调用时累加点号（. .. ...），产生动态效果
-        const toolName = (event.data as { tool: string }).tool || '';
-        if (toolName === lastToolNameRef.current) {
-          toolDotCountRef.current++;
-        } else {
-          lastToolNameRef.current = toolName;
-          toolDotCountRef.current = 0;
-        }
-        const dots = '.'.repeat(toolDotCountRef.current);
-        setDisplayMessages((prev) => {
-          if (prev.length > 0 && prev[prev.length - 1].role === 'tool') {
-            const last = prev[prev.length - 1];
-            return [...prev.slice(0, -1), { ...last, content: `${_t('正在调用')} ${toolName}${dots}` }];
-          }
-          return [...prev, { role: 'tool', content: `${_t('正在调用')} ${toolName}${dots}` }];
-        });
-        break;
-      }
-
-      case 'reply_chunk': {
-        // LLM 流式文本：维持一条 streaming 消息不断追加文本（打字机效果）
-        const text = (event.data as { text: string }).text || '';
-        setDisplayMessages((prev) => {
-          if (
-            streamingIndexRef.current >= 0 &&
-            streamingIndexRef.current < prev.length &&
-            prev[streamingIndexRef.current].role === 'streaming'
-          ) {
-            // 追加到已有的 streaming 消息
-            const updated = [...prev];
-            updated[streamingIndexRef.current] = {
-              role: 'streaming',
-              content: updated[streamingIndexRef.current].content + text,
-            };
-            return updated;
-          }
-          // 新建 streaming 消息（首次 chunk 或上一条 streaming 已被 round_start 清除）
-          streamingIndexRef.current = prev.length;
-          return [...prev, { role: 'streaming', content: text }];
-        });
-        break;
-      }
-
-      case 'reply_done': {
-        // LLM 流式文本推送完毕，将 streaming → assistant 完成转换
-        setDisplayMessages((prev) => {
-          if (
-            streamingIndexRef.current >= 0 &&
-            streamingIndexRef.current < prev.length &&
-            prev[streamingIndexRef.current].role === 'streaming'
-          ) {
-            const updated = [...prev];
-            updated[streamingIndexRef.current] = {
-              role: 'assistant',
-              content: updated[streamingIndexRef.current].content,
-            };
-            return updated;
-          }
-          return prev;
-        });
-        streamingIndexRef.current = -1;
-        break;
-      }
-
-      case 'round_start': {
-        // 非首轮时清空上一轮的 streaming 暂存，让下个 reply_chunk 创建新消息
-        // 效果：中间轮次的过渡回复被覆盖，最终只保留最后一轮的回复
-        const round = (event.data as { round: number }).round || 0;
-        if (round > 1) {
-          streamingIndexRef.current = -1;
-          setDisplayMessages((prev) => prev.filter((m) => m.role !== 'streaming'));
-        }
-        break;
-      }
-
-      case 'result': {
-        // 业务差异完全由调用方处理（store 更新、notes 合并等）
-        perCall?.onResult?.(event.data);
-        break;
-      }
-
-      case 'done': {
-        // 防御：若 reply_done 未成功将 streaming 转为 assistant，此处兜底转换后再过滤
-        setDisplayMessages((prev) => {
-          const fixed = prev.map((m) =>
-            m.role === 'streaming' ? { ...m, role: 'assistant' as DisplayRole } : m,
-          );
-          return fixed.filter((m) =>
-            m.role === 'user' || m.role === 'assistant' || m.role === 'parse_start',
-          );
-        });
-        perCall?.onDone?.();
-        break;
-      }
-
-      case 'error': {
-        const errMsg = String((event.data as { message?: string }).message || _t('请求失败'));
-        setDisplayMessages((prev) => {
-          const clean = prev.filter((m) => m.role !== 'tool' && m.role !== 'streaming');
-          return [...clean, { role: 'assistant', content: `${_t('抱歉前缀')}${errMsg}` }];
-        });
-        perCall?.onError?.(errMsg);
-        break;
-      }
-    }
-  }, [setDisplayMessages, setHistory]); // 这两个 setter 是 useState 返回的稳定引用
-
-  return { handleEvent };
 }
 
 // ==================================================================
@@ -327,7 +119,11 @@ export default function ChatPanel() {
   }, [notes]);
 
   // 统一的 SSE 事件处理器（解析 & 聊天共享）
-  const { handleEvent } = useSSEEventHandler(setDisplayMessages, setHistory);
+  const { handleEvent } = useSSEEventHandler(setDisplayMessages, {
+    calling: t('正在调用'),
+    sorry: t('抱歉前缀'),
+    failed: t('请求失败'),
+  });
 
   // 新消息到达时自动滚动到底部
   useEffect(() => {
@@ -338,19 +134,25 @@ export default function ChatPanel() {
   useEffect(() => {
     const store = useTableParseStore.getState();
 
-    const handler = (event: { type: string; data: Record<string, unknown> }) => {
+    const handler = (event: SSEEvent) => {
       handleEvent(event, {
-        // 解析流程的 result：更新 store 中的 items / products / history
-        onResult(data) {
-          const payload = data as { items?: unknown; products?: unknown; history?: unknown };
-          if (payload.items) {
-            store.replaceItems(payload.items as ParsedItem[]);
-          }
-          if (payload.products) {
-            store.replaceProducts(payload.products as ProductEntry[]);
-          }
-          if (Array.isArray(payload.history)) {
-            setHistory(payload.history as ChatHistoryEntry[]);
+        // 解析流程开始时清空对话历史
+        onParseStart() {
+          setHistory([]);
+        },
+        // 解析流程的自定义事件（result 等）
+        onCustomEvent(event) {
+          if (event.type === 'result') {
+            const payload = event.data as { items?: unknown; products?: unknown; history?: unknown };
+            if (payload.items) {
+              store.replaceItems(payload.items as ParsedItem[]);
+            }
+            if (payload.products) {
+              store.replaceProducts(payload.products as ProductEntry[]);
+            }
+            if (Array.isArray(payload.history)) {
+              setHistory(payload.history as ChatHistoryEntry[]);
+            }
           }
         },
         // 解析流程的 done：重置 loading 状态（此时 loading 通常是 false，作为安全复位）
@@ -496,8 +298,9 @@ export default function ChatPanel() {
           for (const event of events) {
             handleEvent(event, {
               // 聊天流程的 result：更新 store 数据 + notes + history
-              onResult(data) {
-                const payload = data as unknown as SSEResultPayload;
+              onCustomEvent(event) {
+                if (event.type !== 'result') return;
+                const payload = event.data as unknown as SSEResultPayload;
 
                 if (payload.items) {
                   storeState.replaceItems(payload.items);

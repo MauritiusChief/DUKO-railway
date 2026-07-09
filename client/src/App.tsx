@@ -4,6 +4,8 @@ import LayoutRecognizePage from './pages/LayoutRecognizePage';
 import DebugPage from './pages/DebugPage';
 import LoginPage from './pages/LoginPage';
 import HistoryPage from './pages/HistoryPage';
+import AllHistoryPage from './pages/AllHistoryPage';
+import TracePage from './pages/TracePage';
 import AuthGuard from './components/AuthGuard';
 import AdminGuard from './components/AdminGuard';
 
@@ -30,9 +32,9 @@ export default function App() {
       <Route
         path="/layout-recognize"
         element={
-          <AdminGuard>
+          <AuthGuard>
             <LayoutRecognizePage />
-          </AdminGuard>
+          </AuthGuard>
         }
       />
       <Route
@@ -40,6 +42,22 @@ export default function App() {
         element={
           <AdminGuard>
             <DebugPage />
+          </AdminGuard>
+        }
+      />
+      <Route
+        path="/trace"
+        element={
+          <AdminGuard>
+            <TracePage />
+          </AdminGuard>
+        }
+      />
+      <Route
+        path="/all-history"
+        element={
+          <AdminGuard>
+            <AllHistoryPage />
           </AdminGuard>
         }
       />

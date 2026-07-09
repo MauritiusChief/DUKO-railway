@@ -86,3 +86,199 @@
   margin: 4px 0;
   font-size: 14px;
 }
+
+/* ====== 管理员用户管理区域 ====== */
+
+/* 管理员卡片加宽以容纳用户列表 */
+.login-card-admin {
+  max-width: 640px;
+}
+
+.user-management-section {
+  margin-top: 20px;
+  border-top: 1px solid #eee;
+  padding-top: 16px;
+  text-align: left;
+}
+
+.user-management-section h3 {
+  margin: 0 0 12px;
+  font-size: 16px;
+  text-align: center;
+}
+
+.mgmt-loading,
+.mgmt-empty {
+  text-align: center;
+  color: #999;
+  font-size: 13px;
+}
+
+.user-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.user-list-item {
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.user-list-item-seed {
+  background: #fafbfc;
+  border-color: #d0d0d0;
+}
+
+.user-list-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.user-list-item-username {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.user-list-item-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #4a6fa5;
+  background: #e8f0fe;
+  border-radius: 3px;
+  vertical-align: middle;
+}
+
+.user-list-item-badge-admin {
+  color: #6b4fa5;
+  background: #f0e8fe;
+}
+
+.user-list-item-meta {
+  font-size: 12px;
+  color: #999;
+}
+
+.user-list-item-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.mgmt-action-btn {
+  padding: 4px 10px;
+  font-size: 12px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  cursor: pointer;
+  background: #fff;
+  transition: background 0.15s;
+}
+
+.mgmt-action-btn:hover {
+  background: #f0f0f0;
+}
+
+.mgmt-action-delete:hover {
+  color: #c00;
+  border-color: #fcc;
+  background: #ffebee;
+}
+
+.mgmt-action-rename:hover,
+.mgmt-action-password:hover {
+  border-color: #4a90d9;
+  background: #e8f0fe;
+}
+
+.mgmt-protected-hint {
+  font-size: 12px;
+  color: #aaa;
+}
+
+/* 展开的操作面板 */
+.mgmt-action-panel {
+  margin-top: 4px;
+  padding: 10px 12px;
+  background: #fafafa;
+  border-radius: 4px;
+  border: 1px solid #eee;
+}
+
+.mgmt-action-panel form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mgmt-action-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mgmt-action-field label {
+  font-size: 12px;
+  color: #666;
+  font-weight: 500;
+}
+
+.mgmt-action-field input {
+  padding: 6px 10px;
+  font-size: 13px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  outline: none;
+}
+
+.mgmt-action-field input:focus {
+  border-color: #4a90d9;
+}
+
+.mgmt-action-btns {
+  display: flex;
+  gap: 8px;
+}
+
+.mgmt-action-btns button {
+  padding: 6px 14px;
+  font-size: 13px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  cursor: pointer;
+  background: #fff;
+}
+
+.mgmt-action-btns button[type="submit"] {
+  background: #4a90d9;
+  color: #fff;
+  border-color: #4a90d9;
+}
+
+.mgmt-action-btns button[type="submit"]:hover {
+  background: #3a7bc8;
+}
+
+.mgmt-btn-danger {
+  background: #e74c3c !important;
+  color: #fff !important;
+  border-color: #e74c3c !important;
+}
+
+.mgmt-btn-danger:hover {
+  background: #c0392b !important;
+}
+
+.mgmt-confirm-text {
+  font-size: 13px;
+  color: #555;
+  margin: 0;
+}

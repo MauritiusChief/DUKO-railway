@@ -1,22 +1,30 @@
-/* BlockCard —— 物品卡片样式 */
+/* BlockCard —— 物品卡片样式（精简版：上半手柄/徽标，下半 SKU） */
 
 .bc-card {
   display: flex;
-  align-items: flex-start;
+  flex-direction: column;
+  height: 100%;
   border: 1px solid #d0d0d0;
   border-radius: 3px;
   background: #fff;
-  padding: 4px 6px;
-  gap: 6px;
+  /* padding: 2px 4px; */
+  gap: 2px;
   min-width: 0;
-  flex-shrink: 0;
+  cursor: pointer;
   user-select: none;
   position: relative;
-  transition: border-color 0.1s;
+  transition: border-color 0.1s, box-shadow 0.1s;
+  overflow: hidden;
 }
 
 .bc-card:hover {
   border-color: #aaa;
+}
+
+/* 选中态 */
+.bc-selected {
+  border-color: #4a90d9;
+  box-shadow: 0 0 0 1px #4a90d9;
 }
 
 .bc-gap {
@@ -29,20 +37,29 @@
   );
   border-style: dashed;
   border-color: #ddd;
+  cursor: default;
 }
 
 .bc-dual {
   border-color: #4a90d9;
 }
 
-/* 拖拽手柄 */
+/* 上半区：手柄 + 徽标 */
+
+.bc-top {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex: 0 0 auto;
+  min-height: 14px;
+}
 
 .bc-drag-handle {
   cursor: grab;
   color: #bbb;
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1;
-  padding: 2px 2px;
+  padding: 1px;
   flex-shrink: 0;
   user-select: none;
 }
@@ -55,132 +72,41 @@
   cursor: grabbing;
 }
 
-/* 主体 */
-
-.bc-body {
-  flex: 1;
-  min-width: 0;
-}
-
-.bc-top-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 4px;
-}
-
-.bc-category {
-  font-size: 11px;
-  font-weight: 600;
-  color: #333;
-  display: flex;
-  align-items: center;
-  gap: 3px;
-}
-
-.bc-cat-gap {
-  color: #aaa;
-  font-weight: 400;
-}
-
 .bc-dual-badge {
   font-size: 10px;
   color: #4a90d9;
+  line-height: 1;
 }
 
-.bc-width {
-  font-size: 11px;
-  color: #666;
+.bc-stack-badge {
+  font-size: 9px;
+  color: #999;
+  line-height: 1;
   white-space: nowrap;
 }
 
-.bc-bottom-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 4px;
-  margin-top: 1px;
-}
+/* 下半区：SKU 独占整行 */
 
 .bc-sku {
+  flex: 1;
   font-size: 11px;
-  color: #888;
+  color: #555;
   font-family: monospace;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.bc-pos {
-  font-size: 10px;
-  color: #bbb;
-  white-space: nowrap;
-}
-
-/* 堆叠物品 */
-
-.bc-stacked {
-  margin-top: 2px;
-  padding-top: 2px;
-  border-top: 1px dotted #eee;
-}
-
-.bc-stacked-item {
-  font-size: 10px;
-  color: #999;
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
-
-.bc-stacked-remove {
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: #ccc;
-  font-size: 10px;
-  padding: 0 2px;
-  line-height: 1;
-  border-radius: 2px;
-}
-
-.bc-stacked-remove:hover {
-  color: #c00;
-  background: #fee;
-}
-
-/* 删除按钮 */
-
-.bc-actions {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  flex-shrink: 0;
-  opacity: 0;
-  transition: opacity 0.1s;
+  justify-content: center;
+  min-height: 0;
 }
 
-.bc-card:hover .bc-actions {
-  opacity: 1;
+.bc-sku-row {
+  overflow: hidden;
+  white-space: nowrap;
+  line-height: 1.1;
 }
 
-.bc-delete-btn {
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: #ccc;
-  font-size: 12px;
-  padding: 1px 3px;
-  line-height: 1;
-  border-radius: 2px;
-}
-
-.bc-delete-btn:hover {
-  color: #c00;
-  background: #fee;
-}
-
-.bc-delete-static:hover {
-  color: #e67e22;
-  background: #fff3e0;
+.bc-gap .bc-sku {
+  color: #bbb;
+  font-family: inherit;
+  font-size: 10px;
 }

@@ -3,13 +3,17 @@
  *
  * 用户在此粘贴/拖入橱柜布局图片，选择视图类型和关联的墙/岛台，
  * 点击识别后发送到后端 OpenRouter 视觉模型进行布局识别。
+ * 通过 SSE 流式接收 tool_call / reply_chunk / layout_update / result 事件，
+ * 实时更新左侧画布和右侧对话面板。
  * 图片不持久化，仅作为 LayoutInstruction 的临时载体。
  */
 import { useState, useCallback, useRef } from 'react';
 import { useI18n } from '../i18n/context';
-import type { LayoutDocument, LayoutInstruction } from '../types';
-import './ImageUploadPanel.css';
+import { useLayoutStore } from '../stores/layoutStore';
+import type { LayoutDocument } from '../types';
 import { fetchWithAuth } from '../lib/fetchWithAuth';
+import { parseSSEEvents, type SSEEvent } from '../lib/sse';
+import './ImageUploadPanel.css';
 
 interface ImageUploadPanelProps {
   layout: LayoutDocument | null;
@@ -22,7 +26,7 @@ export function ImageUploadPanel({ layout, onLayoutUpdated }: ImageUploadPanelPr
 
   const [imageData, setImageData] = useState<string | null>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
-  const [viewType, setViewType] = useState<'top' | 'elevation' | '3d'>('top');
+  const [viewType, setViewType] = useState<'top' | 'elevation' | '3d'>('elevation');
   const [associatedWallIds, setAssociatedWallIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -104,7 +108,7 @@ export function ImageUploadPanel({ layout, onLayoutUpdated }: ImageUploadPanelPr
     );
   }, []);
 
-  /** 提交识别 */
+  /** 提交识别（SSE 流式） */
   const handleRecognize = useCallback(async () => {
     if (!imageData || !layout) return;
     setLoading(true);
@@ -124,27 +128,62 @@ export function ImageUploadPanel({ layout, onLayoutUpdated }: ImageUploadPanelPr
       });
 
       if (!res.ok) {
-        const errBody = await res.json().catch(() => ({ error: '识别失败' }));
-        setError(errBody.error || errBody.detail || '识别失败');
+        const errBody = await res.json().catch(() => ({ error: t('识别失败') }));
+        setError(errBody.error || errBody.detail || t('识别失败'));
         setLoading(false);
         return;
       }
 
-      const data = await res.json();
-      onLayoutUpdated(data.updatedLayout);
-      setSuccessMsg('Layout updated successfully');
-      // 不清除图片，用户可以再次识别
-    } catch {
-      setError('网络请求失败，请检查连接');
-    }
-    setLoading(false);
-  }, [imageData, viewType, associatedWallIds, layout, onLayoutUpdated]);
+      // SSE 流式读取
+      const reader = res.body!.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
 
-  const allItems = layout ? [...layout.walls, ...layout.islands] : [];
+      const readLoop = async () => {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const { events, remaining } = parseSSEEvents(buffer);
+          buffer = remaining;
+
+          for (const event of events) {
+            // 转发给 LayoutChatPanel 展示对话过程
+            useLayoutStore.getState().emitRecognitionEvent(event);
+
+            if (event.type === 'layout_update') {
+              const data = event.data as { layout: LayoutDocument; tool?: string };
+              if (data.layout) {
+                onLayoutUpdated(data.layout);
+              }
+            } else if (event.type === 'result') {
+              const data = event.data as { updatedLayout: LayoutDocument; reply?: string };
+              if (data.updatedLayout) {
+                onLayoutUpdated(data.updatedLayout);
+              }
+              setSuccessMsg(t('布局更新成功'));
+            } else if (event.type === 'error') {
+              const data = event.data as { message?: string };
+              setError(data.message || t('识别失败'));
+            }
+          }
+        }
+      };
+
+      await readLoop();
+    } catch {
+      setError(t('网络请求失败'));
+    } finally {
+      setLoading(false);
+    }
+  }, [imageData, viewType, associatedWallIds, layout, onLayoutUpdated, t]);
+
+  const allItems = layout ? layout.walls : [];
 
   return (
     <div className="iup-panel" onPaste={handlePaste}>
-      <div className="iup-header">图片识别</div>
+      <div className="iup-header">{t('图片识别')}</div>
 
       {/* 图片区域 */}
       <div
@@ -159,7 +198,7 @@ export function ImageUploadPanel({ layout, onLayoutUpdated }: ImageUploadPanelPr
         ) : (
           <div className="iup-placeholder">
             <span className="iup-placeholder-icon">🖼</span>
-            <span>拖拽图片到此处或点击选择</span>
+            <span>{t('拖拽图片提示')}</span>
           </div>
         )}
         <input
@@ -173,18 +212,18 @@ export function ImageUploadPanel({ layout, onLayoutUpdated }: ImageUploadPanelPr
 
       {/* 类型选择 */}
       <div className="iup-row">
-        <label className="iup-label">视图类型:</label>
+        <label className="iup-label">{t('视图类型')}:</label>
         <select className="iup-select" value={viewType} onChange={(e) => setViewType(e.target.value as 'top' | 'elevation' | '3d')}>
-          <option value="top">俯视图</option>
-          <option value="elevation">正视图</option>
-          <option value="3d">立体图</option>
+          <option value="elevation">{t('正视图')}</option>
+          <option value="top">{t('俯视图')}</option>
+          <option value="3d">{t('立体图')}</option>
         </select>
       </div>
 
       {/* 关联墙/岛台 */}
       {allItems.length > 0 && (
         <div className="iup-row iup-row-col">
-          <label className="iup-label">关联墙/岛台:</label>
+          <label className="iup-label">{t('关联墙面岛台')}:</label>
           <div className="iup-checkboxes">
             {allItems.map((item) => (
               <label key={item.id} className="iup-check">
@@ -206,7 +245,7 @@ export function ImageUploadPanel({ layout, onLayoutUpdated }: ImageUploadPanelPr
         disabled={!imageData || loading}
         onClick={handleRecognize}
       >
-        {loading ? '识别中...' : '识别此图片'}
+        {loading ? t('识别中') : t('识别此图片')}
       </button>
 
       {/* 清空图片 */}
@@ -215,7 +254,7 @@ export function ImageUploadPanel({ layout, onLayoutUpdated }: ImageUploadPanelPr
           className="iup-btn-clear"
           onClick={() => { setImageData(null); setImagePreviewUrl(null); }}
         >
-          清除图片
+          {t('清除图片')}
         </button>
       )}
 
