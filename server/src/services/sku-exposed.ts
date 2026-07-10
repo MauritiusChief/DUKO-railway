@@ -93,6 +93,7 @@ const SHAPE_TYPE_ALIAS_RULES: InjectRule[] = [
   { condition: (_, t) => t === 'VSB', value: 'V' },
   { condition: (_, t) => t === 'BEP', value: 'BSK' },
   { condition: (_, t) => t === 'WEP', value: 'WSK' },
+  { condition: (_, t, s) => t === 'OV' && s === '331524', value: 'W' },
   { condition: (c, t, s) => EUROPEAN_STYLE_CODES.includes(c) && t === 'PNL' && s === '2596', value: 'RRP' },
   { condition: (c, t) => EUROPEAN_STYLE_CODES.includes(c) && t === 'BEP', value: 'DWP' },
   { condition: (c, t, s) => EUROPEAN_STYLE_CODES.includes(c) && t === 'WF' && (s === '330' || s === '630'), value: 'BF' },
