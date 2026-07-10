@@ -385,6 +385,14 @@ export const messages = {
     zh: '高度',
     en: 'Height',
   },
+  宽: {
+    zh: '宽',
+    en: 'W',
+  },
+  高: {
+    zh: '高',
+    en: 'H',
+  },
   添加物品: {
     zh: '添加物品',
     en: 'Add Item',
@@ -436,6 +444,10 @@ export const messages = {
   叠放吊柜: {
     zh: '叠放吊柜',
     en: 'Stack Wall Cabinet',
+  },
+  无叠放物品: {
+    zh: '无叠放物品',
+    en: 'No Stack Item',
   },
   无墙面提示: {
     zh: '暂无墙面。点击 "+ 墙面/岛台" 添加一面。',
@@ -509,8 +521,8 @@ export const messages = {
     en: 'Close',
   },
   添加叠放: {
-    zh: '+ 叠放',
-    en: '+ Stack',
+    zh: '添加叠放 →',
+    en: 'Stack it →',
   },
   选择颜色: {
     zh: '颜色',
