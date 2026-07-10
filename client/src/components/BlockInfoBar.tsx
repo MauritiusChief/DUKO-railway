@@ -184,6 +184,7 @@ export function BlockInfoBar({
         </span>
 
         <label className="pf-field">
+          <span>{t('宽')}:</span>
           <input
             className="pf-input pf-width-input"
             type="number"
@@ -193,11 +194,12 @@ export function BlockInfoBar({
             onChange={(e) => setWidth(e.target.value)}
             onBlur={commitWidth}
             onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-          />
+          />"
         </label>
 
         {heightRelevant && (
           <label className="pf-field">
+            <span>{t('高')}:</span>
             <input
               className="pf-input pf-height-input"
               type="number"
@@ -208,11 +210,12 @@ export function BlockInfoBar({
               onChange={(e) => setHeight(e.target.value)}
               onBlur={commitHeight}
               onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-            />
+            />"
           </label>
         )}
 
         <label className="pf-field">
+          SKU:
           <input
             className="pf-input pf-sku-input"
             value={sku}
@@ -225,11 +228,11 @@ export function BlockInfoBar({
         {/* 距左位置编辑（gap 块保持只读） */}
         {isGap ? (
           <span className="pf-readonly">
-            {t('距左')}: {distanceFromLeft}{t('英寸')}
+            {t('距左')}: {distanceFromLeft}"
           </span>
         ) : (
           <label className="pf-field">
-            {t('距左')}
+            {t('距左')}:
             <input
               className="pf-input pf-width-input"
               type="number"
@@ -239,8 +242,7 @@ export function BlockInfoBar({
               onChange={(e) => setPos(e.target.value)}
               onBlur={commitPos}
               onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-            />
-            {t('英寸')}
+            />"
           </label>
         )}
         {mainItem && !NO_COLOR_CATEGORIES.has(mainItem.category) && (

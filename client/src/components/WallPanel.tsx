@@ -452,18 +452,21 @@ export function WallPanel({ wall }: WallPanelProps) {
                   </option>
                 ))}
               </select>
-              <input
-                className="pf-input pf-width-input"
-                type="number"
-                min="0.5"
-                step="0.5"
-                placeholder={t('宽度')}
-                value={newWidth}
-                onChange={(e) => setNewWidth(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') confirmAdd(); }}
-                autoFocus
-              />
-              {isStackableCategory && (
+              <label className="pf-field"><span>{t('宽')}:</span>
+                <input
+                  className="pf-input pf-width-input"
+                  type="number"
+                  min="0.5"
+                  step="0.5"
+                  placeholder={t('宽度')}
+                  value={newWidth}
+                  onChange={(e) => setNewWidth(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') confirmAdd(); }}
+                  autoFocus
+                />"
+              </label>
+              {isStackableCategory && (<label className="pf-field">
+                <span>{t('高')}:</span>
                 <input
                   className="pf-input pf-height-input"
                   type="number"
@@ -473,15 +476,18 @@ export function WallPanel({ wall }: WallPanelProps) {
                   value={newHeight}
                   onChange={(e) => setNewHeight(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') confirmAdd(); }}
+                />"
+              </label>)}
+              <label className="pf-field">
+                SKU:
+                <input
+                  className="pf-input pf-sku-input"
+                  placeholder={t('请输入SKU')}
+                  value={newSku}
+                  onChange={(e) => setNewSku(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') confirmAdd(); }}
                 />
-              )}
-              <input
-                className="pf-input pf-sku-input"
-                placeholder={t('请输入SKU')}
-                value={newSku}
-                onChange={(e) => setNewSku(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') confirmAdd(); }}
-              />
+              </label>
               {!NO_COLOR_CATEGORIES.has(newCategory) && (
               <select
                 className="pf-select"

@@ -36,13 +36,15 @@
 - layout-recognize 无需颜色的东西不用警报，也不暴露选择颜色的下拉菜单
 - filler 似乎被自动双轨插入，需要修改
 - LLM 老是弄错需要删除的物体的 id, 很可能是信息给错了。需要检查
-
-## 未完成
-
 - 已创建墙、已更新 property 等信息被当作助手消息了，得删除。
 - layout agent 需要忽略 BEP 这种板子，而是将其作为某个面被暴露的确实证据，修改暴露面（因为只有暴露的才需要装 BEP 等板子）
 - OCR agent 也要特别注意从图片识别哪个面被暴露（比方说，如果贴了 BEP 那么肯定暴露）
 - filler 也需要贴侧面美化板
+
+## 未完成
+
+- 再明确 stuffed_gap 和 gaplike_item 类型的定义。
+  - 现在的问题是，WR301512（酒架/填充开口区域）被当作 stuffed_gap, 而绿色标记线老是被认作 VAL
 
 - layout-recognzie 需要在墙已经建好之后再连接不同的墙
 - layout-recognzie 允许改自动滑动方向

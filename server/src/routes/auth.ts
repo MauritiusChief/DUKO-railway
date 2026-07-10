@@ -29,13 +29,14 @@ import { validate } from '../middleware/validate.js';
 import { loginSchema, registerSchema, adminUpdateUsernameSchema, adminUpdatePasswordSchema, adminDeleteUserSchema } from '../validation/schemas.js';
 import { findUserByUsername, findUserById, createUser, listUsers, deleteUserById, updateUsername, updateUserPassword } from '../db/users.js';
 import { config } from '../config/env.js';
+import { apiLimiter, authLimiter } from '../middleware/rateLimit.js';
 
 export const authRouter = Router();
 
 const SALT_ROUNDS = 12;
 
 /** POST /api/auth/login —— 验证凭据，返回 access token + 用户信息，refresh token 写入 HttpOnly Cookie */
-authRouter.post('/auth/login', validate(loginSchema), (req: Request, res: Response) => {
+authRouter.post('/login', authLimiter, validate(loginSchema), (req: Request, res: Response) => {
   const { username, password } = req.body as { username: string; password: string };
 
   const user = findUserByUsername(username);
@@ -76,7 +77,7 @@ authRouter.post('/auth/login', validate(loginSchema), (req: Request, res: Respon
 
 /** POST /api/auth/register —— 管理员创建新用户 */
 authRouter.post(
-  '/auth/register',
+  '/register',
   authenticateToken,
   requireAdmin,
   validate(registerSchema),
@@ -97,7 +98,7 @@ authRouter.post(
 );
 
 /** POST /api/auth/refresh —— 从 Cookie 读取 refresh token，旋转后返回新 access token + 新 Cookie */
-authRouter.post('/auth/refresh', (req: Request, res: Response) => {
+authRouter.post('/refresh', authLimiter, (req: Request, res: Response) => {
   const refreshToken = getRefreshCookie(req);
 
   if (!refreshToken) {
@@ -146,7 +147,7 @@ authRouter.post('/auth/refresh', (req: Request, res: Response) => {
 });
 
 /** POST /api/auth/logout —— 从 Cookie 读取 refresh token 并撤销，清除 Cookie */
-authRouter.post('/auth/logout', (req: Request, res: Response) => {
+authRouter.post('/logout', apiLimiter, (req: Request, res: Response) => {
   const refreshToken = getRefreshCookie(req);
 
   if (refreshToken) {
@@ -183,7 +184,7 @@ function isSeedAdmin(userId: number): boolean {
 
 /** GET /api/auth/users —— 管理员浏览所有用户列表 */
 authRouter.get(
-  '/auth/users',
+  '/users',
   authenticateToken,
   requireAdmin,
   (_req: Request, res: Response) => {
@@ -194,7 +195,7 @@ authRouter.get(
 
 /** PATCH /api/auth/users/:id/username —— 管理员修改用户名 */
 authRouter.patch(
-  '/auth/users/:id/username',
+  '/users/:id/username',
   authenticateToken,
   requireAdmin,
   validate(adminUpdateUsernameSchema),
@@ -236,7 +237,7 @@ authRouter.patch(
 
 /** PATCH /api/auth/users/:id/password —— 管理员修改密码 */
 authRouter.patch(
-  '/auth/users/:id/password',
+  '/users/:id/password',
   authenticateToken,
   requireAdmin,
   validate(adminUpdatePasswordSchema),
@@ -272,7 +273,7 @@ authRouter.patch(
 
 /** DELETE /api/auth/users/:id —— 管理员删除用户 */
 authRouter.delete(
-  '/auth/users/:id',
+  '/users/:id',
   authenticateToken,
   requireAdmin,
   validate(adminDeleteUserSchema),

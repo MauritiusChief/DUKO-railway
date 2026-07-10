@@ -44,11 +44,11 @@ export function StackedItemsEditor({ items, onAdd, onRemove, canAdd }: StackedIt
 
   return (
     <div className="pf-row pf-row-stacked">
-      {items.length > 0 && (
+      {items.length > 0 ? (
         <div className="pf-stacked">
           {items.map((it) => (
             <span key={it.id} className="pf-stacked-item">
-              {it.height != null && <span className="pf-stacked-height">{it.height}</span>}
+              {it.height != null && <span className="pf-stacked-height">{it.height}"</span>}
               ↑ {it.sku}
               <button
                 className="pf-stacked-remove"
@@ -60,9 +60,12 @@ export function StackedItemsEditor({ items, onAdd, onRemove, canAdd }: StackedIt
             </span>
           ))}
         </div>
-      )}
+      ) : <div className="pf-stacked pf-field">{t('无叠放物品')}</div>}
       {canAdd && (
         <div className="pf-stacked-add">
+          <button className="pf-stacked-add-btn" onClick={handleAdd}>
+            {t('添加叠放')}
+          </button>
           <input
             className="pf-input pf-stacked-add-height"
             type="number"
@@ -80,9 +83,6 @@ export function StackedItemsEditor({ items, onAdd, onRemove, canAdd }: StackedIt
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') handleAdd(); }}
           />
-          <button className="pf-stacked-add-btn" onClick={handleAdd}>
-            {t('添加叠放')}
-          </button>
         </div>
       )}
     </div>
