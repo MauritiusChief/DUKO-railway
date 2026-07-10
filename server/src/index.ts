@@ -32,7 +32,7 @@ import { notesRouter } from './routes/notes.js';
 import { layoutGenerateListRouter } from './routes/layoutGenerateList.js';
 import { traceRouter } from './routes/trace.js';
 import { authenticateToken } from './middleware/auth.js';
-import { authLimiter, apiLimiter, llmLimiter } from './middleware/rateLimit.js';
+import { apiLimiter, llmLimiter } from './middleware/rateLimit.js';
 import { config, validateSecrets } from './config/env.js';
 import { initDB } from './db/lance.js';
 import { initSkuDB, getRecordCount } from './db/sku.js';
@@ -80,7 +80,7 @@ app.use(helmet({
 // ---- API 路由 ----
 
 // 认证路由：不施加 authenticateToken（自身有独立限流与校验）
-app.use('/api', authLimiter, authRouter);
+app.use('/api/auth', authRouter);
 
 // 当前用户查询：已受 authenticateToken 保护，使用较为宽松的 apiLimiter
 app.get('/api/me', apiLimiter, authenticateToken, meHandler);
