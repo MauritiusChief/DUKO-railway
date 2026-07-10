@@ -211,8 +211,8 @@ const europeanStyleUtilityCab = EUROPEAN_STYLE_CODES.flatMap(color => {
     return EUROPEAN_UTIL_WIDTH.map(w => ({ colorCode: color, shapeTypeCode: 'UT', shapeSizeCode: `${w}${String(Number(h)+35)}24`, subItems: `${color}B${w}F,${color}UT${w}${h}24` }))
   })
 })
-// 美式烤箱柜规则生成
-const americanStyleOvenCab = AMERICAN_STYLE_CODES.flatMap(color => {
+// 美式和一体式烤箱柜规则生成
+const noneEuroStyleOvenCab = NONE_EURO_STYLE_CODES.flatMap(color => {
   return AMERICAN_OV_HEIGHT.map(h => ({ colorCode: color, shapeTypeCode: 'OV', shapeSizeCode: `33${String(Number(h)+66)}24`, subItems: `${color}OV33${h}24,${color}OV336624` }))
 })
 // 带柜垃圾桶生成
@@ -237,7 +237,7 @@ const COMPOSITE_ITEMS_RULES: CompositeItemRule[] = [
   ...europeanStyleBackPanel,
   ...americanStyleUtilityCab,
   ...europeanStyleUtilityCab,
-  ...americanStyleOvenCab,
+  ...noneEuroStyleOvenCab,
   ...baseCabWithTrashBin,
   ...noneEuroRefrigePanel,
   ...noneEuroDishwasherPanelCombo,
