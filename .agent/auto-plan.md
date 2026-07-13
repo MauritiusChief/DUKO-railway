@@ -285,15 +285,15 @@ SSE 事件示例：
 **鉴权流程**：
 
 1. auto 连接 WebSocket 后立即发送 `{ type: 'hello', version: '1', token: '<AUTO_WORKER_TOKEN>' }`。
-2. Server 用 bcrypt 比对 `hello.token` 与数据库中存储的 worker token 哈希，验证通过后标记该连接为已认证。
+2. Server 直接比对 `hello.token` 与 `AUTO_WORKER_TOKEN` 环境变量一致，验证通过后标记该连接为已认证。
 3. 认证失败回复 `{ type: 'error', message: 'worker token 无效' }` 并关闭连接。
 4. 认证成功后，auto 发送 `{ type: 'ready' }`，Server 开始派发任务。
 5. 任务执行完毕后，auto 再次发送 `{ type: 'ready' }` 以获取下一个任务。
 
 **Worker Token 管理**：
 
-- `server/.env` 中新增 `WORKER_TOKEN_HASH`（bcrypt 哈希值），原始 token 仅存 `auto/.env` 的 `AUTO_WORKER_TOKEN`。
-- 提供 `server/src/generate-worker-token.ts` CLI 脚本：生成 `auto_` 前缀的随机 token（如 `auto_8k2Ld9xM3nQp7RtY`），输出 bcrypt 哈希，引导用户将 token 和 hash 分别填入 `auto/.env` 和 `server/.env`。
+- `server/.env` 和 `auto/.env` 均设置 `AUTO_WORKER_TOKEN`，两端保存相同的明文 token。
+- 管理员自行生成一段随机字符串（如 `openssl rand -hex 32`）。
 - 首版仅支持单个 worker token，不支持多 worker 或多 token。
 
 **派发逻辑**：
@@ -314,12 +314,6 @@ SSE 事件示例：
 1. Server 检测到 worker 断线时，查找该 worker 名下所有 `running` 状态的 `quotation_tasks`。
 2. 对于每个任务：如果 `retry_count == 0`，将状态回退为 `queued`，`retry_count = 1`；如果 `retry_count >= 1`，将状态标为 `failed`，`task_error = 'worker 断线，任务超时'`。
 3. worker 名下跟踪：由于首版只有一个 worker，断线就是该 worker 离开。在内存中维护 `activeWorkerAssignment: Map<number, number>`（taskId → worker 连接标识符）。
-
-**多 Worker 安全（前瞻）**：
-
-- `quotation_tasks` 的 `running` 字段本身提供了一定的互斥保护，但两个 worker 同时 `ready` 存在 race condition。
-- 解决方案：在内存中维护 `assignedTaskIds: Set<number>`，任务被 `task-assigned` 后立即加入集合；新 `ready` 到来时从 SQL 查询 `WHERE status = 'queued' AND id NOT IN (...)` 排除已分配但未确认的任务。
-- 首版一个 worker，此机制作为防御性措施一并实现。
 
 **SSE 集成**：
 
@@ -358,15 +352,15 @@ auto/
     "init-session": "tsx src/init-session.ts"
   },
   "dependencies": {
-    "playwright": "^1.52.0",
-    "ws": "^8.18.0",
-    "dotenv": "^16.4.7",
-    "zod": "^3.25.76"
+    "playwright": "...",
+    "ws": "...",
+    "dotenv": "...",
+    "zod": "..."
   },
   "devDependencies": {
-    "tsx": "^4.19.0",
-    "typescript": "^5.7.0",
-    "@types/ws": "^8.5.0"
+    "tsx": "...",
+    "typescript": "...",
+    "@types/ws": "..."
   }
 }
 ```
@@ -527,13 +521,12 @@ orders 搜索栏的选择器、搜索提交方式、搜索结果选择及报价�
 **交付物：**
 
 - [ ] 安装依赖：`npm install ws`（server 侧）
-- [ ] 新建 `server/src/generate-worker-token.ts`：生成随机 token + bcrypt 哈希，输出到终端供手动填入 `.env`
-- [ ] `server/src/config/env.ts` 新增 `workerTokenHash` 配置项（从 `WORKER_TOKEN_HASH` 环境变量读取）
+- [ ] `server/src/config/env.ts` 新增 `autoWorkerToken` 配置项（从 `AUTO_WORKER_TOKEN` 环境变量读取）
 - [ ] 新建 `server/src/services/sse-broadcast.ts`：按 taskId 分组的 SSE 订阅管理器
 - [ ] 新建 `server/src/services/ws-handler.ts`：
   - WebSocket 连接升级（通过 `ws.Server` 挂载到 Express `http.Server`）
   - 消息路由：按 `type` 分发到对应 handler
-  - `hello` handler：bcrypt 比对 token → 标记连接已认证
+  - `hello` handler：比对 `hello.token` 与 `AUTO_WORKER_TOKEN` 环境变量 → 标记连接已认证
   - `ready` handler：取队头 `queued` 任务 → 发送 `task-assigned`
   - `accepted` handler：更新任务为 `running`，记录 `started_at`
   - `line-result` handler：幂等检查 → 写入行结果 → 调用 `sse-broadcast.broadcast`
@@ -541,7 +534,7 @@ orders 搜索栏的选择器、搜索提交方式、搜索结果选择及报价�
   - `heartbeat` handler：回复 `heartbeat-ack`
   - 断线检测与回收：`ws.Server` 的 `close` 事件 + 心跳超时定时器
 - [ ] 在 `server/src/index.ts` 启动流程中初始化 WebSocket server
-- [ ] `server/.env.example` 更新：增加 `WORKER_TOKEN_HASH` 说明
+- [ ] `server/.env.example` 更新：增加 `AUTO_WORKER_TOKEN` 说明
 - [ ] 编写测试或手动验证：
   - worker token 无效时连接被拒绝
   - 重放 `accepted`（attempt=1 重复）被幂等丢弃
