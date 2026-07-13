@@ -78,7 +78,7 @@ export async function runQuotationTask(
     }
 
     // ---- 2. 导航到 /odoo/sales，移除 "My Quotations" facet ----
-    const searchResult = await navigateAndSearch(page, task.quotationNumber);
+    await navigateAndSearch(page, task.quotationNumber);
 
     // ---- 3. 核验报价单 + 读取公司 + 已有行 ----
     let verification: QuotationVerification;
@@ -170,7 +170,7 @@ export async function runQuotationTask(
  * 导航到 /odoo/sales，搜索报价单并打开首结果。
  * 若搜索无结果，抛出错误（调用方转为 task-failed）。
  */
-async function navigateAndSearch(page: Page, quotationNumber: string): Promise<'ok'> {
+async function navigateAndSearch(page: Page, quotationNumber: string): Promise<void> {
   await navigateToSales(page);
   await removeMyQuotationsFacet(page);
   await searchQuotation(page, quotationNumber);
@@ -181,7 +181,6 @@ async function navigateAndSearch(page: Page, quotationNumber: string): Promise<'
   }
 
   await openFirstResult(page);
-  return 'ok';
 }
 
 /**

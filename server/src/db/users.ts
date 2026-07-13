@@ -139,7 +139,9 @@ export function initUserDB(dbDir: string): void {
       created_at         TEXT    NOT NULL DEFAULT (datetime('now')),
       updated_at         TEXT    NOT NULL DEFAULT (datetime('now')),
       started_at         TEXT,
-      completed_at       TEXT
+      completed_at         TEXT,
+      pending_confirmation TEXT,
+      final_lines_snapshot TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_quotation_tasks_user ON quotation_tasks(user_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_quotation_tasks_status ON quotation_tasks(status, created_at ASC);
@@ -155,23 +157,6 @@ export function initUserDB(dbDir: string): void {
     );
     CREATE INDEX IF NOT EXISTS idx_quotation_task_lines_task ON quotation_task_lines(task_id);
   `);
-
-  // 步骤 5 迁移：新增 pending_confirmation 和 final_lines_snapshot 列
-  // SQLite ALTER TABLE 不支持 IF NOT EXISTS，尝试添加并忽略"列已存在"错误
-  const migrateColumns = [
-    'ALTER TABLE quotation_tasks ADD COLUMN pending_confirmation TEXT',
-    'ALTER TABLE quotation_tasks ADD COLUMN final_lines_snapshot TEXT',
-  ];
-  for (const sql of migrateColumns) {
-    try {
-      db.exec(sql);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      if (!msg.includes('duplicate column name')) {
-        throw err;
-      }
-    }
-  }
 }
 
 /** 获取底层 SQLite 数据库连接（供 trace 等服务模块使用） */
