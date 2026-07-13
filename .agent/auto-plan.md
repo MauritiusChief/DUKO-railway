@@ -431,27 +431,16 @@ SIGINT / SIGTERM
 5. 上报最终任务状态。
 6. 关闭浏览器 context（profile 自动保留）。
 
-### PM2 集成
+### 部署
 
-更新 `ecosystem.config.cjs` 以包含 auto 服务：
+`auto` 在旧电脑上以 `npm start` 方式运行，不使用 PM2 或整合到已弃置的根目录 `ecosystem.config.cjs` 中。
 
-```js
-module.exports = {
-  apps: [
-    {
-      name: 'duko-advance',
-      script: 'dist/index.js',
-      cwd: './server',
-      env: { NODE_ENV: 'production', PORT: 3023 },
-    },
-    {
-      name: 'duko-auto',
-      script: 'dist/index.js',
-      cwd: './auto',
-      env: { NODE_ENV: 'production' },
-    },
-  ],
-};
+```bash
+cd auto
+npm install
+npx playwright install chromium
+npm run init-session   # 首次：手动登录 Odoo 保存 profile
+npm start
 ```
 
 ### 每任务浏览器流程（步骤 5-6 实现细节）
@@ -572,7 +561,7 @@ orders 搜索栏的选择器、搜索提交方式、搜索结果选择及报价�
 - [ ] `auto/src/init-session.ts`：
   - 首次运行脚本：启动 headed Chromium → 打开 Odoo → 提示用户登录 → 用户确认后关闭
 - [ ] 安装 Playwright 浏览器：`npx playwright install chromium`
-- [ ] 更新 `ecosystem.config.cjs` 加入 `duko-auto` 进程定义
+- [ ] `auto/README.md` 中写清部署步骤（`npm install` → `npx playwright install chromium` → `npm run init-session` → `npm start`）
 - [ ] 验收：
   - auto 能成功连接 server WebSocket
   - 连接断开后自动重连（观察指数退避日志）
