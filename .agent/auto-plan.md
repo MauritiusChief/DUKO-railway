@@ -450,7 +450,7 @@ npm start
 1. 收到任务后发送 `accepted`。
 2. 启动 persistent headed Chromium context。
 3. 打开 Odoo，并检查是否仍为已登录状态。
-4. 访问 `https://dukouserp.com/odoo/orders`。
+4. 访问 `https://dukouserp.com/odoo/sales`。
 5. 在 orders 页面搜索栏输入任务中的 quotation 单号，打开搜索到的目标报价单。
 6. 核验打开页面的 quotation 单号与任务一致后，才允许修改行项目。
 7. 根据任务选择追加或清空后重建，并逐行填写产品与数量。
@@ -568,7 +568,7 @@ orders 搜索栏的选择器、搜索提交方式、搜索结果选择及报价�
   - 浏览器启动和关闭正常（profile 目录生成且包含 Odoo cookies）
   - 登录检测逻辑可区分已登录/未登录页面
 
-### 步骤 5：在真实 Odoo 页面实现 `/odoo/orders` 搜索报价单、目标核验及失败处理
+### 步骤 5：在真实 Odoo 页面实现 `/odoo/sales` 搜索报价单、目标核验及失败处理
 
 （后续细化）
 
@@ -588,7 +588,7 @@ orders 搜索栏的选择器、搜索提交方式、搜索结果选择及报价�
 
 - 用户可从主页面的产品清单进入报价任务页并创建任务。
 - auto 离线时前端明确显示不可派发。
-- auto 在线时，任务能按 quotation 单号在 `/odoo/orders` 中找到并核验目标报价单。
+- auto 在线时，任务能按 quotation 单号在 `/odoo/sales` 中找到并核验目标报价单。
 - 浏览器仅在任务执行期间运行，任务结束后关闭。
 - 所有产品行都具有可查询的成功或失败结果。
 - 打开任务页后，用户无需刷新即可看到任务状态和逐行填写结果更新；SSE 断线或页面刷新后可通过 REST 快照恢复完整结果。

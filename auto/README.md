@@ -90,5 +90,5 @@ auto/
 
 - ✅ WebSocket 客户端、重连、心跳
 - ✅ 浏览器启动与 Odoo 登录检测
-- ⏳ Odoo `/odoo/orders` 报价单搜索与核验（步骤 5）
+- ⏳ Odoo `/odoo/sales` 报价单搜索与核验（步骤 5）
 - ⏳ 报价逐行填写逻辑迁移（步骤 6）
