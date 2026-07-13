@@ -505,7 +505,7 @@ npm start
 10. 上报最终任务状态、任务错误、所有行结果与最终快照。
 11. 关闭浏览器与 context，保留 profile。
 
-orders 搜索栏的选择器、搜索提交方式、搜索结果选择、报价单号核验方式及表格行/单元格选择器需要在 Playwright 实作阶段以真实 Odoo 页面逐步调整（`experiment/html/` 下保存的裁剪页面可作为静态参考，但带数据的行需在真实页面确认）。实现中不得假设固定 URL 规则或内部数据库 ID。
+orders 搜索栏的选择器、搜索提交方式、搜索结果选择、报价单号核验方式已在 `experiment/html/` 下保存的裁剪页面中静态确认（含 `odoo-sales-xxxx-table.html` 的真实数据行，读取用 `td[name="..."]` 选择器已锁定）。仅写入侧编辑态（`o_selected_row` 内的 `<input>`）的交互时序仍需在真实页面上调整。实现中不得假设固定 URL 规则或内部数据库 ID。
 
 ## 实施顺序
 
@@ -619,7 +619,7 @@ orders 搜索栏的选择器、搜索提交方式、搜索结果选择、报价�
 
 **交付物：**
 
-- [ ] `auto/src/odoo/selectors.ts`：新增销售列表页与详情页选择器（与 `script/selectors.ts` 的 11 个并列）
+- [ ] `auto/src/odoo/selectors.ts`：新增销售列表页与详情页选择器（可复用 `script/selectors.ts` 的 11 项）
   - 搜索框 `input.o_searchview_input`
   - "My Quotations" facet 移除钮 `.o_searchview_facet .o_facet_remove`（否则搜不到他人创建的报价单）
   - 列表数据行 `table.o_list_table tbody tr.o_data_row`，行内单号 cell `td[name="name"]`
@@ -633,8 +633,12 @@ orders 搜索栏的选择器、搜索提交方式、搜索结果选择、报价�
 - [ ] `auto/src/odoo/quotation-verify.ts`：
   - `readQuotationNumber(page)`：读标题 span，trim
   - `readCompany(page)`：读 `partner_id` input 的 `inputValue()`，trim
-  - `readExistingLines(page)`：复用 `experiment/playwright/quotationRead.ts` 模式遍历 `o_data_row`，读 product cell（`td.o_sol_product_many2one_cell`）文本 + quantity cell 文本，返回 `QuotationSnapshotLine[]`
-  - **quantity cell 选择器需在真实带数据的页面上确认**（`experiment/html/odoo-sales-xxxx.html` 只有占位空行，无法静态确定；按列头 `th[data-name="product_uom_qty"]` 的列序定位）
+  - `readExistingLines(page)`：遍历 `tbody tr.o_data_row`（已保存行），读各单元格 textContent，返回 `QuotationSnapshotLine[]`。读取选择器已用 `experiment/html/odoo-sales-xxxx-table.html`（含真实数据行）确认：
+    - 数据行：`tbody tr.o_data_row`
+    - 产品型号：`td[name="product_template_id"]`（等价 `td.o_sol_product_many2one_cell`），文本如 `02B09F`
+    - 数量：`td[name="product_uom_qty"]`，文本如 `3.00`（2 位小数）
+    - 单价（可选，留作扩展）：`td[name="price_unit"]`
+  - **注意读取 vs 写入的选择器区分**：读取针对已保存行用 `td[name="..."]` 文本；写入针对点击 "Add a product" 后进入编辑态的 `tr.o_data_row.o_selected_row`（内含 `<input>`），用 input 选择器——后者由步骤 6 从 ScriptCat 迁移而来，不在本步骤设计。三个相邻数字列靠 `name` 区分（`qty_available` / `free_qty` / `product_uom_qty`），不依赖 class。
 - [ ] 核验与任务级失败（任一命中即 `task-failed`，不进入确认/写入）：
   - 搜索结果为空 → `未找到该报价单`
   - 标题单号 ≠ `task.quotationNumber` → `报价单号核验不一致`
