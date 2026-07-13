@@ -407,15 +407,15 @@ connectedWallIds 表示 L 形转角连接关系。connectIslands 用于设置背
 | tall_cabinet | 高柜 | air + ground |
 | gap | 空挡 | air 或 ground |
 | stuffed_gap | 塞了东西的空挡（抽油烟机/窗户等），本质同 gap | air 或 ground |
-| gaplike_item | 开放性商品（VAL/GH/WES/WR 酒架/BES/PR 碗碟架等），进清单但两侧不遮挡 | air 或 ground |
-| filler | 填充条/窄条（BF/WF/TF/RF），进清单 | air 或 ground 或 air + ground |
+| gaplike_item | 开放性商品，进清单但两侧不遮挡 | air 或 ground |
+| filler | 填充条/窄条，进清单 | air 或 ground 或 air + ground |
 | tall_appliance | 高电器（冰箱等，非 DUKO 产，按名称判定） | air + ground |
 | base_appliance_need_top | 需台面电器（洗碗机等，按名称判定） | ground |
 | base_appliance_without_top | 免台面电器（灶台等，按名称判定） | ground |
 
 **区分 stuffed_gap 与 gaplike_item**：
 - **stuffed_gap**：该位置上**没有任何需要进清单的物体**的纯空位（如纯窗户、纯抽油烟机位），不进清单，仅触发邻接外露
-- **gaplike_item**：该位置上是 DUKO 产的**开放性商品**（酒架/玻璃杯架/装饰横条/端架/碗碟架等），进清单但两侧遮挡不住。一旦该物体是 DUKO 产开放性商品，必须用 gaplike_item 而非 stuffed_gap
+- **gaplike_item**：该位置上是 DUKO 产的**开放性商品**，进清单但两侧遮挡不住。具体哪些 shapeTypeCode 属此列以 \`lookupItemCategory\` 查询为准；一旦是 DUKO 产开放性商品，必须用 gaplike_item 而非 stuffed_gap
 
 ## 颜色规则
 

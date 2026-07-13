@@ -66,7 +66,7 @@ export const SHAPE_TYPES_SIZE_NA = new Set([
 ]);
 
 /**
- * Layout 物品分类表 —— shapeTypeCode -> BlockItemCategory
+ * Layout 物品分类表 —— 按 BlockItemCategory 分组的 shapeTypeCode 列表
  *
  * 仅收录会作为布局块（block）出现的 DUKO 产柜体/填充条/开放性商品。
  * 配件（molding/panel/post/corbel/decor door 等）与非 DUKO 产电器
@@ -75,48 +75,31 @@ export const SHAPE_TYPES_SIZE_NA = new Set([
  *   - 电器多按名称（如 "refrigerator"）由 LLM 判定分类；
  *   - 纯空位（gap / stuffed_gap）无对应 shapeTypeCode。
  *
- * 该表供 lookupItemCategory 工具查询，作为 LLM 插入物品前判定分类的权威依据。
+ * 该表是分类的单一真相源：lookupItemCategory 工具反向查表，layout ocr agent
+ * 的形状代码分类对照表也由它 + exposed_types 描述拼接生成。
  */
-export const LAYOUT_CATEGORY_BY_SHAPE_TYPE: Readonly<Record<string, BlockItemCategory>> = {
-  // wall_cabinet —— 吊柜（air）
-  W: 'wall_cabinet',
-  WBC: 'wall_cabinet',
-  WDC: 'wall_cabinet',
-  WER: 'wall_cabinet',
-  WMC: 'wall_cabinet',
+export const LAYOUT_CATEGORY_BY_SHAPE_TYPE: Readonly<Record<BlockItemCategory, readonly string[]>> = {
+  // air 轨
+  wall_cabinet: ['W', 'WBC', 'WDC', 'WER', 'WMC'],
 
-  // base_cabinet —— 地柜（ground），Vanity 系列配合 insertItem 的 isVanity
-  B: 'base_cabinet',
-  BBC: 'base_cabinet',
-  BLS: 'base_cabinet',
-  BMC: 'base_cabinet',
-  BSR: 'base_cabinet',
-  CSB: 'base_cabinet',
-  NCSB: 'base_cabinet',
-  DB: 'base_cabinet',
-  FSB: 'base_cabinet',
-  SB: 'base_cabinet',
-  VC: 'base_cabinet',
-  VDB: 'base_cabinet',
-  VSB: 'base_cabinet',
-  VSD: 'base_cabinet',
-  VSDB: 'base_cabinet',
+  // ground 轨（Vanity 系列配合 insertItem 的 isVanity）
+  base_cabinet: ['B', 'BBC', 'BLS', 'BMC', 'BSR', 'CSB', 'NCSB', 'DB', 'FSB', 'SB', 'VC', 'VDB', 'VSB', 'VSD', 'VSDB'],
 
-  // tall_cabinet —— 通天高柜（air + ground 双轨）
-  UT: 'tall_cabinet',
-  OV: 'tall_cabinet',
+  // air + ground 双轨
+  tall_cabinet: ['UT', 'OV'],
 
-  // filler —— 填充条（air / ground）
-  BF: 'filler',
-  WF: 'filler',
-  TF: 'filler',
-  RF: 'filler',
+  // 以下分类无对应 shapeTypeCode —— 纯空位或非 DUKO 产电器，按名称/位置判定
+  gap: [],
+  stuffed_gap: [],
 
-  // gaplike_item —— 开放性商品：进清单但两侧遮挡不住（air / ground）
-  VAL: 'gaplike_item',
-  GH: 'gaplike_item',
-  WES: 'gaplike_item',
-  WR: 'gaplike_item',
-  BES: 'gaplike_item',
-  PR: 'gaplike_item',
+  // air / ground（进清单但两侧遮挡不住）
+  gaplike_item: ['VAL', 'GH', 'WES', 'WR', 'BES', 'PR'],
+
+  // air / ground / air + ground
+  filler: ['BF', 'WF', 'TF', 'RF'],
+
+  // 以下电器分类无对应 DUKO 产 shapeTypeCode，按名称判定
+  tall_appliance: [],
+  base_appliance_need_top: [],
+  base_appliance_without_top: [],
 };

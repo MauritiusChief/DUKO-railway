@@ -7,64 +7,47 @@
  * LLM 在 insertItem / insertItemAtPosition 之前调用此工具，以查表结果作为
  * 分类、是否双轨、可用轨道的权威依据，避免凭语义猜测。
  *
- * 分类真源：constants.LAYOUT_CATEGORY_BY_SHAPE_TYPE
+ * 分类真源：constants.LAYOUT_CATEGORY_BY_SHAPE_TYPE（按分类分组）
+ * 描述来源：exposed_types 表（getShapeTypeEntries，非硬编码）
  * 轨道逻辑：复用 layout.ts 的 targetTracks / isDualTrackCategory（共用单一逻辑）
  */
 
 import type { ToolDefinition } from '../types/tool.js';
+import type { BlockItemCategory } from '../types/layout.js';
 import { LAYOUT_CATEGORY_BY_SHAPE_TYPE } from '../constants.js';
+import { getShapeTypeEntries } from '../services/utils.js';
 import { targetTracks, isDualTrackCategory } from './layout.js';
 
-// 各 shapeTypeCode 的简短描述（用于工具返回，便于 LLM 校验理解）
-// 与 dev_data/Exposed-Types.csv 对齐，仅收录已映射到 layout 分类的 code
-const SHAPE_TYPE_DESCRIPTIONS: Readonly<Record<string, string>> = {
-  // wall_cabinet
-  W: 'Wall Cabinet（吊柜）',
-  WBC: 'Wall Blind Corner（吊柜盲角）',
-  WDC: 'Wall Diagonal Cabinet（吊柜对角柜）',
-  WER: 'Wall Easy Reach / Corner（吊柜转角）',
-  WMC: 'Wall Microwave Cabinet（吊柜微波炉柜）',
-  // base_cabinet
-  B: 'Base Cabinet（地柜）',
-  BBC: 'Base Blind Corner（地柜盲角）',
-  BLS: 'Base Lazy Susan（地柜小 Linda）',
-  BMC: 'Base Microwave Cabinet（地柜微波炉柜）',
-  BSR: 'Base Spice Rack Cabinet（地柜调料架柜）',
-  CSB: 'Corner Sink Base（转角水槽柜）',
-  NCSB: 'Corner Sink Base（转角水槽柜）',
-  DB: 'Drawer Base（抽屉地柜）',
-  FSB: 'Farm Sink Base（农家水槽柜）',
-  SB: 'Sink Base（水槽柜）',
-  VC: 'Vanity Combo（浴室组合柜）',
-  VDB: 'Vanity Drawer Base（浴室抽屉柜）',
-  VSB: 'Vanity Sink Base（浴室水槽柜）',
-  VSD: 'Vanity Sink Base（浴室水槽柜）',
-  VSDB: 'Vanity Sink Drawer Base（浴室水槽抽屉柜）',
-  // tall_cabinet
-  UT: 'Utility Pantry（通天高柜/储物柜）',
-  OV: 'Oven Cabinet（烤箱高柜）',
-  // filler
-  BF: 'Base Filler（地柜填充条）',
-  WF: 'Wall / Base Filler（吊/地柜填充条）',
-  TF: 'Tall Filler（高柜填充条）',
-  RF: 'Fridge Filler（冰箱填充条）',
-  // gaplike_item
-  VAL: 'Valance（挡板/装饰横条）',
-  GH: 'Glass Holder / Glass Rack（玻璃杯架）',
-  WES: 'Wall Ending Shelf（吊柜端架）',
-  WR: 'Wine Rack（酒架）',
-  BES: 'Base Ending Shelf（地柜端架）',
-  PR: 'Plate Rack（碗碟架）',
-};
+// 反向映射：shapeTypeCode(大写) -> BlockItemCategory
+// 由分组常量 LAYOUT_CATEGORY_BY_SHAPE_TYPE 派生，保持单一真相源
+const SHAPE_TYPE_TO_CATEGORY: ReadonlyMap<string, BlockItemCategory> = new Map(
+  (Object.entries(LAYOUT_CATEGORY_BY_SHAPE_TYPE) as [BlockItemCategory, readonly string[]][]).flatMap(
+    ([category, codes]) => codes.map((code) => [code.toUpperCase(), category]),
+  ),
+);
 
-// 分类对应的中文含义，便于 LLM 理解返回结果
-const CATEGORY_MEANING: Readonly<Record<string, string>> = {
+// 分类对应的中文含义，便于 LLM 理解返回结果（固定分类法标签，非产品数据）
+const CATEGORY_MEANING: Readonly<Record<BlockItemCategory, string>> = {
   wall_cabinet: '吊柜',
   base_cabinet: '地柜',
   tall_cabinet: '通天高柜',
-  filler: '填充条',
+  gap: '空挡',
+  stuffed_gap: '塞了东西的空挡',
   gaplike_item: '开放性商品（进清单但两侧不遮挡）',
+  filler: '填充条',
+  tall_appliance: '高电器',
+  base_appliance_need_top: '需台面电器',
+  base_appliance_without_top: '免台面电器',
 };
+
+/**
+ * 从 exposed_types 表查询单个 shapeTypeCode 的描述（首次访问 DB，之后命中缓存）。
+ * 找不到返回空串。
+ */
+function lookupDescription(upperCode: string): string {
+  const entry = getShapeTypeEntries().find((e) => e.code.toUpperCase() === upperCode);
+  return entry?.description ?? '';
+}
 
 export const LOOKUP_ITEM_CATEGORY_TOOL = {
   type: 'function',
@@ -96,7 +79,7 @@ export function executeLookupItemCategory(args: Record<string, unknown>): string
   const raw = String(args.shapeTypeCode ?? '').trim().toUpperCase();
   if (!raw) return '错误: shapeTypeCode 为必填项。';
 
-  const category = LAYOUT_CATEGORY_BY_SHAPE_TYPE[raw];
+  const category = SHAPE_TYPE_TO_CATEGORY.get(raw);
   if (!category) {
     return (
       `"${raw}" 不在 layout 物品分类表中。` +
@@ -109,8 +92,8 @@ export function executeLookupItemCategory(args: Record<string, unknown>): string
 
   const dual = isDualTrackCategory(category);
   const tracks = targetTracks(category);
-  const meaning = CATEGORY_MEANING[category] ?? '';
-  const desc = SHAPE_TYPE_DESCRIPTIONS[raw] ?? '';
+  const meaning = CATEGORY_MEANING[category];
+  const desc = lookupDescription(raw);
 
   return (
     `${raw} -> ${category}（${meaning}） | 双轨: ${dual ? '是' : '否'} | ` +

@@ -8,7 +8,7 @@
  *  - 只做图像文本/宽度/双轨属性识别，不做型号解释或 SKU 查询
  *  - 不访问当前 layout（通过 dispatchLayoutOcr 的 note 获取额外信息）
  *  - 不检查双轨物体是否真实对齐
- *  - 不访问 exposed_types 或产品数据库
+ *  - 不查询产品数据库；但会注入 exposed_types 形状代码分类对照表辅助分类
  *  - 不开放任何工具（0 tools），直接返回 OCR 文本
  */
 
@@ -18,6 +18,7 @@ import type { MultimodalChatMessage } from '../types/message.js';
 import type { LlmProvider } from '../llm/provider.js';
 import { config } from '../config/env.js';
 import { writeChatLog } from '../services/logger.js';
+import { buildLayoutCategoryShapeTable } from '../services/utils.js';
 
 // ==================================================================
 //  LayoutOcrAgent 输入
@@ -42,12 +43,16 @@ export class LayoutOcrAgent extends BaseAgent<MultimodalChatMessage> {
   /** 不开放任何工具 */
   static override ownedToolNames: string[] = [];
 
+  /** 已分类 shapeType 的三列对照表（code/描述/分类），注入 prompt 辅助分类 */
+  private layoutCategoryTable: string;
+
   constructor(llm: LlmProvider<MultimodalChatMessage>, agentConfig?: BaseAgentConfig) {
     super(llm, agentConfig ?? {
       budgetLimit: 0,
       maxRounds: 2,
       langHint: '中文',
     });
+    this.layoutCategoryTable = buildLayoutCategoryShapeTable();
   }
 
   getSystemPrompt(): string {
@@ -137,6 +142,14 @@ ${wallHint}
 
 有时左右两侧的墙不会直接画出，需要通过布局推断。如果侧边存在宽度不超过1.5英寸的条状物，那么很可能就是专门用来覆盖暴露的侧面的装饰板。因此，便可以确认这个侧边肯定暴露。此条状物本身不用加入物品分类，标记此侧暴露即可。
 
+## 形状代码分类对照
+
+下表列出会作为布局块出现的 DUKO 产形状代码及其分类。识别到这些代码时按此表归类；不在表中的代码多为配件（不作布局块）或按名称判定的电器。
+
+| shapeTypeCode | 描述 | 分类 |
+|------|------|------|
+${this.layoutCategoryTable || '（暂无数据）'}
+
 ## 物品分类
 
 | 分类 | 含义 | 轨道 |
@@ -146,15 +159,15 @@ ${wallHint}
 | tall_cabinet | 通天高柜 | air + ground |
 | gap | 空挡 | air 或 ground |
 | stuffed_gap | 塞了东西的空挡（抽油烟机/窗户等），本质同 gap | air 或 ground |
-| gaplike_item | 开放性商品（如 VAL/GH/WES/WR 酒架/BES/PR 碗碟架），进清单但两侧遮挡不住 | air 或 ground |
-| filler | 填充条/窄条（如窄填板），进清单 | air 或 ground 或 air + ground |
+| gaplike_item | 开放性商品，进清单但两侧遮挡不住 | air 或 ground |
+| filler | 填充条/窄条，进清单 | air 或 ground 或 air + ground |
 | tall_appliance | 高电器（冰箱等） | air + ground |
 | base_appliance_need_top | 需台面电器（洗碗机等） | ground |
 | base_appliance_without_top | 免台面电器（灶台等） | ground |
 
 **注意**：
 - **stuffed_gap** 仅用于该位置上**没有任何需要进清单物体**的纯空位（如纯窗户、纯抽油烟机位），不进清单、仅触发邻接外露
-- **gaplike_item** 用于 DUKO 产的开放性商品：VAL（Valance）、GH（Glass Holder / Glass Rack）、WES（Wall Ending Shelf）、WR（Wine Rack 酒架）、BES（Base Ending Shelf）、PR（Plate Rack 碗碟架）等。它们进清单但不像柜体那样能遮挡两侧。一旦是 DUKO 产开放性商品，必须标为 gaplike_item 而非 stuffed_gap
+- **gaplike_item** 用于 DUKO 产的开放性商品（具体哪些 shapeTypeCode 见上方"形状代码分类对照"），进清单但不像柜体那样能遮挡两侧。一旦是 DUKO 产开放性商品，必须标为 gaplike_item 而非 stuffed_gap
 
 ## 输出格式
 
