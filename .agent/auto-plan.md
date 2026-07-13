@@ -13,10 +13,11 @@
 ```text
 Web Client
   | REST: 创建、查询报价任务
+  | SSE: 接收逐行执行进度
   v
 Railway Server
   | SQLite: 任务、逐行结果、状态
-  | WebSocket: 任务派发、进度与结果
+  | WebSocket: 与 auto 派发任务、接收进度与结果
   v
 旧电脑 auto
   | 每个任务启动 headed Playwright + persistent profile
@@ -95,6 +96,7 @@ interface QuotationTaskResult {
 - 显示 auto 是否在线。
 - 显示当前正在执行任务的 quotation 单号、提交用户名、开始时间和状态。
 - 显示当前用户的历史任务及每行的成功/失败结果。
+- 对正在查看的任务建立 SSE 连接，实时显示当前处理行、每行成功或失败结果及最终状态。
 - 任务详细结果仅任务创建者和管理员可见；当前执行任务的摘要对所有已登录用户可见。
 - 登录失效等基础设施失败统一提示“自动化登录状态失效，请联系技术部门”。
 - 产品未匹配等业务错误直接逐行显示 SKU 与错误原因。
@@ -121,6 +123,20 @@ interface QuotationTaskResult {
 - `GET /api/quotation-tasks/:id`：获取当前用户的任务详情与逐行结果。
 - `POST /api/quotation-tasks/:id/cancel`：取消尚未开始的任务。
 - `GET /api/quotation-tasks/active`：返回 auto 在线状态与当前执行任务的公开摘要。
+- `GET /api/quotation-tasks/:id/events`：以 SSE 推送该任务的状态和逐行结果；仅任务创建者和管理员可订阅。
+
+REST 负责创建、首次加载、历史查询、取消任务及页面刷新后的状态恢复。SSE 只负责 Server 向 `/quotation-tasks` 页面实时推送更新；页面先通过 REST 获取完整快照，再建立 SSE 连接，避免重连期间遗漏已持久化的结果。
+
+SSE 事件示例：
+
+```ts
+{ type: 'task-status', taskId, status: 'running' }
+{ type: 'line-result', taskId, lineNo: 3, status: 'success' }
+{ type: 'line-result', taskId, lineNo: 4, status: 'failed', error: '产品未匹配' }
+{ type: 'task-completed', taskId, status: 'partial_failed' }
+```
+
+由于当前前端认证使用 Bearer access token，SSE 实现应复用项目现有的 fetch 流式读取方式，以请求头传入 `Authorization`，而不依赖原生 `EventSource` 无法自定义请求头的限制。
 
 ### WebSocket
 
@@ -129,7 +145,7 @@ Server 在现有 HTTP Server 上提供 `/api/auto/connect`：
 - auto 用独立、可撤销的 worker token 鉴权；不得复用普通用户 JWT。
 - Server 仅保存 worker token 的哈希值，原始 token 只存在旧电脑环境变量中。
 - auto 连接后发送 `hello` 和 `ready`，Server 才派发 `queued` 任务。
-- auto 收到任务立即确认，执行过程中上报进度和逐行结果，结束后上报最终结果。
+- auto 收到任务立即确认，执行过程中上报进度和逐行结果，结束后上报最终结果；Server 每次持久化状态或行结果后立即向对应任务的 SSE 订阅者广播事件。
 - 消息携带 `version`、`taskId` 和 `attempt`，Server 以此实现幂等处理。
 - worker 断线或任务租约超时时，未完成任务回到队列或按重试策略标记失败，避免永久卡住。
 - 首版一个 auto 实例一次只处理一个任务，避免并发操作同一个 Odoo 浏览器状态。
@@ -186,8 +202,8 @@ orders 搜索栏的选择器、搜索提交方式、搜索结果选择及报价�
 3. 实现 worker token 配置、WebSocket 鉴权、在线状态、派发、幂等结果处理和断线回收。
 4. 创建 `auto` 基础运行时，完成重连、心跳、每任务启动/关闭浏览器和登录失效检测。
 5. 在真实 Odoo 页面实现 `/odoo/orders` 搜索报价单、目标核验及失败处理。
-6. 从 `experiment/playwright/` 迁移报价写入逻辑，并改为返回逐行结果。
-7. 创建报价任务页，在主解析页增加跳转按钮，保留复制 CSV。
+6. 从 `experiment/playwright/` 和 ScriptCat 脚本迁移报价写入逻辑，并改为返回逐行结果。
+7. 创建报价任务页，在主解析页增加跳转按钮，保留复制 CSV；实现 REST 快照加载与 SSE 逐行状态更新。
 8. 实测追加、清空重建、单行失败、报价单找不到、登录失效、worker 断线及 Railway 重启。
 
 ## 验收标准
@@ -197,5 +213,6 @@ orders 搜索栏的选择器、搜索提交方式、搜索结果选择及报价�
 - auto 在线时，任务能按 quotation 单号在 `/odoo/orders` 中找到并核验目标报价单。
 - 浏览器仅在任务执行期间运行，任务结束后关闭。
 - 所有产品行都具有可查询的成功或失败结果。
+- 打开任务页后，用户无需刷新即可看到任务状态和逐行填写结果更新；SSE 断线或页面刷新后可通过 REST 快照恢复完整结果。
 - 登录失效被识别为任务失败，界面引导用户联系技术部门。
 - Railway 重启或 auto 断线不会导致任务永久卡在 `running`。
