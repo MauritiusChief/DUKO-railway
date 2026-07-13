@@ -37,6 +37,10 @@ import {
   getRunningTaskIds,
   reclaimTaskOnDisconnect,
   getTaskByIdRaw,
+  setPendingConfirmation,
+  getPendingConfirmation,
+  clearPendingConfirmation,
+  setFinalLinesSnapshot,
 } from '../db/quotation.js';
 import { setNotifyTaskQueued } from '../routes/quotation.js';
 import { broadcastQuotationEvent } from '../routes/quotation.js';
@@ -195,7 +199,7 @@ function handleLineResult(ws: WebSocket, msg: Extract<InboundMessage, { type: 'l
 
 function handleTaskCompleted(ws: WebSocket, msg: Extract<InboundMessage, { type: 'task-completed' }>): void {
   if (!worker?.authenticated) return;
-  const { taskId, status, attempt } = msg;
+  const { taskId, status, attempt, finalSnapshot } = msg;
 
   if (isDuplicate(taskId, attempt)) {
     sendAck(ws, taskId, attempt);
@@ -220,9 +224,14 @@ function handleTaskCompleted(ws: WebSocket, msg: Extract<InboundMessage, { type:
   sendAck(ws, taskId, attempt);
   setActiveTask(null);
 
+  // 保存最终快照
+  if (finalSnapshot && finalSnapshot.length > 0) {
+    setFinalLinesSnapshot(taskId, finalSnapshot);
+  }
+
   broadcastQuotationEvent(taskId, {
     type: 'task-completed',
-    data: { taskId, status: resolvedStatus },
+    data: { taskId, status: resolvedStatus, finalSnapshot },
   });
 
   // 任务结束后 worker 会发送 ready，这里不主动派发
@@ -260,6 +269,33 @@ function handleTaskFailed(ws: WebSocket, msg: Extract<InboundMessage, { type: 't
 function handleHeartbeat(conn: WorkerConnection, ws: WebSocket): void {
   conn.lastHeartbeat = Date.now();
   sendMessage(ws, { type: 'heartbeat-ack' });
+}
+
+function handleConfirmRequest(ws: WebSocket, msg: Extract<InboundMessage, { type: 'confirm-request' }>): void {
+  if (!worker?.authenticated) return;
+  const { taskId, company, quotationNumber, existingLines, inputLines, attempt } = msg;
+
+  if (isDuplicate(taskId, attempt)) {
+    sendAck(ws, taskId, attempt);
+    return;
+  }
+
+  const task = getTaskByIdRaw(taskId);
+  if (!task || task.status !== 'running') {
+    ackAttempt(taskId, attempt);
+    sendAck(ws, taskId, attempt);
+    return;
+  }
+
+  const payload = { company, quotationNumber, existingLines, inputLines };
+  setPendingConfirmation(taskId, payload);
+  ackAttempt(taskId, attempt);
+  sendAck(ws, taskId, attempt);
+
+  broadcastQuotationEvent(taskId, {
+    type: 'confirm-request',
+    data: { taskId, company, quotationNumber, existingLines, inputLines },
+  });
 }
 
 // ==================================================================
@@ -313,6 +349,9 @@ function handleMessage(conn: WorkerConnection, ws: WebSocket, raw: string): void
       break;
     case 'heartbeat':
       handleHeartbeat(conn, ws);
+      break;
+    case 'confirm-request':
+      handleConfirmRequest(ws, msg);
       break;
   }
 }
@@ -462,4 +501,19 @@ export function resetWebSocketState(): void {
 /** 获取当前 worker 是否已连接且已认证 */
 export function isWorkerConnected(): boolean {
   return worker?.authenticated ?? false;
+}
+
+/**
+ * 向 worker 发送 confirm-response（由 REST /confirm 端点触发）。
+ * 返回是否发送成功。
+ */
+export function sendConfirmResponse(
+  taskId: number,
+  decision: 'confirmed' | 'rejected',
+): boolean {
+  if (!worker || !worker.authenticated || worker.ws.readyState !== WebSocket.OPEN) {
+    return false;
+  }
+  sendMessage(worker.ws, { type: 'confirm-response', taskId, decision });
+  return true;
 }

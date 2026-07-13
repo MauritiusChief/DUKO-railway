@@ -22,8 +22,13 @@ import {
   type InboundMessage,
   type TaskAssignedMessage,
   type AckMessage,
+  type ConfirmRequestMessage,
 } from './protocol.js';
-import { runQuotationTask } from './browser.js';
+import {
+  runQuotationTask,
+  type ConfirmationRequest,
+  type ConfirmationResult,
+} from './browser.js';
 
 // ==================================================================
 //  重连参数
@@ -55,6 +60,12 @@ class AutoClient {
   /** 未收到 ack 的出站消息队列（重连后重放） */
   private pendingOutbound: OutboundMessage[] = [];
 
+  /** 确认握手的 pending promise resolver（按 taskId） */
+  private confirmResolvers = new Map<number, {
+    resolve: (result: ConfirmationResult) => void;
+    timer: ReturnType<typeof setTimeout>;
+  }>();
+
   constructor() {
     process.on('SIGINT', () => this.shutdown('SIGINT'));
     process.on('SIGTERM', () => this.shutdown('SIGTERM'));
@@ -80,8 +91,6 @@ class AutoClient {
       this.backoffAttempt = 0;
       this.missedAcks = 0;
       this.sendHello();
-      // hello 成功时 server 不回复，失败时会发 error 并关闭。
-      // WebSocket 保证消息顺序：hello 先于 ready 被处理，因此可直接发送 ready。
       this.replayPending();
       this.sendReady();
     });
@@ -100,10 +109,8 @@ class AutoClient {
 
     ws.on('error', (err) => {
       console.error('[auto] 连接错误:', err.message);
-      // close 事件会随后触发 onDisconnected
     });
 
-    // ws 内置 ping/pong
     ws.on('pong', () => {
       this.missedAcks = 0;
     });
@@ -113,6 +120,13 @@ class AutoClient {
   private onDisconnected(): void {
     this.ws = null;
     this.stopHeartbeat();
+
+    // 断线时取消所有挂起的确认等待
+    for (const [taskId, entry] of this.confirmResolvers) {
+      clearTimeout(entry.timer);
+      entry.resolve('timeout');
+    }
+    this.confirmResolvers.clear();
 
     if (this.shuttingDown) return;
 
@@ -176,6 +190,9 @@ class AutoClient {
       case 'heartbeat-ack':
         this.missedAcks = 0;
         break;
+      case 'confirm-response':
+        this.handleConfirmResponse(msg);
+        break;
       case 'error':
         console.warn('[auto] server 报错:', msg.message);
         break;
@@ -189,7 +206,8 @@ class AutoClient {
         (m.type === 'accepted' ||
           m.type === 'line-result' ||
           m.type === 'task-completed' ||
-          m.type === 'task-failed') &&
+          m.type === 'task-failed' ||
+          m.type === 'confirm-request') &&
         m.taskId === msg.taskId &&
         m.attempt === msg.attempt,
     );
@@ -197,6 +215,18 @@ class AutoClient {
       this.pendingOutbound.splice(idx, 1);
     }
   }
+
+  /** 处理来自 server 的用户确认回应 */
+  private handleConfirmResponse(msg: { type: 'confirm-response'; taskId: number; decision: 'confirmed' | 'rejected' }): void {
+    const entry = this.confirmResolvers.get(msg.taskId);
+    if (!entry) return; // 迟到/重复响应，忽略
+
+    clearTimeout(entry.timer);
+    this.confirmResolvers.delete(msg.taskId);
+    entry.resolve(msg.decision);
+  }
+
+  // ---------- 确认握手 ----------
 
   // ---------- 任务执行 ----------
 
@@ -224,23 +254,45 @@ class AutoClient {
     );
 
     // 2. 执行浏览器任务
-    const outcome = await runQuotationTask(task, async (lineResult: LineResult) => {
-      // 每行完成时立即上报
-      const lineAttempt = ++this.currentTaskAttempt;
-      this.sendTracked({
-        type: 'line-result',
-        taskId: task.taskId,
-        lineNo: lineResult.lineNo,
-        status: lineResult.status,
-        error: lineResult.error,
-        attempt: lineAttempt,
-      });
+    const outcome = await runQuotationTask(task, {
+      onLineResult: async (lineResult: LineResult) => {
+        const lineAttempt = ++this.currentTaskAttempt;
+        this.sendTracked({
+          type: 'line-result',
+          taskId: task.taskId,
+          lineNo: lineResult.lineNo,
+          status: lineResult.status,
+          error: lineResult.error,
+          attempt: lineAttempt,
+        });
+      },
+      requestConfirmation: async (req: ConfirmationRequest): Promise<ConfirmationResult> => {
+        return new Promise((resolve) => {
+          const confirmAttempt = ++this.currentTaskAttempt;
+          const timer = setTimeout(() => {
+            this.confirmResolvers.delete(task.taskId);
+            resolve('timeout');
+          }, appConfig.confirmTimeoutMs);
+
+          this.confirmResolvers.set(task.taskId, { resolve, timer });
+
+          const confirmMsg: ConfirmRequestMessage = {
+            type: 'confirm-request',
+            taskId: task.taskId,
+            company: req.company,
+            quotationNumber: req.quotationNumber,
+            existingLines: req.existingLines,
+            inputLines: req.inputLines,
+            attempt: confirmAttempt,
+          };
+          this.sendTracked(confirmMsg);
+        });
+      },
     });
 
     // 3. 上报最终结果
     const finalAttempt = ++this.currentTaskAttempt;
     if (outcome.status === 'failed' && outcome.lineResults.length === 0) {
-      // 任务级失败（如登录失效、浏览器启动失败）
       this.sendTracked({
         type: 'task-failed',
         taskId: task.taskId,
@@ -265,15 +317,23 @@ class AutoClient {
             error: r.error,
           };
         }),
+        finalSnapshot: outcome.finalSnapshot,
         attempt: finalAttempt,
       });
       console.log(`[auto] 任务 #${task.taskId} 完成: ${status}`);
     }
 
-    // 4. 重置 attempt 计数，准备下一个任务
+    // 4. 清理确认状态
+    const confirmEntry = this.confirmResolvers.get(task.taskId);
+    if (confirmEntry) {
+      clearTimeout(confirmEntry.timer);
+      this.confirmResolvers.delete(task.taskId);
+    }
+
+    // 5. 重置 attempt 计数，准备下一个任务
     this.currentTaskAttempt = 0;
 
-    // 5. 发送 ready 等待下一个任务
+    // 6. 发送 ready 等待下一个任务
     this.sendReady();
   }
 
@@ -312,12 +372,10 @@ class AutoClient {
 
   /**
    * 重连成功后（hello 已发送），重放所有未 ack 的消息。
-   * 在 server 确认连接稳定前调用。
    */
   private replayPending(): void {
     if (this.pendingOutbound.length === 0) return;
     console.log(`[auto] 重放 ${this.pendingOutbound.length} 条未确认消息`);
-    // 复制后清空，因为 send 会重新加入队列
     const pending = [...this.pendingOutbound];
     this.pendingOutbound = [];
     for (const msg of pending) {
@@ -333,6 +391,11 @@ class AutoClient {
     console.log(`[auto] 收到 ${signal}，正在关闭...`);
 
     this.stopHeartbeat();
+
+    for (const [, entry] of this.confirmResolvers) {
+      clearTimeout(entry.timer);
+    }
+    this.confirmResolvers.clear();
 
     if (this.ws) {
       try {

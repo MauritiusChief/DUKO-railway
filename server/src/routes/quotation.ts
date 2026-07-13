@@ -23,10 +23,15 @@ import {
   getTaskByIdRaw,
   getTaskByIdForUser,
   cancelTask,
+  getPendingConfirmation,
+  clearPendingConfirmation,
   type QuotationTaskSummary,
   type QuotationTaskDetail,
 } from '../db/quotation.js';
 import { canAccessTask } from '../services/quotation.js';
+import {
+  sendConfirmResponse,
+} from '../services/ws-handler.js';
 import {
   subscribe,
   broadcast,
@@ -175,6 +180,61 @@ quotationRouter.post('/quotation-tasks/:id/cancel', (req, res) => {
 });
 
 // ==================================================================
+//  POST /api/quotation-tasks/:id/confirm —— 用户确认/拒绝目标报价单
+// ==================================================================
+
+quotationRouter.post('/quotation-tasks/:id/confirm', (req, res) => {
+  const taskId = Number(req.params.id);
+  if (Number.isNaN(taskId)) {
+    res.status(400).json({ error: '无效的任务 ID' });
+    return;
+  }
+
+  const { decision } = req.body as { decision?: string };
+  if (decision !== 'confirmed' && decision !== 'rejected') {
+    res.status(400).json({ error: 'decision 必须为 confirmed 或 rejected' });
+    return;
+  }
+
+  const task = getTaskByIdRaw(taskId);
+  if (!task) {
+    res.status(404).json({ error: '任务不存在' });
+    return;
+  }
+
+  if (!canAccessTask(task.userId, req.user!.userId, req.user!.role)) {
+    res.status(403).json({ error: '无权操作此报价任务' });
+    return;
+  }
+
+  if (task.status !== 'running') {
+    res.status(409).json({ error: '任务未在执行中，无法确认', status: task.status });
+    return;
+  }
+
+  const pending = getPendingConfirmation(taskId);
+  if (!pending) {
+    res.status(409).json({ error: '没有待处理的确认请求' });
+    return;
+  }
+
+  clearPendingConfirmation(taskId);
+
+  const sent = sendConfirmResponse(taskId, decision);
+  if (!sent) {
+    res.status(503).json({ error: 'auto worker 离线或不可达，请稍后重试' });
+    return;
+  }
+
+  broadcastQuotationEvent(taskId, {
+    type: 'confirm-response',
+    data: { taskId, decision },
+  });
+
+  res.json({ message: '已提交确认', taskId, decision });
+});
+
+// ==================================================================
 //  GET /api/quotation-tasks/:id/events —— SSE 逐行进度
 //  通过 Authorization 请求头鉴权（复用 fetch + ReadableStream 方式）
 // ==================================================================
@@ -210,6 +270,19 @@ quotationRouter.get('/quotation-tasks/:id/events', (req, res) => {
       error: l.error,
     })),
   });
+
+  // 若任务 running 且有 pending_confirmation，补发 confirm-request（用户刷新页面后卡片复现）
+  if (task.status === 'running' && task.pendingConfirmation) {
+    try {
+      const pending = JSON.parse(task.pendingConfirmation);
+      sse.send('confirm-request', {
+        taskId: task.id,
+        ...pending,
+      });
+    } catch {
+      // JSON 解析失败，忽略（不应发生）
+    }
+  }
 
   // 若任务已是终态，推送最终状态后保持连接（客户端可自行关闭）
   if (

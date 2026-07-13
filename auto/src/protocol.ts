@@ -26,6 +26,12 @@ export const HEARTBEAT_MAX_MISSED = 3;
 //  任务相关类型
 // ==================================================================
 
+/** 报价快照行（读取用） */
+export interface QuotationSnapshotLine {
+  productModel: string
+  quantity: string
+}
+
 export type QuotationWriteMode = 'overwrite' | 'append';
 
 export interface TaskLine {
@@ -82,11 +88,18 @@ export const serverErrorSchema = z.object({
   message: z.string(),
 });
 
+export const confirmResponseSchema = z.object({
+  type: z.literal('confirm-response'),
+  taskId: z.number().int().positive(),
+  decision: z.enum(['confirmed', 'rejected']),
+});
+
 export const inboundMessageSchema = z.discriminatedUnion('type', [
   taskAssignedSchema,
   ackSchema,
   heartbeatAckSchema,
   serverErrorSchema,
+  confirmResponseSchema,
 ]);
 
 // ==================================================================
@@ -97,6 +110,7 @@ export type TaskAssignedMessage = z.infer<typeof taskAssignedSchema>;
 export type AckMessage = z.infer<typeof ackSchema>;
 export type HeartbeatAckMessage = z.infer<typeof heartbeatAckSchema>;
 export type ServerErrorMessage = z.infer<typeof serverErrorSchema>;
+export type ConfirmResponseMessage = z.infer<typeof confirmResponseSchema>;
 export type InboundMessage = z.infer<typeof inboundMessageSchema>;
 
 // ==================================================================
@@ -133,6 +147,7 @@ export interface TaskCompletedMessage {
   taskId: number;
   status: 'completed' | 'partial_failed';
   lines: (TaskLine & { status: 'pending' | 'success' | 'failed'; error?: string })[];
+  finalSnapshot?: QuotationSnapshotLine[];
   attempt: number;
 }
 
@@ -147,6 +162,16 @@ export interface HeartbeatMessage {
   type: 'heartbeat';
 }
 
+export interface ConfirmRequestMessage {
+  type: 'confirm-request';
+  taskId: number;
+  company: string;
+  quotationNumber: string;
+  existingLines: QuotationSnapshotLine[];
+  inputLines: { partModel: string; quantity: number }[];
+  attempt: number;
+}
+
 export type OutboundMessage =
   | HelloMessage
   | ReadyMessage
@@ -154,4 +179,5 @@ export type OutboundMessage =
   | LineResultMessage
   | TaskCompletedMessage
   | TaskFailedMessage
-  | HeartbeatMessage;
+  | HeartbeatMessage
+  | ConfirmRequestMessage;

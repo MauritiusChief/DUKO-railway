@@ -36,6 +36,8 @@ export interface QuotationTaskRow {
   task_error: string | null;
   retry_count: number;
   last_acked_attempt: number;
+  pending_confirmation: string | null;
+  final_lines_snapshot: string | null;
   created_at: string;
   updated_at: string;
   started_at: string | null;
@@ -79,6 +81,8 @@ export interface QuotationTaskSummary {
 /** API 返回的任务详情（含逐行结果） */
 export interface QuotationTaskDetail extends QuotationTaskSummary {
   lines: QuotationTaskLineRow[];
+  pendingConfirmation: string | null;
+  finalLinesSnapshot: string | null;
 }
 
 /** 当前活跃任务的公开摘要（不暴露敏感信息） */
@@ -240,6 +244,8 @@ export function getTaskByIdRaw(taskId: number): QuotationTaskDetail | undefined 
   return {
     ...rowToSummary(task),
     lines,
+    pendingConfirmation: task.pending_confirmation,
+    finalLinesSnapshot: task.final_lines_snapshot,
   };
 }
 
@@ -392,6 +398,49 @@ export function computeFinalStatus(
 }
 
 // ==================================================================
+//  确认握手持久化
+// ==================================================================
+
+/** 写入 pending_confirmation（确认请求载荷 JSON） */
+export function setPendingConfirmation(taskId: number, payload: object): void {
+  const d = getDb();
+  d.prepare(
+    `UPDATE quotation_tasks
+     SET pending_confirmation = ?, updated_at = datetime('now')
+     WHERE id = ?`,
+  ).run(JSON.stringify(payload), taskId);
+}
+
+/** 读取 pending_confirmation (JSON 字符串，无则 null) */
+export function getPendingConfirmation(taskId: number): string | null {
+  const d = getDb();
+  const row = d
+    .prepare('SELECT pending_confirmation FROM quotation_tasks WHERE id = ?')
+    .get(taskId) as { pending_confirmation: string | null } | undefined;
+  return row?.pending_confirmation ?? null;
+}
+
+/** 清空 pending_confirmation（确认后或回收时） */
+export function clearPendingConfirmation(taskId: number): void {
+  const d = getDb();
+  d.prepare(
+    `UPDATE quotation_tasks
+     SET pending_confirmation = NULL, updated_at = datetime('now')
+     WHERE id = ?`,
+  ).run(taskId);
+}
+
+/** 写入 final_lines_snapshot（任务结束后从 Odoo 页面读取的最终行） */
+export function setFinalLinesSnapshot(taskId: number, snapshot: object): void {
+  const d = getDb();
+  d.prepare(
+    `UPDATE quotation_tasks
+     SET final_lines_snapshot = ?, updated_at = datetime('now')
+     WHERE id = ?`,
+  ).run(JSON.stringify(snapshot), taskId);
+}
+
+// ==================================================================
 //  断线回收
 // ==================================================================
 
@@ -428,7 +477,7 @@ export function reclaimTaskOnDisconnect(taskId: number): {
   if (row.retry_count === 0) {
     d.prepare(
       `UPDATE quotation_tasks
-       SET status = 'queued', retry_count = 1, started_at = NULL, updated_at = datetime('now')
+       SET status = 'queued', retry_count = 1, started_at = NULL, pending_confirmation = NULL, updated_at = datetime('now')
        WHERE id = ?`,
     ).run(taskId);
     return { status: 'queued', retryCount: 1 };
@@ -438,6 +487,7 @@ export function reclaimTaskOnDisconnect(taskId: number): {
     `UPDATE quotation_tasks
      SET status = 'failed',
          task_error = 'worker 断线，任务超时',
+         pending_confirmation = NULL,
          completed_at = datetime('now'),
          updated_at = datetime('now')
      WHERE id = ?`,

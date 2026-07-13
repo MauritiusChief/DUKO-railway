@@ -69,6 +69,14 @@ export const taskCompletedMessageSchema = z.object({
         error: z.string().optional(),
       }),
     ),
+  finalSnapshot: z
+    .array(
+      z.object({
+        productModel: z.string(),
+        quantity: z.string(),
+      }),
+    )
+    .optional(),
 });
 
 export const taskFailedMessageSchema = z.object({
@@ -82,6 +90,26 @@ export const heartbeatMessageSchema = z.object({
   type: z.literal('heartbeat'),
 });
 
+export const confirmRequestMessageSchema = z.object({
+  type: z.literal('confirm-request'),
+  taskId: z.number().int().positive(),
+  company: z.string(),
+  quotationNumber: z.string(),
+  existingLines: z.array(
+    z.object({
+      productModel: z.string(),
+      quantity: z.string(),
+    }),
+  ),
+  inputLines: z.array(
+    z.object({
+      partModel: z.string(),
+      quantity: z.number().int().positive(),
+    }),
+  ),
+  attempt: z.number().int().positive(),
+});
+
 /** auto → Server 入站消息的联合校验 schema */
 export const inboundMessageSchema = z.discriminatedUnion('type', [
   helloMessageSchema,
@@ -91,6 +119,7 @@ export const inboundMessageSchema = z.discriminatedUnion('type', [
   taskCompletedMessageSchema,
   taskFailedMessageSchema,
   heartbeatMessageSchema,
+  confirmRequestMessageSchema,
 ]);
 
 // ==================================================================
@@ -104,6 +133,7 @@ export type LineResultMessage = z.infer<typeof lineResultMessageSchema>;
 export type TaskCompletedMessage = z.infer<typeof taskCompletedMessageSchema>;
 export type TaskFailedMessage = z.infer<typeof taskFailedMessageSchema>;
 export type HeartbeatMessage = z.infer<typeof heartbeatMessageSchema>;
+export type ConfirmRequestMessage = z.infer<typeof confirmRequestMessageSchema>;
 
 export type InboundMessage = z.infer<typeof inboundMessageSchema>;
 
@@ -140,8 +170,15 @@ export interface ServerErrorMessage {
   message: string;
 }
 
+export interface ConfirmResponseMessage {
+  type: 'confirm-response';
+  taskId: number;
+  decision: 'confirmed' | 'rejected';
+}
+
 export type OutboundMessage =
   | TaskAssignedMessage
   | AckMessage
   | HeartbeatAckMessage
-  | ServerErrorMessage;
+  | ServerErrorMessage
+  | ConfirmResponseMessage;
