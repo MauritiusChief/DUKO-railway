@@ -75,6 +75,12 @@ export {
   executeRecordNote,
 } from './note.js';
 
+// Layout 物品分类查询
+export {
+  LOOKUP_ITEM_CATEGORY_TOOL,
+  executeLookupItemCategory,
+} from './item-category.js';
+
 // 预算
 export {
   injectBudgetInfo,

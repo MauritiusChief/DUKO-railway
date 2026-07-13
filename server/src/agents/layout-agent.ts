@@ -63,6 +63,11 @@ import {
   DISPATCH_LAYOUT_OCR_TOOL,
 } from '../tools/dispatch.js';
 
+import {
+  LOOKUP_ITEM_CATEGORY_TOOL,
+  executeLookupItemCategory,
+} from '../tools/item-category.js';
+
 import { ToolName } from '../tools/index.js';
 import { BatchSearchAgent } from './batch-search-agent.js';
 import { PreciseSearchAgent } from './precise-search-agent.js';
@@ -135,6 +140,7 @@ export class LayoutAgent extends BaseAgent<ChatMessage> {
   getTools(): ToolDefinition[] {
     return [
       ...LAYOUT_TOOLS,
+      LOOKUP_ITEM_CATEGORY_TOOL,
       SEARCH_SKU_SHAPE_TOOL,
       SEARCH_SKU_DESCRIPTION_TOOL,
       DISPATCH_LAYOUT_OCR_TOOL,
@@ -183,6 +189,10 @@ export class LayoutAgent extends BaseAgent<ChatMessage> {
     }
 
     switch (tc.function.name) {
+      // ---- 分类查询（本地查表，无耗时、不计预算） ----
+      case 'lookupItemCategory':
+        return executeLookupItemCategory(args);
+
       // ---- 搜索工具（补漏） ----
       case 'searchSkuShape':
         return executeSearchSkuShape(args);
@@ -388,18 +398,24 @@ connectedWallIds 表示 L 形转角连接关系。connectIslands 用于设置背
 
 ## 物品分类说明
 
+**重要：能通过 shapeTypeCode 查到的物品，分类以 \`lookupItemCategory\` 工具返回为准，不要凭语义猜测。**
+
 | 分类 | 含义 | 轨道 |
 |------|------|------|
 | wall_cabinet | 吊柜 | air |
 | base_cabinet | 地柜 | ground |
 | tall_cabinet | 高柜 | air + ground |
 | gap | 空挡 | air 或 ground |
-| stuffed_gap | 塞了东西的空挡（抽油烟机/窗户等，本质同 gap） | air 或 ground |
-| gaplike_item | 遮挡性不强的商品（VAL/Glass Holder/WES等），进清单但两侧不遮挡 | air 或 ground |
-| filler | 填充条/窄条（窄填板等），进清单 | air 或 ground 或 air + ground |
-| tall_appliance | 高电器（冰箱等） | air + ground |
-| base_appliance_need_top | 需台面电器（洗碗机等） | ground |
-| base_appliance_without_top | 免台面电器（灶台等） | ground |
+| stuffed_gap | 塞了东西的空挡（抽油烟机/窗户等），本质同 gap | air 或 ground |
+| gaplike_item | 开放性商品（VAL/GH/WES/WR 酒架/BES/PR 碗碟架等），进清单但两侧不遮挡 | air 或 ground |
+| filler | 填充条/窄条（BF/WF/TF/RF），进清单 | air 或 ground 或 air + ground |
+| tall_appliance | 高电器（冰箱等，非 DUKO 产，按名称判定） | air + ground |
+| base_appliance_need_top | 需台面电器（洗碗机等，按名称判定） | ground |
+| base_appliance_without_top | 免台面电器（灶台等，按名称判定） | ground |
+
+**区分 stuffed_gap 与 gaplike_item**：
+- **stuffed_gap**：该位置上**没有任何需要进清单的物体**的纯空位（如纯窗户、纯抽油烟机位），不进清单，仅触发邻接外露
+- **gaplike_item**：该位置上是 DUKO 产的**开放性商品**（酒架/玻璃杯架/装饰横条/端架/碗碟架等），进清单但两侧遮挡不住。一旦该物体是 DUKO 产开放性商品，必须用 gaplike_item 而非 stuffed_gap
 
 ## 颜色规则
 
@@ -423,6 +439,9 @@ connectedWallIds 表示 L 形转角连接关系。connectIslands 用于设置背
 - **searchSkuShape**：编辑距离模糊匹配形状代码 + 颜色
 - **searchSkuDescription**：BM25 全文检索描述字段 + 颜色
 
+### 分类查询工具
+- **lookupItemCategory**：按 shapeTypeCode 查询 layout 物品分类、是否双轨、可用轨道。**插入物品前必须先调用**确认分类
+
 ### 委派工具
 - **dispatchBatchSearch**：批量委派给 BatchSearchAgent 搜索验证 SKU
 - **dispatchPreciseSearch**：单条深度精确搜索
@@ -435,8 +454,9 @@ connectedWallIds 表示 L 形转角连接关系。connectIslands 用于设置背
 3. **将 OCR 列表与关联墙/岛台匹配**：判断每个 block 的轨道、宽度、双轨属性、分类、墙总宽度。OCR 列表标题中的总宽信息优先用于 updateWallProperties
 4. **验证 SKU**：对需要数据库验证的柜体型号或商品型号，调用 dispatchBatchSearch 或 dispatchPreciseSearch，或亲自用 searchSkuShape/searchSkuDescription 补漏，仍无法确定的优先保留 OCR 列表中的原始信息
 5. **二次 OCR（如需要）**：如果发现 OCR 可能识别时有遗漏、双轨无法对齐、宽度总和明显冲突，调用 dispatchLayoutOcr 并带上具体备注
-6. **修改布局**：使用 layout tools 增量修改布局
-7. **中文总结**：最后用中文简短说明修改了什么，以及哪些区域仍不确定
+6. **查询分类（插入前必做）**：对每个待插入物品，若其 shapeTypeCode 在 layout 分类表内，**插入前必须调用 \`lookupItemCategory\` 确认分类与轨道**；查不到的（电器/纯空位）按上方分类规则判断
+7. **修改布局**：使用 layout tools 增量修改布局
+8. **中文总结**：最后用中文简短说明修改了什么，以及哪些区域仍不确定
 
 ## 重要规则
 

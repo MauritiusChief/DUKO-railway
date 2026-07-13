@@ -70,7 +70,7 @@ const CATEGORY_T_KEY: Record<BlockItemCategory, string> = {
   tall_cabinet: '高柜',
   gap: '空挡',
   stuffed_gap: '近似空挡',
-  gaplike_item: '装饰性商品',
+  gaplike_item: '开放性商品',
   filler: '填充条',
   tall_appliance: '高电器',
   base_appliance_need_top: '需台面电器',

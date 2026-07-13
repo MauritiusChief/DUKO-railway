@@ -44,7 +44,8 @@ function sumWidths(blocks: SectionBlock[]): number {
   return blocks.reduce((s, b) => s + b.width, 0);
 }
 
-function targetTracks(category: BlockItemCategory): TrackSpan[] {
+/** 计算某分类可用的轨道（共用逻辑，供 lookupItemCategory 等复用） */
+export function targetTracks(category: BlockItemCategory): TrackSpan[] {
   switch (category) {
     case 'wall_cabinet':
       return ['air'];
@@ -68,7 +69,8 @@ function targetTracks(category: BlockItemCategory): TrackSpan[] {
   }
 }
 
-function isDualTrackCategory(category: BlockItemCategory): boolean {
+/** 是否双轨分类（tall_cabinet / tall_appliance，跨 air + ground）—— 共用逻辑 */
+export function isDualTrackCategory(category: BlockItemCategory): boolean {
   return category === 'tall_cabinet' || category === 'tall_appliance';
 }
 
@@ -512,7 +514,8 @@ export function executeDeleteWall(state: MutableLayout, args: Record<string, unk
 const CATEGORY_DESC =
   '物品分类: wall_cabinet(吊柜), base_cabinet(地柜), tall_cabinet(高柜-通天), gap(空挡), ' +
   'stuffed_gap(抽油烟机/窗户等，本质同 gap), gaplike_item(遮挡性不强的商品), filler(填充条/窄条), tall_appliance(高电器如冰箱), ' +
-  'base_appliance_need_top(需台面电器如洗碗机), base_appliance_without_top(免台面电器如灶台)';
+  'base_appliance_need_top(需台面电器如洗碗机), base_appliance_without_top(免台面电器如灶台)。' +
+  '插入前建议先调用 lookupItemCategory(shapeTypeCode) 查询准确分类与轨道。';
 
 export const INSERT_ITEM_TOOL = {
   type: 'function',

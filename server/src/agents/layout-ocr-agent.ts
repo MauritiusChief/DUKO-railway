@@ -146,15 +146,15 @@ ${wallHint}
 | tall_cabinet | 通天高柜 | air + ground |
 | gap | 空挡 | air 或 ground |
 | stuffed_gap | 塞了东西的空挡（抽油烟机/窗户等），本质同 gap | air 或 ground |
-| gaplike_item | 遮挡性不强的商品（如 VAL/Glass Holder/WES），进清单但两侧遮挡不住 | air 或 ground |
+| gaplike_item | 开放性商品（如 VAL/GH/WES/WR 酒架/BES/PR 碗碟架），进清单但两侧遮挡不住 | air 或 ground |
 | filler | 填充条/窄条（如窄填板），进清单 | air 或 ground 或 air + ground |
 | tall_appliance | 高电器（冰箱等） | air + ground |
 | base_appliance_need_top | 需台面电器（洗碗机等） | ground |
 | base_appliance_without_top | 免台面电器（灶台等） | ground |
 
 **注意**：
-- 抽油烟机、窗户等"塞了东西的空位"若其位置上有需要其他需要进清单的物体则优先用这些物体替代，否则统一标为 **stuffed_gap**
-- VAL（Valance）、GH（Glass Holder / Glass Rack）、WES（Wall Ending Shelf）等不像橱柜或电器那样大块的、能起到遮挡作用的商品，统一标为 **gaplike_item**
+- **stuffed_gap** 仅用于该位置上**没有任何需要进清单物体**的纯空位（如纯窗户、纯抽油烟机位），不进清单、仅触发邻接外露
+- **gaplike_item** 用于 DUKO 产的开放性商品：VAL（Valance）、GH（Glass Holder / Glass Rack）、WES（Wall Ending Shelf）、WR（Wine Rack 酒架）、BES（Base Ending Shelf）、PR（Plate Rack 碗碟架）等。它们进清单但不像柜体那样能遮挡两侧。一旦是 DUKO 产开放性商品，必须标为 gaplike_item 而非 stuffed_gap
 
 ## 输出格式
 
