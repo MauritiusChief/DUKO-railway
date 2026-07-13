@@ -74,9 +74,15 @@ interface QuotationTaskLine {
   error?: string
 }
 
+interface QuotationSnapshotLine {
+  productModel: string
+  quantity: string
+}
+
 interface QuotationTaskResult {
   quotationNumber: string
   lines: QuotationTaskLine[]
+  finalSnapshot: QuotationSnapshotLine[]
   message: string
   error?: string
 }
@@ -126,8 +132,11 @@ server 和 auto 共享同一套消息类型定义。协议消息使用 plain TS 
 // 逐行结果上报（每行完成即上报）
 { type: 'line-result', taskId: number, lineNo: number, status: 'success' | 'failed', error?: string, attempt: number }
 
-// 任务成功完成（所有行已处理）
-{ type: 'task-completed', taskId: number, status: 'completed' | 'partial_failed', lines: QuotationTaskLine[], attempt: number }
+// 请求用户确认目标报价单（在打开报价单、读取公司与已有行之后，写入之前发送）
+{ type: 'confirm-request', taskId: number, attempt: number, company: string, quotationNumber: string, existingLines: QuotationSnapshotLine[], inputLines: { partModel: string, quantity: number }[] }
+
+// 任务成功完成（所有行已处理）；finalSnapshot 为任务后再次从 Odoo 页面表格读取的最终行，作为视觉确认的权威来源
+{ type: 'task-completed', taskId: number, status: 'completed' | 'partial_failed', lines: QuotationTaskLine[], finalSnapshot: QuotationSnapshotLine[], attempt: number }
 
 // 任务级失败
 { type: 'task-failed', taskId: number, error: string, attempt: number }
@@ -145,6 +154,9 @@ server 和 auto 共享同一套消息类型定义。协议消息使用 plain TS 
 // 确认收到消息（幂等处理用）
 { type: 'ack', taskId: number, attempt: number }
 
+// 用户确认结果（UI 经 REST POST /confirm 触发，server 中继给 auto）
+{ type: 'confirm-response', taskId: number, decision: 'confirmed' | 'rejected' }
+
 // 心跳回复
 { type: 'heartbeat-ack' }
 
@@ -156,8 +168,9 @@ server 和 auto 共享同一套消息类型定义。协议消息使用 plain TS 
 
 - 每条 auto→server 消息携带 `attempt`，从 1 开始，每次重发递增。
 - server 为每个 taskId 记录 `last_acked_attempt`，收到 `attempt <= last_acked_attempt` 的消息时直接回复 `ack` 并丢弃。
-- auto 重连后重放所有未收到 `ack` 的消息（包括 `accepted`、`line-result`、`task-completed`、`task-failed`）。
+- auto 重连后重放所有未收到 `ack` 的消息（包括 `accepted`、`confirm-request`、`line-result`、`task-completed`、`task-failed`）。
 - `heartbeat` 和 `ready` 消息不携带 attempt（无须幂等）。
+- `confirm-response` 由 server→auto 单向发送（用户操作触发），不携带 attempt；auto 端按 taskId 解析等待中的确认 promise，迟到的重复响应直接忽略。
 
 ## 前端流程
 
@@ -180,6 +193,8 @@ server 和 auto 共享同一套消息类型定义。协议消息使用 plain TS 
 - 显示当前正在执行任务的 quotation 单号、提交用户名、开始时间和状态。
 - 显示当前用户的历史任务及每行的成功/失败结果。
 - 对正在查看的任务建立 SSE 连接，实时显示当前处理行、每行成功或失败结果及最终状态。
+- **确认卡片**：收到 SSE `confirm-request` 事件时，展示从 Odoo 页面读到的公司名、已有行表（型号/数量）与即将写入行表（型号/数量），并提供"确认/拒绝"按钮，调用 `POST /api/quotation-tasks/:id/confirm`。用户长时间不操作（默认 5 分钟）则 auto 端超时失败、UI 据 SSE 状态更新。确认前刷新页面时，SSE 重连后会补发 `confirm-request` 使卡片复现。
+- **最终快照**：收到 `task-completed` 事件的 `finalSnapshot` 后，以只读表格展示 Odoo 页面最终的行（型号/数量），与逐行执行结果并列，并标注数据来源为 Odoo 页面（以页面为准）。
 - 任务详细结果仅任务创建者和管理员可见；当前执行任务的摘要对所有已登录用户可见。
 - 登录失效等基础设施失败统一提示“自动化登录状态失效，请联系技术部门”。
 - 产品未匹配等业务错误直接逐行显示 SKU 与错误原因。
@@ -201,6 +216,8 @@ CREATE TABLE IF NOT EXISTS quotation_tasks (
   write_mode        TEXT    NOT NULL CHECK(write_mode IN ('overwrite','append')),
   status            TEXT    NOT NULL DEFAULT 'queued' CHECK(status IN ('queued','running','completed','partial_failed','failed','cancelled')),
   task_error        TEXT,
+  pending_confirmation  TEXT,
+  final_lines_snapshot  TEXT,
   retry_count       INTEGER NOT NULL DEFAULT 0,
   last_acked_attempt INTEGER NOT NULL DEFAULT 0,
   created_at        TEXT    NOT NULL DEFAULT (datetime('now')),
@@ -229,6 +246,8 @@ CREATE INDEX IF NOT EXISTS idx_quotation_task_lines_task ON quotation_task_lines
 - `retry_count` 追踪断线回收次数：首次超时回收回 `queued` 并 `retry_count=1`；第二次超时标 `failed`
 - `last_acked_attempt` 实现幂等：记录最后一次 ack 的 attempt 编号
 - `task_error` 存储任务级错误信息（与行级的 `quotation_task_lines.error` 不同）
+- `pending_confirmation` 存储最新 `confirm-request` 的 JSON 载荷（公司名、已有行、即将写入行）。供 UI 刷新/SSE 重连后补发确认卡片；用户确认/拒绝、超时、断线回收时清空
+- `final_lines_snapshot` 存储任务结束后从 Odoo 页面表格再次读取的最终行快照（型号/数量），作为视觉确认的权威来源
 - 与现有 parse_records 的 200 条限制类似，每用户最多保留 100 条任务，删除旧任务时一并删除所属任务行
 
 ### 代码分层
@@ -251,6 +270,7 @@ server/src/routes/quotation.ts # 路由层：REST 端点
 - `GET /api/quotation-tasks`：获取当前用户的任务列表。按 `created_at DESC` 排序。首版不分页。
 - `GET /api/quotation-tasks/:id`：获取当前用户的任务详情与逐行结果。仅任务创建者和管理员可访问。
 - `POST /api/quotation-tasks/:id/cancel`：取消任务。仅当状态为 `queued` 时允许；`running` 返回 409。
+- `POST /api/quotation-tasks/:id/confirm`：用户确认/拒绝目标报价单。请求体 `{ decision: 'confirmed' | 'rejected' }`。仅任务创建者和管理员可调用；仅当任务状态为 `running` 且 `pending_confirmation` 非空时受理，否则返回 409。受理后清空 `pending_confirmation` 并经 WebSocket 向 auto 发送 `confirm-response`。
 - `GET /api/quotation-tasks/active`：公开可读。返回 `{ autoOnline: boolean, activeTask?: { quotationNumber, username, startedAt, status } }`。
 - `GET /api/quotation-tasks/:id/events`：SSE 端点。通过 `Authorization` 请求头鉴权（复用 fetch + ReadableStream 方式）。仅任务创建者和管理员可订阅。
 
@@ -260,10 +280,13 @@ SSE 事件示例：
 
 ```ts
 { type: 'task-status', taskId, status: 'running' }
+{ type: 'confirm-request', taskId, company: '...', quotationNumber: '...', existingLines: [...], inputLines: [...] }
 { type: 'line-result', taskId, lineNo: 3, status: 'success' }
 { type: 'line-result', taskId, lineNo: 4, status: 'failed', error: '产品未匹配' }
-{ type: 'task-completed', taskId, status: 'partial_failed' }
+{ type: 'task-completed', taskId, status: 'partial_failed', finalSnapshot: [{ productModel: '...', quantity: '...' }] }
 ```
+
+`confirm-request` 在 SSE 连接建立时若任务 `running` 且 `pending_confirmation` 非空，会在 `snapshot` 之后补发，确保用户刷新页面后仍能看到确认卡片。
 
 由于当前前端认证使用 Bearer access token，SSE 实现应复用项目现有的 fetch 流式读取方式，以请求头传入 `Authorization`，而不依赖原生 `EventSource` 无法自定义请求头的限制。
 
@@ -319,6 +342,23 @@ SSE 事件示例：
 
 WebSocket handler 在收到 `line-result`、`task-completed`、`task-failed` 后，调用 `sse-broadcast.broadcast(taskId, type, data)` 向对应的 SSE 订阅者推送事件。
 
+### 用户确认握手（company confirm）
+
+为防止写错报价单，每次任务在打开目标报价单、读取公司与已有行之后，写入之前，必须由用户在 UI 上确认：
+
+```text
+auto 读到 company + existingLines
+  → WS confirm-request → server 写 pending_confirmation + ack + SSE 广播 confirm-request
+  → UI 展示确认卡片（公司名 + 已有行 + 即将写入行）+ 「确认/拒绝」按钮
+  → 用户点确认/拒绝 → REST POST /confirm → server 清空 pending + WS confirm-response
+  → auto 收到 confirm-response，继续写入（confirmed）或失败（rejected）
+```
+
+- 超时：auto 端默认 `AUTO_CONFIRM_TIMEOUT_MS = 300_000`（5 分钟）等待 `confirm-response`，超时视为任务失败（`task-failed('用户确认超时')`）。
+- 刷新恢复：SSE `/events` 连接时若任务 `running` 且 `pending_confirmation` 非空，在 `snapshot` 后补发 `confirm-request`。
+- 断线回收：`reclaimTaskOnDisconnect` 一并清空 `pending_confirmation`；任务重新排队后，auto 重连会从头执行（重新搜索/核验/请求确认）。
+- 确认环节对所有任务强制执行，不可跳过。
+
 ## auto 服务
 
 目录与 `server`、`client`、`script` 平级：
@@ -326,13 +366,17 @@ WebSocket handler 在收到 `line-result`、`task-completed`、`task-failed` 后
 ```text
 auto/
   src/
-    index.ts              # WebSocket、重连、任务调度
+    index.ts              # WebSocket、重连、任务调度、确认握手回调
     protocol.ts           # 消息与任务类型
-    browser.ts            # 每任务启动和关闭 persistent Chromium
+    config.ts             # 环境变量（含 AUTO_CONFIRM_TIMEOUT_MS）
+    browser.ts            # 每任务启动和关闭 persistent Chromium，串接完整流程
+    init-session.ts       # 首次手动登录 Odoo 保存 profile
     odoo/
-      quotation.ts        # 定位、核验报价单
-      write-lines.ts      # 逐行填写并返回结果
-      selectors.ts
+      selectors.ts        # 销售列表页 + 报价详情页 + 表格选择器
+      sales-search.ts     # 导航 /odoo/sales、移除 facet、搜索、打开结果
+      quotation-verify.ts # 核验单号、读取公司、读取已有/最终行
+      quotation-table.ts  # 表格增删行、填产品、填数量（Locator API）
+      write-lines.ts      # append / overwrite 写入，逐行返回结果
   package.json
   tsconfig.json
   .env.example
@@ -375,6 +419,7 @@ AUTO_WORKER_TOKEN=replace-with-long-random-token
 AUTO_PROFILE_DIR=./data/browser-profile
 ODOO_BASE_URL=https://dukouserp.com/odoo/
 AUTO_HEADLESS=false
+AUTO_CONFIRM_TIMEOUT_MS=300000
 ```
 
 ### 运行时流程
@@ -427,8 +472,8 @@ SIGINT / SIGTERM
 3. 打开 `ODOO_BASE_URL`，检查登录状态：
    - **检测方法**：检查 `page.url()` 是否包含 `/web/login`，或 `page.locator('.oe_login_form')` 是否可见。
    - 若未登录 → 上报 `task-failed`，`error = 'Odoo 登录状态失效，请联系技术部门'`。
-4. 后续步骤 4~10 见下方"每任务浏览器流程"（步骤 5-6 实现）。
-5. 上报最终任务状态。
+4. 后续步骤（搜索/核验/请求确认/写入/最终快照）见下方"每任务浏览器流程"（步骤 5-6 实现）。
+5. 上报最终任务状态、所有行结果与最终快照。
 6. 关闭浏览器 context（profile 自动保留）。
 
 ### 部署
@@ -445,20 +490,22 @@ npm start
 
 ### 每任务浏览器流程（步骤 5-6 实现细节）
 
-> 以下为步骤 5-6 的预设计，暂不实现。
+> 以下为步骤 5-6 的预设计，选择器细节见步骤 5 交付物。
 
 1. 收到任务后发送 `accepted`。
 2. 启动 persistent headed Chromium context。
 3. 打开 Odoo，并检查是否仍为已登录状态。
-4. 访问 `https://dukouserp.com/odoo/sales`。
-5. 在 orders 页面搜索栏输入任务中的 quotation 单号，打开搜索到的目标报价单。
-6. 核验打开页面的 quotation 单号与任务一致后，才允许修改行项目。
-7. 根据任务选择追加或清空后重建，并逐行填写产品与数量。
-8. 记录每一行的成功或失败；行级失败后继续处理剩余行。
-9. 上报最终任务状态、任务错误和所有行结果。
-10. 关闭浏览器与 context，保留 profile。
+4. 访问 `https://dukouserp.com/odoo/sales`，移除默认的"My Quotations"过滤条件（否则搜不到他人创建的报价单）。
+5. 在搜索栏输入任务中的 quotation 单号，打开搜索到的目标报价单。
+6. 核验打开页面的 quotation 单号与任务一致；读取 `partner_id` 字段的公司名（为空则任务失败）。
+7. 读取报价单表格中已有的行（型号/数量），连同公司名、即将写入的行，通过 `confirm-request` 一并送回 server→SSE→UI，等待用户在 UI 上确认。
+   - 用户确认（`confirm-response: confirmed`）后继续；用户拒绝或超过 5 分钟未操作（auto 端超时），任务失败并关闭浏览器。
+8. 根据任务选择追加或清空后重建，并逐行填写产品与数量；每行结果即时通过 `line-result` 上报。
+9. 所有行处理完成后，**再次从 Odoo 页面表格读取全部行**（不依赖服务端收到的逐行结果拼装），作为 `finalSnapshot` 随 `task-completed` 上报。
+10. 上报最终任务状态、任务错误、所有行结果与最终快照。
+11. 关闭浏览器与 context，保留 profile。
 
-orders 搜索栏的选择器、搜索提交方式、搜索结果选择及报价单号核验方式需要在 Playwright 实作阶段以真实 Odoo 页面逐步调整。实现中不得假设固定 URL 规则或内部数据库 ID。
+orders 搜索栏的选择器、搜索提交方式、搜索结果选择、报价单号核验方式及表格行/单元格选择器需要在 Playwright 实作阶段以真实 Odoo 页面逐步调整（`experiment/html/` 下保存的裁剪页面可作为静态参考，但带数据的行需在真实页面确认）。实现中不得假设固定 URL 规则或内部数据库 ID。
 
 ## 实施顺序
 
@@ -568,27 +615,107 @@ orders 搜索栏的选择器、搜索提交方式、搜索结果选择及报价�
   - 浏览器启动和关闭正常（profile 目录生成且包含 Odoo cookies）
   - 登录检测逻辑可区分已登录/未登录页面
 
-### 步骤 5：在真实 Odoo 页面实现 `/odoo/sales` 搜索报价单、目标核验及失败处理
+### 步骤 5：实现 `/odoo/sales` 搜索报价单、目标核验、公司与已有行读取，并搭建确认握手的服务端骨架
 
-（后续细化）
+**交付物：**
 
-### 步骤 6：从 `experiment/playwright/` 和 ScriptCat 脚本迁移报价写入逻辑，并改为返回逐行结果
+- [ ] `auto/src/odoo/selectors.ts`：新增销售列表页与详情页选择器（与 `script/selectors.ts` 的 11 个并列）
+  - 搜索框 `input.o_searchview_input`
+  - "My Quotations" facet 移除钮 `.o_searchview_facet .o_facet_remove`（否则搜不到他人创建的报价单）
+  - 列表数据行 `table.o_list_table tbody tr.o_data_row`，行内单号 cell `td[name="name"]`
+  - 详情标题单号 `h1 div[name="name"] span`
+  - 公司 input `div[name="partner_id"] input.o-autocomplete--input`（`id="partner_id_0"`），用 `await input.inputValue()` 读取
+- [ ] `auto/src/odoo/sales-search.ts`：
+  - `navigateToSales(page)`：goto `${ODOO_BASE_URL}sales`，等 `table.o_list_table` 渲染
+  - `removeMyQuotationsFacet(page)`：点击 `.o_facet_remove`，等 facet 消失
+  - `searchQuotation(page, quotationNumber)`：`fill` 搜索框 → `press('Enter')` → 等 `tbody tr.o_data_row` 首行出现（带超时）
+  - `openFirstResult(page)`：点击首行单号 cell → 等详情页 `h1 div[name="name"] span` 出现
+- [ ] `auto/src/odoo/quotation-verify.ts`：
+  - `readQuotationNumber(page)`：读标题 span，trim
+  - `readCompany(page)`：读 `partner_id` input 的 `inputValue()`，trim
+  - `readExistingLines(page)`：复用 `experiment/playwright/quotationRead.ts` 模式遍历 `o_data_row`，读 product cell（`td.o_sol_product_many2one_cell`）文本 + quantity cell 文本，返回 `QuotationSnapshotLine[]`
+  - **quantity cell 选择器需在真实带数据的页面上确认**（`experiment/html/odoo-sales-xxxx.html` 只有占位空行，无法静态确定；按列头 `th[data-name="product_uom_qty"]` 的列序定位）
+- [ ] 核验与任务级失败（任一命中即 `task-failed`，不进入确认/写入）：
+  - 搜索结果为空 → `未找到该报价单`
+  - 标题单号 ≠ `task.quotationNumber` → `报价单号核验不一致`
+  - 公司为空 → `报价单未填写客户/公司，请先在 Odoo 中填写后再启动`
+- [ ] 串入 `auto/src/browser.ts`（替换现有占位块，位于登录检查通过之后）：`navigateToSales` → `removeMyQuotationsFacet` → `searchQuotation` → `openFirstResult` → 核验 → `readCompany` + `readExistingLines` → 调 `callbacks.requestConfirmation({ company, quotationNumber, existingLines, inputLines })`，按返回值分支：`confirmed` 继续；`rejected`/`timeout` → 任务失败
+- [ ] `browser.ts` 新签名：`runQuotationTask(task, callbacks: { onLineResult; requestConfirmation })`；`index.ts` 适配调用处
 
-（后续细化）
+**服务端确认握手骨架（支撑上面的握手）：**
 
-### 步骤 7：创建报价任务页，在主解析页增加跳转按钮，保留复制 CSV；实现 REST 快照加载与 SSE 逐行状态更新
+- [ ] 协议两端各加 `confirm-request`（auto→server，tracked+acked，含 `attempt`）与 `confirm-response`（server→auto）schema；`task-completed` 增加可选 `finalSnapshot`
+  - auto 侧扩展点：`protocol.ts` 的 `inboundMessageSchema` 与 `OutboundMessage`
+  - server 侧扩展点：`ws-protocol.ts` 的 `inboundMessageSchema` 与 `OutboundMessage`
+- [ ] `auto/src/index.ts` 实现 `requestConfirmation`：发 tracked `confirm-request` → 在新增 `confirm-response` 分支按 `taskId` resolve promise；启动超时定时器（默认 `AUTO_CONFIRM_TIMEOUT_MS=300_000`，5 分钟，env 可配）；迟到/重复响应忽略；超时 resolve `'timeout'`
+- [ ] DB（`initUserDB` 的 DDL 与 `QuotationTaskRow` 类型）加列：`pending_confirmation TEXT NULL`、`final_lines_snapshot TEXT NULL`
+- [ ] `ws-handler.ts`：新增 `confirm-request` 分支 → 幂等校验 → 写 `pending_confirmation` → `ack` → `broadcastQuotationEvent(taskId, { type:'confirm-request', ...payload })`
+- [ ] `reclaimTaskOnDisconnect` 增加清空 `pending_confirmation`（断线回收时丢弃挂起的确认）
+- [ ] `routes/quotation.ts` 新增 `POST /api/quotation-tasks/:id/confirm`（body `{ decision: 'confirmed'|'rejected' }`）：权限校验 + 校验 task `running` 且 `pending_confirmation` 非空 → 清空 pending → 经 `ws-handler` 发 `confirm-response`；不满足条件返回 409
+- [ ] SSE `/events` 连接时：若 task `running` 且 `pending_confirmation` 非空，在 `snapshot` 后补发 `confirm-request`（解决确认前刷新页面丢卡片）
+- [ ] `auto/.env.example` + `auto/src/config.ts` 增 `AUTO_CONFIRM_TIMEOUT_MS`（默认 300000）
 
-（后续细化）
+### 步骤 6：迁移报价写入逻辑为 Playwright Locator API，逐行上报，任务后读最终快照
 
-### 步骤 8：实测追加、清空重建、单行失败、报价单找不到、登录失效、worker 断线及 Railway 重启
+**交付物：**
 
-（后续细化）
+- [ ] `auto/src/odoo/quotation-table.ts`：把 `experiment/playwright/quotationTable.ts` + `script/quotation.ts` 核心迁为 Locator API 版（纯 Playwright，不再依赖 `document.execCommand`/MutationObserver；用 `locator.fill()`/`waitFor()`/`waitForFunction()` 替代）：
+  - `ensureTableReady` / `getDataRows` / `getSelectedEditableRow`
+  - `addNewEditableRow`（点 `Add a product`，等 `o_data_row` 数增长 + `o_selected_row` 出现）
+  - `fillProductAndChooseFromMenu`（`fill` → 等下拉 `ul.o-autocomplete--dropdown-menu` → 按 `hasText` 匹配点击 `a.dropdown-item`；超时/未匹配返回 `false`）
+  - `fillQuantity`（`fill` + `press('Enter')`）
+  - `removeQuotationRow` / `removeAllQuotationRows`（每删一行 `waitForFunction` 等行数减少）
+  - `deselectCurrentRow`（点 `SELECT_CANCELLING` 标题 span）
+- [ ] `auto/src/odoo/write-lines.ts`：`writeLines(page, mode, lines, onLineResult)`
+  - `overwrite`：先读已有产品名集合 → 删除不在新集合中的行（逐行删 + 等减少）→ 对"新增集合"走 append
+  - `append`：逐行 `addNewEditableRow` → `fillProductAndChooseFromMenu`；失败 → `removeQuotationRow` + `onLineResult({ lineNo, status:'failed', error:'产品未匹配' })`；成功 → `fillQuantity` → `deselectCurrentRow` → `onLineResult({ lineNo, status:'success' })`
+  - 行级失败后继续后续行
+- [ ] `browser.ts` 串接：`requestConfirmation` 返回 `confirmed` 后 → `writeLines` → 再次 `readExistingLines`（**source of truth = Odoo 页面表格，非服务端拼装**）→ 填入 `TaskOutcome.finalSnapshot`
+- [ ] `index.ts`：`task-completed` 消息带上 `finalSnapshot`
+- [ ] `ws-handler.ts` `handleTaskCompleted`：幂等校验后把 `finalSnapshot` 写入 `final_lines_snapshot` 列，并在 SSE `task-completed` 事件载荷中带出
+- [ ] 错误分类：产品未匹配/数量无法填写 = 行级失败继续；表格结构变化、autocomplete 整体异常、写入过程未捕获异常 = `task-failed`
+
+### 步骤 7：创建报价任务页（确认卡片 + 最终快照），主解析页增加跳转按钮，保留复制 CSV
+
+**交付物：**
+
+- [ ] `client/src/pages/TableParsePage.tsx`：在"复制 CSV"旁加"创建报价任务"按钮 → 跳 `/quotation-tasks`，把 Zustand `products` 带入 + 写 localStorage 草稿
+- [ ] 新增受登录保护的 `client/src/pages/QuotationTasksPage.tsx`（路由 `/quotation-tasks`）：
+  - 表单：quotation 单号、`writeMode`（追加/清空重建）、来自主解析页的产品清单确认
+  - `GET /api/quotation-tasks/active` 显示 auto 在线状态 + 当前执行摘要
+  - 当前用户历史任务列表 + 任务详情（逐行成功/失败 + 最终快照）
+  - SSE 订阅当前任务：先 REST 快照，再 `fetch` 流式 SSE
+- [ ] **确认卡片**：收到 SSE `confirm-request` → 展示「公司名 + 已有行表（型号/数量）+ 即将写入行表（型号/数量）」+ 「确认 / 拒绝」按钮 → `POST /api/quotation-tasks/:id/confirm`；收到 `task-completed` 前 5 分钟未操作则由 auto 端超时失败、UI 据 SSE 状态更新为失败
+  - 确认前刷新页面：SSE 重连后补发的 `confirm-request` 让卡片复现，仍可确认
+- [ ] **最终快照表**：`task-completed` 事件的 `finalSnapshot` → 只读展示「Odoo 页面实际状态（型号/数量）」，与逐行结果并列，标注数据来源是 Odoo 页面
+- [ ] localStorage 草稿：提交成功或用户清除后删除
+- [ ] 统一文案：基础设施失败（登录失效等）提示「自动化登录状态失效，请联系技术部门」；业务错误逐行显示 SKU 与原因
+
+### 步骤 8：端到端实测矩阵（手动验收）
+
+**交付物：**
+
+- [ ] 追加写入：确认 → 逐行成功 → 最终快照与 Odoo 页面一致
+- [ ] 清空重建：确认 → 删除旧行 → 写入新行 → 最终快照只含新行
+- [ ] 单行失败：某型号 autocomplete 未匹配 → 该行 `failed`，其余继续，任务 `partial_failed`
+- [ ] 报价单找不到（搜索结果为空）→ `task-failed`
+- [ ] 单号核验不一致（打开后标题单号 ≠ 任务单号）→ `task-failed`
+- [ ] 公司为空（`partner_id` input 空）→ `task-failed`
+- [ ] 用户点「拒绝」→ `task-failed`，错误为用户拒绝
+- [ ] 用户 5 分钟不操作 → auto 超时 → `task-failed`，浏览器关闭
+- [ ] 确认前刷新页面 → SSE 重连补发 `confirm-request`，卡片复现，仍可确认
+- [ ] Odoo 登录态失效 → `task-failed('...登录状态失效...')`
+- [ ] worker 断线（杀 auto 进程）→ 首次回收 `queued`+`retry_count=1`；二次断线 `failed`；回收时 `pending_confirmation` 被清空
+- [ ] Railway 重启（server 重启）→ 任务回收；auto 重连后从头执行（重新搜索/核验/请求确认）
+- [ ] SSE 断线后 REST 快照恢复完整结果
 
 ## 验收标准
 
 - 用户可从主页面的产品清单进入报价任务页并创建任务。
 - auto 离线时前端明确显示不可派发。
 - auto 在线时，任务能按 quotation 单号在 `/odoo/sales` 中找到并核验目标报价单。
+- 写入前用户必须在 UI 上确认目标报价单的公司名与已有行；未填写公司的报价单直接失败。用户拒绝或 5 分钟未操作均导致任务失败。
+- 任务完成后，UI 展示从 Odoo 页面再次读取的最终行快照（型号/数量），与逐行执行结果并列。
 - 浏览器仅在任务执行期间运行，任务结束后关闭。
 - 所有产品行都具有可查询的成功或失败结果。
 - 打开任务页后，用户无需刷新即可看到任务状态和逐行填写结果更新；SSE 断线或页面刷新后可通过 REST 快照恢复完整结果。
