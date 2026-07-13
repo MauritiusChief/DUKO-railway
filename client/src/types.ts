@@ -303,3 +303,65 @@ export interface TraceGroup {
   /** 归属于此 assistant 的 _budget_info（source=injected） */
   budget?: { received: ClientReceivedMessage; sent: ClientSentMessage };
 }
+
+// ==================================================================
+//  报价任务 (Quotation Tasks)
+// ==================================================================
+
+export type QuotationTaskStatus =
+  | 'queued' | 'running' | 'completed' | 'partial_failed' | 'failed' | 'cancelled'
+
+export interface QuotationTaskLine {
+  lineNo: number
+  partModel: string
+  quantity: number
+  status: 'pending' | 'success' | 'failed'
+  error: string | null
+}
+
+export interface QuotationTaskSummary {
+  id: number
+  userId: number
+  username: string
+  quotationNumber: string
+  writeMode: 'overwrite' | 'append'
+  status: QuotationTaskStatus
+  taskError: string | null
+  retryCount: number
+  createdAt: string
+  startedAt: string | null
+  completedAt: string | null
+  lineCount: number
+  successCount: number
+  failedCount: number
+}
+
+export interface QuotationTaskDetail extends QuotationTaskSummary {
+  lines: QuotationTaskLine[]
+  pendingConfirmation: string | null
+  finalLinesSnapshot: string | null
+}
+
+export interface QuotationSnapshotLine {
+  productModel: string
+  quantity: string
+}
+
+export interface ActiveTaskSummaryResponse {
+  autoOnline: boolean
+  activeTask?: {
+    taskId: number
+    quotationNumber: string
+    username: string
+    startedAt: string
+    status: QuotationTaskStatus
+  }
+}
+
+/** 草稿（localStorage 持久化） */
+export interface QuotationDraft {
+  quotationNumber: string
+  writeMode: 'overwrite' | 'append'
+  csvText: string
+  savedAt: number
+}

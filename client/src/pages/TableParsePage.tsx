@@ -892,6 +892,23 @@ export default function TableParsePage() {
                     >
                       {copySuccess ? t('已复制') : t('复制CSV')}
                     </button>
+                    <button
+                      className="tp-submit-btn tp-generate-btn"
+                      onClick={() => {
+                        const products = useTableParseStore.getState().products
+                        const csv = products.map((p) => `${p.productName},${p.quantity}`).join('\n')
+                        const draft = {
+                          quotationNumber: '',
+                          writeMode: 'append' as const,
+                          csvText: csv,
+                          savedAt: Date.now(),
+                        }
+                        localStorage.setItem('duko_quotation_draft', JSON.stringify(draft))
+                        navigate('/quotation-tasks')
+                      }}
+                    >
+                      创建报价任务
+                    </button>
                   </div>
                 </>
               )}
