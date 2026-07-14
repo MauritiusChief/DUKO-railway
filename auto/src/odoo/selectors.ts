@@ -88,3 +88,10 @@ export const REMOVE_ROW_BUTTON = 'td.o_list_record_remove button.fa-trash-o'
 
 /** 点击标题区域以取消选中行 */
 export const SELECT_CANCELLING = 'h1 > div.o_field_widget.o_readonly_modifier.o_required_modifier > span'
+
+// ==================================================================
+//  报价详情页 —— 表单保存按钮
+// ==================================================================
+
+/** 手动保存按钮（仅在表单 dirty 时显示） */
+export const FORM_SAVE_BUTTON = '.o_form_button_save'

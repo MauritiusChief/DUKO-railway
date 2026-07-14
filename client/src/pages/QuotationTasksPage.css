@@ -505,6 +505,14 @@
   text-align: center;
 }
 
+.qt-log-time {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: #999;
+  font-family: 'Consolas', 'Monaco', monospace;
+  white-space: nowrap;
+}
+
 .qt-log-line-success .qt-log-icon {
   color: #2e7d32;
 }

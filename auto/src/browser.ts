@@ -24,6 +24,7 @@ import type {
 import { navigateToSales, removeMyQuotationsFacet, searchQuotation, countExactMatches, openExactMatch } from './odoo/sales-search.js';
 import { verifyQuotation, readExistingLines, type QuotationVerification } from './odoo/quotation-verify.js';
 import { writeLines, type WriteLineResult } from './odoo/write-lines.js';
+import { FORM_SAVE_BUTTON } from './odoo/selectors.js';
 
 /** 确认请求载荷 */
 export interface ConfirmationRequest {
@@ -40,6 +41,7 @@ export type ConfirmationResult = 'confirmed' | 'rejected' | 'timeout';
 export interface BrowserCallbacks {
   onLineResult: (result: LineResult) => Promise<void>
   requestConfirmation: (req: ConfirmationRequest) => Promise<ConfirmationResult>
+  onProgress: (message: string) => Promise<void>
 }
 
 /** 单个任务执行的最终结果 */
@@ -158,6 +160,9 @@ export async function runQuotationTask(
       },
     });
 
+    // ---- 5.5 若 Odoo 页面存在手动保存按钮，点击以确保写入已同步 ----
+    await tryManualSave(page, callbacks.onProgress);
+
     // ---- 6. 读取最终快照（从 Odoo 页面表格） ----
     let finalSnapshot: QuotationSnapshotLine[] = [];
     try {
@@ -235,4 +240,29 @@ async function checkOdooLogin(page: Page): Promise<{ loggedIn: boolean }> {
   const hasAppShell = (await appShell.count()) > 0;
 
   return { loggedIn: !hasLoginForm && hasAppShell };
+}
+
+/**
+ * 若 Odoo 页面存在手动保存按钮（表单 dirty 时出现），点击保存并等待完成。
+ * 不存在则跳过（已自动保存）。每步通过 onProgress 回调写入日志。
+ */
+async function tryManualSave(
+  page: Page,
+  onProgress?: (message: string) => Promise<void>,
+): Promise<void> {
+  const saveButton = page.locator(FORM_SAVE_BUTTON)
+  if ((await saveButton.count()) === 0) {
+    await onProgress?.('未检测到手动保存按钮（可能已自动保存）')
+    return
+  }
+
+  await onProgress?.('正在保存…')
+  try {
+    await saveButton.first().click()
+    // 等待保存完成：按钮消失（hidden 涵盖 detached + 隐藏）
+    await saveButton.first().waitFor({ state: 'hidden', timeout: 15_000 })
+    await onProgress?.('已保存')
+  } catch {
+    await onProgress?.('保存等待超时，继续执行')
+  }
 }

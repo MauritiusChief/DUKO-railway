@@ -32,6 +32,13 @@ function formatTime(iso: string): string {
   } catch { return iso }
 }
 
+function formatLogTime(ts: number): string {
+  const d = new Date(ts)
+  if (isNaN(d.getTime())) return '--:--:--'
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+}
+
 function parseCSV(csv: string): { partModel: string; quantity: number }[] {
   const lines = csv.trim().split('\n').filter(Boolean)
   if (lines.length === 0) return []
@@ -387,6 +394,7 @@ export default function QuotationTasksPage() {
               <div className="qt-log-list">
                 {store.sseLog.map((entry: QuotationLogEntry) => (
                   <div key={entry.id} className={`qt-log-entry qt-log-${entry.kind}`}>
+                    <span className="qt-log-time">{formatLogTime(entry.timestamp)}</span>
                     <span className="qt-log-icon">
                       {entry.kind === 'line-success' ? '\u2713' : entry.kind === 'line-failed' ? '\u2717' : entry.kind === 'task-done' ? '\u25CF' : '\u2139'}
                     </span>

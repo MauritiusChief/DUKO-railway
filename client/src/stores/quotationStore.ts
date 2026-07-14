@@ -402,17 +402,32 @@ function handleTaskSSEEvent(
       set((s) => {
         // 按 lineNo 去重
         if (s.sseLog.some((e) => e.lineNo === data.lineNo)) return {}
+        const line = s.selectedTaskDetail?.lines.find((l) => l.lineNo === data.lineNo)
+        const desc = line ? `${line.partModel} x${line.quantity}` : ''
         const entry: QuotationLogEntry = {
           id: `sse-${data.lineNo}-${Date.now()}`,
           lineNo: data.lineNo,
           kind: data.status === 'success' ? 'line-success' : 'line-failed',
           message: data.status === 'success'
-            ? `#${data.lineNo} 写入成功`
-            : `#${data.lineNo} 写入失败 — ${data.error || '未知错误'}`,
+            ? `#${data.lineNo} ${desc} 写入成功`
+            : `#${data.lineNo} ${desc} 写入失败 — ${data.error || '未知错误'}`,
           timestamp: Date.now(),
         }
         return { sseLog: [...s.sseLog, entry] }
       })
+      break
+    }
+
+    case 'progress': {
+      if (data.taskId !== get().selectedTaskId) break
+      set((s) => ({
+        sseLog: [...s.sseLog, {
+          id: `progress-${Date.now()}`,
+          kind: 'info',
+          message: data.message,
+          timestamp: Date.now(),
+        }],
+      }))
       break
     }
 

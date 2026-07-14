@@ -318,6 +318,24 @@ function handleConfirmRequest(ws: WebSocket, msg: Extract<InboundMessage, { type
   });
 }
 
+function handleProgress(ws: WebSocket, msg: Extract<InboundMessage, { type: 'progress' }>): void {
+  if (!worker?.authenticated) return;
+  const { taskId, message, attempt } = msg;
+
+  if (isDuplicate(taskId, attempt)) {
+    sendAck(ws, taskId, attempt);
+    return;
+  }
+
+  ackAttempt(taskId, attempt);
+  sendAck(ws, taskId, attempt);
+
+  broadcastQuotationEvent(taskId, {
+    type: 'progress',
+    data: { taskId, message },
+  });
+}
+
 // ==================================================================
 //  消息路由
 // ==================================================================
@@ -372,6 +390,9 @@ function handleMessage(conn: WorkerConnection, ws: WebSocket, raw: string): void
       break;
     case 'confirm-request':
       handleConfirmRequest(ws, msg);
+      break;
+    case 'progress':
+      handleProgress(ws, msg);
       break;
   }
 }

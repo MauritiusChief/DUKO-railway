@@ -172,6 +172,13 @@ export interface ConfirmRequestMessage {
   attempt: number;
 }
 
+export interface ProgressMessage {
+  type: 'progress';
+  taskId: number;
+  message: string;
+  attempt: number;
+}
+
 export type OutboundMessage =
   | HelloMessage
   | ReadyMessage
@@ -180,4 +187,5 @@ export type OutboundMessage =
   | TaskCompletedMessage
   | TaskFailedMessage
   | HeartbeatMessage
-  | ConfirmRequestMessage;
+  | ConfirmRequestMessage
+  | ProgressMessage;

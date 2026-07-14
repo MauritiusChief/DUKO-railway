@@ -231,7 +231,8 @@ class AutoClient {
           m.type === 'line-result' ||
           m.type === 'task-completed' ||
           m.type === 'task-failed' ||
-          m.type === 'confirm-request') &&
+          m.type === 'confirm-request' ||
+          m.type === 'progress') &&
         m.taskId === msg.taskId &&
         m.attempt === msg.attempt,
     );
@@ -328,6 +329,15 @@ class AutoClient {
               attempt: confirmAttempt,
             };
             this.sendTracked(confirmMsg);
+          });
+        },
+        onProgress: async (message: string) => {
+          const progressAttempt = ++this.currentTaskAttempt;
+          this.sendTracked({
+            type: 'progress',
+            taskId: task.taskId,
+            message,
+            attempt: progressAttempt,
           });
         },
       }, this.currentAbort.signal);

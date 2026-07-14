@@ -110,6 +110,13 @@ export const confirmRequestMessageSchema = z.object({
   attempt: z.number().int().positive(),
 });
 
+export const progressMessageSchema = z.object({
+  type: z.literal('progress'),
+  taskId: z.number().int().positive(),
+  message: z.string().min(1),
+  attempt: z.number().int().positive(),
+});
+
 /** auto → Server 入站消息的联合校验 schema */
 export const inboundMessageSchema = z.discriminatedUnion('type', [
   helloMessageSchema,
@@ -120,6 +127,7 @@ export const inboundMessageSchema = z.discriminatedUnion('type', [
   taskFailedMessageSchema,
   heartbeatMessageSchema,
   confirmRequestMessageSchema,
+  progressMessageSchema,
 ]);
 
 // ==================================================================
@@ -134,6 +142,7 @@ export type TaskCompletedMessage = z.infer<typeof taskCompletedMessageSchema>;
 export type TaskFailedMessage = z.infer<typeof taskFailedMessageSchema>;
 export type HeartbeatMessage = z.infer<typeof heartbeatMessageSchema>;
 export type ConfirmRequestMessage = z.infer<typeof confirmRequestMessageSchema>;
+export type ProgressMessage = z.infer<typeof progressMessageSchema>;
 
 export type InboundMessage = z.infer<typeof inboundMessageSchema>;
 
