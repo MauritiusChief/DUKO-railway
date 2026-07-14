@@ -14,14 +14,9 @@ import { useQuotationStore, type QuotationLogEntry } from '../stores/quotationSt
 import type { QuotationSnapshotLine } from '../types'
 import './QuotationTasksPage.css'
 import { useI18n } from '../i18n/context'
-const STATUS_LABELS: Record<string, { zh: string; cls: string }> = {
-  queued: { zh: '排队', cls: 'qt-badge-gray' },
-  running: { zh: '执行中', cls: 'qt-badge-blue' },
-  completed: { zh: '完成', cls: 'qt-badge-green' },
-  partial_failed: { zh: '部分失败', cls: 'qt-badge-orange' },
-  failed: { zh: '失败', cls: 'qt-badge-red' },
-  cancelled: { zh: '已取消', cls: 'qt-badge-gray' },
-}
+import { SegSwitch } from '../components/SegSwitch'
+
+/* 状态徽标的 CSS 类名映射 */
 
 function formatTime(iso: string): string {
   try {
@@ -57,9 +52,35 @@ function parseCSV(csv: string): { partModel: string; quantity: number }[] {
 }
 
 export default function QuotationTasksPage() {
-  const { t } = useI18n();
+  const { t, lang, setLang } = useI18n();
   const navigate = useNavigate()
   const store = useQuotationStore()
+
+  /* 状态徽标 CSS 类名映射 */
+  const statusCls = (status: string): string => {
+    const map: Record<string, string> = {
+      queued: 'qt-badge-gray',
+      running: 'qt-badge-blue',
+      completed: 'qt-badge-green',
+      partial_failed: 'qt-badge-orange',
+      failed: 'qt-badge-red',
+      cancelled: 'qt-badge-gray',
+    }
+    return map[status] ?? 'qt-badge-gray'
+  }
+
+  /* 状态 → i18n 翻译文字的映射 */
+  const statusLabel = (status: string): string => {
+    const map: Record<string, string> = {
+      queued: t('排队'),
+      running: t('执行中'),
+      completed: t('完成'),
+      partial_failed: t('部分失败'),
+      failed: t('失败'),
+      cancelled: t('已取消'),
+    }
+    return map[status] ?? status
+  }
 
   // 本地表单状态
   const [quotationNumber, setQuotationNumber] = useState('')
@@ -106,11 +127,11 @@ export default function QuotationTasksPage() {
   const handleSubmit = async () => {
     const lines = parseCSV(csvText)
     if (lines.length === 0) {
-      setStatusMsg('请在文本区输入有效的 CSV 数据')
+      setStatusMsg(t('CSV提示'))
       return
     }
     if (!quotationNumber.trim()) {
-      setStatusMsg('请输入报价单号')
+      setStatusMsg(t('输入提示'))
       return
     }
 
@@ -119,9 +140,9 @@ export default function QuotationTasksPage() {
     if (taskId !== null) {
       store.saveDraft({ quotationNumber: quotationNumber.trim(), writeMode, csvText })
       await store.selectTask(taskId)
-      setStatusMsg('任务已创建')
+      setStatusMsg(t('任务创建成功'))
     } else {
-      setStatusMsg('任务创建失败')
+      setStatusMsg(t('任务创建失败'))
     }
   }
 
@@ -161,9 +182,9 @@ export default function QuotationTasksPage() {
   const handleCopyFailed = useCallback(() => {
     if (!failedLinesCsv) return
     navigator.clipboard.writeText(failedLinesCsv).then(() => {
-      setStatusMsg('失败行已复制到剪贴板')
+      setStatusMsg(t('复制失败行成功'))
     }).catch(() => {
-      setStatusMsg('复制失败')
+      setStatusMsg(t('复制失败'))
     })
   }, [failedLinesCsv])
 
@@ -171,7 +192,7 @@ export default function QuotationTasksPage() {
   const handleFillFailed = useCallback(() => {
     if (!failedLinesCsv) return
     setCsvText(failedLinesCsv)
-    setStatusMsg('失败行已填入输入框')
+    setStatusMsg(t('失败行已填入输入框'))
   }, [failedLinesCsv])
 
   // 判断是否显示确认卡片（待操作）
@@ -186,35 +207,45 @@ export default function QuotationTasksPage() {
       {/* 标题栏 */}
       <div className="qt-header">
         <div className="qt-header-left">
-          <div className="qt-header-title">报价任务</div>
+          <div className="qt-header-title">{t('报价任务页标题')}</div>
           {store.activeSummary && (
             <span className={`qt-auto-status ${store.activeSummary.autoOnline ? 'qt-auto-online' : 'qt-auto-offline'}`}>
-              Auto: {store.activeSummary.autoOnline ? '在线' : '离线'}
+              {store.activeSummary.autoOnline ? t('Auto在线') : t('Auto离线')}
             </span>
           )}
           {store.activeSummary?.activeTask && (
             <span className="qt-active-task">
-              当前: {store.activeSummary.activeTask.quotationNumber} ({store.activeSummary.activeTask.username})
+              {t('当前执行')}: {store.activeSummary.activeTask.quotationNumber} ({store.activeSummary.activeTask.username})
             </span>
           )}
           {store.queueSummary && store.queueSummary.queuedCount > 0 && (
             <span className="qt-queue-status" title={store.queueSummary.tasks.map((t) => `${t.quotationNumber} (${t.username})`).join(', ')}>
-              队列: {store.queueSummary.queuedCount} 排队
+              {t('队列排队', { n: store.queueSummary.queuedCount })}
             </span>
           )}
         </div>
-        <button className="qt-submit-btn" onClick={() => navigate('/')}>回到主页</button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <SegSwitch
+            options={[
+              { value: 'zh', label: '中文' },
+              { value: 'en', label: 'English' },
+            ]}
+            value={lang}
+            onChange={setLang}
+          />
+          <button className="qt-submit-btn" onClick={() => navigate('/')}>{t('回到主页')}</button>
+        </div>
       </div>
 
       {/* 主区域 */}
       <div className="qt-main">
-        {/* 左侧：任务列表 */}
+         {/* 左侧：任务列表 */}
         <div className="qt-left">
-          <div className="qt-left-header">任务列表</div>
+          <div className="qt-left-header">{t('任务列表')}</div>
           <div className="qt-list">
-            {store.loading && <div className="qt-list-empty">加载中...</div>}
+            {store.loading && <div className="qt-list-empty">{t('加载中')}</div>}
             {!store.loading && store.tasks.length === 0 && (
-              <div className="qt-list-empty">暂无任务</div>
+              <div className="qt-list-empty">{t('暂无任务')}</div>
             )}
             {store.tasks.map((task) => (
               <div
@@ -224,15 +255,15 @@ export default function QuotationTasksPage() {
               >
                 <div className="qt-item-main">
                   <div className="qt-item-top">
-                    <span className={`qt-badge ${STATUS_LABELS[task.status]?.cls ?? 'qt-badge-gray'}`}>
-                      {STATUS_LABELS[task.status]?.zh ?? task.status}
+                    <span className={`qt-badge ${statusCls(task.status)}`}>
+                      {statusLabel(task.status)}
                     </span>
                     <span className="qt-item-number">{task.quotationNumber}</span>
                   </div>
                   <div className="qt-item-meta">
-                    <span>{task.lineCount} 行</span>
-                    {task.successCount > 0 && <span className="qt-meta-ok">{task.successCount} 成功</span>}
-                    {task.failedCount > 0 && <span className="qt-meta-err">{task.failedCount} 失败</span>}
+                    <span>{task.lineCount} {t('行')}</span>
+                    {task.successCount > 0 && <span className="qt-meta-ok">{task.successCount} {t('成功')}</span>}
+                    {task.failedCount > 0 && <span className="qt-meta-err">{task.failedCount} {t('失败')}</span>}
                     <span className="qt-item-time">{formatTime(task.createdAt)}</span>
                   </div>
                 </div>
@@ -241,7 +272,7 @@ export default function QuotationTasksPage() {
                     className="qt-item-cancel"
                     onClick={(e) => { e.stopPropagation(); store.cancelTask(task.id) }}
                   >
-                    取消
+                    {t('取消任务')}
                   </button>
                 )}
               </div>
@@ -251,103 +282,115 @@ export default function QuotationTasksPage() {
 
         {/* 右侧：主体 */}
         <div className="qt-right">
+          {/* 未选中任务时显示空态提示 */}
           {!store.selectedTaskId && (
-            <div className="qt-empty-msg">创建新任务或选择左侧任务查看详情</div>
+            <div className="qt-empty-msg">{t('选择任务提示')}</div>
           )}
 
-          {/* ====== 上部分：表单 + 预览 ====== */}
-          <div className="qt-top-section">
-            <div className="qt-form">
-              <div className="qt-field">
-                <label className="qt-label">报价单号</label>
-                <input
-                  className="qt-input"
-                  value={quotationNumber}
-                  onChange={(e) => setQuotationNumber(e.target.value)}
-                  placeholder="例如 S0159713"
-                />
-              </div>
-              <div className="qt-field">
-                <label className="qt-label">{t("精准Odoo地址")}</label>
-                <input
-                  className="qt-input qt-input-disabled"
-                  value="https://dukouserp.com/odoo/"
-                  disabled
-                  title="自定义 Odoo 地址（暂未开放）"
-                />
-              </div>
-              <div className="qt-field qt-field-grow">
-                <label className="qt-label">CSV 数据 (partModel, quantity)</label>
-                <textarea
-                  className="qt-textarea"
-                  value={csvText}
-                  onChange={(e) => setCsvText(e.target.value)}
-                  placeholder={'02B09F,3\n02B12,1\nB15,2'}
-                  rows={8}
-                />
-              </div>
-              <div className="qt-field">
-                <label className="qt-label-inline">
-                  <input
-                    type="checkbox"
-                    checked={writeMode === 'overwrite'}
-                    onChange={(e) => setWriteMode(e.target.checked ? 'overwrite' : 'append')}
-                  />
-                  清空原有行后重建（覆写模式）
-                </label>
-              </div>
-              <div className="qt-actions">
-                <button className="qt-submit-btn" onClick={handleSubmit} disabled={store.submitting}>
-                  {store.submitting ? '提交中...' : '提交任务'}
-                </button>
-                <button className="qt-clear-btn" onClick={handleClearDraft}>清空</button>
-              </div>
-              {statusMsg && <div className="qt-status-msg">{statusMsg}</div>}
+          {/* 已选中任务时显示返回按钮 */}
+          {store.selectedTaskId && (
+            <div style={{ marginBottom: '12px' }}>
+              <button className="qt-submit-btn" onClick={() => store.deselectTask()}>
+                &larr; {t('返回未选中')}
+              </button>
             </div>
+          )}
 
-            <div className="qt-preview">
-              <div className="qt-section-label">预览 ({previewLines.length} 行)</div>
-              <div className="qt-table-wrap">
-                <table className="qt-table">
-                  <thead>
-                    <tr>
-                      <th className="qt-th-sku">SKU</th>
-                      <th className="qt-th-qty">数量</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {previewLines.length === 0 && (
-                      <tr><td colSpan={2} className="qt-td-empty">—</td></tr>
-                    )}
-                    {previewLines.map((l, i) => (
-                      <tr key={i}>
-                        <td className="qt-td-sku">{l.partModel}</td>
-                        <td className="qt-td-qty">{l.quantity}</td>
+          {/* ====== 上部分：表单 + 预览（仅未选中任务时可见） ====== */}
+          {!store.selectedTaskId && (
+            <div className="qt-top-section">
+              <div className="qt-form">
+                <div className="qt-field">
+                  <label className="qt-label">{t('报价单号')}</label>
+                  <input
+                    className="qt-input"
+                    value={quotationNumber}
+                    onChange={(e) => setQuotationNumber(e.target.value)}
+                    placeholder="例如 S0159713"
+                  />
+                </div>
+                <div className="qt-field">
+                  <label className="qt-label">{t('精准Odoo地址')}</label>
+                  <input
+                    className="qt-input qt-input-disabled"
+                    value="https://dukouserp.com/odoo/"
+                    disabled
+                    title={t('Odoo地址提示')}
+                  />
+                </div>
+                <div className="qt-field qt-field-grow">
+                  <label className="qt-label">{t('CSV数据')}</label>
+                  <textarea
+                    className="qt-textarea"
+                    value={csvText}
+                    onChange={(e) => setCsvText(e.target.value)}
+                    placeholder={'02B09F,3\n02B12,1\nB15,2'}
+                    rows={8}
+                  />
+                </div>
+                <div className="qt-field">
+                  <label className="qt-label-inline">
+                    <input
+                      type="checkbox"
+                      checked={writeMode === 'overwrite'}
+                      onChange={(e) => setWriteMode(e.target.checked ? 'overwrite' : 'append')}
+                    />
+                    {t('覆写模式')}
+                  </label>
+                </div>
+                <div className="qt-actions">
+                  <button className="qt-submit-btn" onClick={handleSubmit} disabled={store.submitting}>
+                    {store.submitting ? t('提交中') : t('提交任务')}
+                  </button>
+                  <button className="qt-clear-btn" onClick={handleClearDraft}>{t('清空')}</button>
+                </div>
+                {statusMsg && <div className="qt-status-msg">{statusMsg}</div>}
+              </div>
+
+              <div className="qt-preview">
+                <div className="qt-section-label">{t('预览')} ({previewLines.length} {t('行')})</div>
+                <div className="qt-table-wrap">
+                  <table className="qt-table">
+                    <thead>
+                      <tr>
+                        <th className="qt-th-sku">{t('型号')}</th>
+                        <th className="qt-th-qty">{t('数量')}</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {previewLines.length === 0 && (
+                        <tr><td colSpan={2} className="qt-td-empty">&mdash;</td></tr>
+                      )}
+                      {previewLines.map((l, i) => (
+                        <tr key={i}>
+                          <td className="qt-td-sku">{l.partModel}</td>
+                          <td className="qt-td-qty">{l.quantity}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* ====== 中部分：确认卡片 / 公司 + 已有行信息 ====== */}
           {(showConfirm || showConfirmedInfo) && (
             <div className={`qt-mid-section`}>
               <div className="qt-section-label">
-                {showConfirm ? '等待确认' : '已确认'} — 公司: {confirmInfo?.company || '—'}
+                {showConfirm ? t('等待确认') : t('已确认')} &mdash; 公司: {confirmInfo?.company || '\u2014'}
               </div>
               <div className="qt-mid-grid">
                 <div className="qt-mid-col">
-                  <div className="qt-sub-label">Odoo 已有行</div>
+                  <div className="qt-sub-label">{t('Odoo已有行')}</div>
                   <div className="qt-table-wrap qt-table-sm">
                     <table className="qt-table">
                       <thead>
-                        <tr><th>型号</th><th>数量</th></tr>
+                        <tr><th>{t('型号')}</th><th>{t('数量')}</th></tr>
                       </thead>
                       <tbody>
                         {(!confirmInfo?.existingLines || confirmInfo.existingLines.length === 0) && (
-                          <tr><td colSpan={2} className="qt-td-empty">无已有行</td></tr>
+                          <tr><td colSpan={2} className="qt-td-empty">{t('无已有行')}</td></tr>
                         )}
                         {confirmInfo?.existingLines?.map((l, i) => (
                           <tr key={i}>
@@ -360,11 +403,11 @@ export default function QuotationTasksPage() {
                   </div>
                 </div>
                 <div className="qt-mid-col">
-                  <div className="qt-sub-label">即将写入行</div>
+                  <div className="qt-sub-label">{t('即将写入行')}</div>
                   <div className="qt-table-wrap qt-table-sm">
                     <table className="qt-table">
                       <thead>
-                        <tr><th>型号</th><th>数量</th></tr>
+                        <tr><th>{t('型号')}</th><th>{t('数量')}</th></tr>
                       </thead>
                       <tbody>
                         {confirmInfo?.inputLines?.map((l, i) => (
@@ -380,8 +423,8 @@ export default function QuotationTasksPage() {
               </div>
               {showConfirm && (
                 <div className="qt-confirm-actions">
-                  <button className="qt-submit-btn" onClick={() => handleConfirm('confirmed')}>确认</button>
-                  <button className="qt-reject-btn" onClick={() => handleConfirm('rejected')}>拒绝</button>
+                  <button className="qt-submit-btn" onClick={() => handleConfirm('confirmed')}>{t('确认')}</button>
+                  <button className="qt-reject-btn" onClick={() => handleConfirm('rejected')}>{t('拒绝')}</button>
                 </div>
               )}
             </div>
@@ -390,7 +433,7 @@ export default function QuotationTasksPage() {
           {/* ====== 下部分：执行日志 + 最终快照 ====== */}
           {store.sseLog.length > 0 && (
             <div className="qt-bot-section">
-              <div className="qt-section-label">执行日志</div>
+              <div className="qt-section-label">{t('执行日志')}</div>
               <div className="qt-log-list">
                 {store.sseLog.map((entry: QuotationLogEntry) => (
                   <div key={entry.id} className={`qt-log-entry qt-log-${entry.kind}`}>
@@ -407,11 +450,11 @@ export default function QuotationTasksPage() {
               {/* 最终快照表格 */}
               {store.finalSnapshot && store.finalSnapshot.length > 0 && (
                 <div className="qt-snapshot-section">
-                  <div className="qt-section-label">Odoo 页面最终行（以页面为准）</div>
+                  <div className="qt-section-label">{t('Odoo最终行')}</div>
                   <div className="qt-table-wrap">
                     <table className="qt-table">
                       <thead>
-                        <tr><th>型号</th><th>数量</th></tr>
+                        <tr><th>{t('型号')}</th><th>{t('数量')}</th></tr>
                       </thead>
                       <tbody>
                         {store.finalSnapshot.map((l: QuotationSnapshotLine, i: number) => (
@@ -429,18 +472,18 @@ export default function QuotationTasksPage() {
               {/* 失败行 CSV（终态 + 有失败行时显示，供复制回输入框补写） */}
               {selectedIsTerminal && failedLinesCsv && (
                 <div className="qt-failed-csv-section">
-                  <div className="qt-section-label">失败行（可直接复制回输入框补写）</div>
+                  <div className="qt-section-label">{t('失败行标题')}</div>
                   <pre className="qt-failed-csv-text">{failedLinesCsv}</pre>
                   <div className="qt-failed-csv-actions">
-                    <button className="qt-submit-btn" onClick={handleCopyFailed}>复制到剪贴板</button>
-                    <button className="qt-clear-btn" onClick={handleFillFailed}>填入输入框</button>
+                    <button className="qt-submit-btn" onClick={handleCopyFailed}>{t('复制到剪贴板')}</button>
+                    <button className="qt-clear-btn" onClick={handleFillFailed}>{t('填入输入框')}</button>
                   </div>
                 </div>
               )}
 
               {/* 任务错误（终态 + 有错误时显示） */}
               {selectedIsTerminal && store.selectedTaskDetail?.taskError && (
-                <div className="qt-task-error">错误: {store.selectedTaskDetail.taskError}</div>
+                <div className="qt-task-error">{t('错误')}: {store.selectedTaskDetail.taskError}</div>
               )}
             </div>
           )}

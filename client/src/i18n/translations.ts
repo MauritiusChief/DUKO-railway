@@ -948,4 +948,36 @@ export const messages = {
     zh: '型号',
     en: 'Model',
   },
+  前往报价任务: {
+    zh: '报价任务',
+    en: 'Quotation Tasks',
+  },
+  队列排队: {
+    zh: '队列: {n} 排队',
+    en: 'Queue: {n} queued',
+  },
+  复制到剪贴板: {
+    zh: '复制到剪贴板',
+    en: 'Copy to clipboard',
+  },
+  填入输入框: {
+    zh: '填入输入框',
+    en: 'Fill into input',
+  },
+  失败行已填入输入框: {
+    zh: '失败行已填入输入框',
+    en: 'Failed lines filled into input',
+  },
+  失败行标题: {
+    zh: '失败行（可直接复制回输入框补写）',
+    en: 'Failed lines (can copy back to input for retry)',
+  },
+  Odoo地址提示: {
+    zh: '自定义 Odoo 地址（暂未开放）',
+    en: 'Custom Odoo URL (not available yet)',
+  },
+  返回未选中: {
+    zh: '返回',
+    en: 'Back',
+  },
 } as const;

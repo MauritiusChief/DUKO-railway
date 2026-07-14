@@ -81,6 +81,7 @@ interface QuotationStore {
 
   initGlobalSSE: () => void
   cleanupSSE: () => void
+  deselectTask: () => void
   subscribeTaskSSE: (taskId: number) => void
   unsubscribeTaskSSE: () => void
 
@@ -151,6 +152,19 @@ export const useQuotationStore = create<QuotationStore>((set, get) => ({
     }
 
     set({ detailLoading: false })
+  },
+
+  /** 取消选中任务，回到未选中状态 */
+  deselectTask: () => {
+    get().unsubscribeTaskSSE()
+    set({
+      selectedTaskId: null,
+      selectedTaskDetail: null,
+      sseLog: [],
+      confirmRequest: null,
+      finalSnapshot: null,
+      detailLoading: false,
+    })
   },
 
   /** 刷新当前选中任务的详情，合并 sseLog（不清空） */

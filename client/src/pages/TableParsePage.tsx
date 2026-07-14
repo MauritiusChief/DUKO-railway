@@ -475,6 +475,9 @@ export default function TableParsePage() {
             value={lang}
             onChange={setLang}
           />
+          <button className="tp-submit-btn tp-download-btn" onClick={() => navigate('/quotation-tasks')}>
+            {t('前往报价任务')}
+          </button>
           <button className="tp-submit-btn tp-download-btn" onClick={handleDownloadScript}>
             {t('下载脚本')}
           </button>
