@@ -50,6 +50,12 @@ export const ACCESSORY_SHAPE_TYPE_CODES = [
   "GD",
 ];
 
+// 换色配件：在 /generate-products 步骤中，将指定颜色的配件重映射到参考颜色
+// 29 (美式) 使用 02 的配件，32 (欧式) 使用 12 的配件
+export const NONE_EURO_COLOR_MAPPED_SHAPE_TYPE_CODES = new Set(['CM', 'ACM', 'CCM', 'OCM', 'PNL', 'SK', 'SM', 'TK', 'BM']);
+export const EURO_COLOR_MAPPED_SHAPE_TYPE_CODES = new Set(['CM', 'ACM', 'CCM', 'OCM', 'SM', 'TK', 'BM']);
+export const ACCESSORY_COLOR_REMAP: Record<string, string> = { '29': '02', '32': '12' };
+
 // Shape types whose color field can be N/A (not tied to any specific color/finish)
 export const SHAPE_TYPES_COLOR_NA = new Set([
   "GD",  // Glass Doors — no color
