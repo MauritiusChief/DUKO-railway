@@ -134,3 +134,41 @@ export const debugToolSchema = z.object({
 export const layoutGenerateListSchema = z.object({
   layout: z.object({}).passthrough(),
 });
+
+// ==================================================================
+//  报价任务 (Quotation Tasks)
+// ==================================================================
+
+/** 报价任务写入模式 */
+export const quotationWriteModeSchema = z.enum(['overwrite', 'append']);
+
+/** 报价任务行状态 */
+export const quotationLineStatusSchema = z.enum(['pending', 'success', 'failed']);
+
+/** 报价任务状态 */
+export const quotationTaskStatusSchema = z.enum([
+  'queued',
+  'running',
+  'completed',
+  'partial_failed',
+  'failed',
+  'cancelled',
+]);
+
+/** POST /api/quotation-tasks —— 创建报价任务 */
+export const createQuotationTaskSchema = z.object({
+  quotationNumber: z.string().optional().default(''),
+  odooUrl: z.string().optional().default(''),
+  writeMode: quotationWriteModeSchema,
+  lines: z
+    .array(
+      z.object({
+        partModel: z.string().min(1, '产品型号不能为空'),
+        quantity: z.number().int().min(1, '数量至少为 1'),
+      }),
+    )
+    .min(1, '至少需要一行产品'),
+}).refine(
+  (data) => data.quotationNumber.trim() !== '' || data.odooUrl.trim() !== '',
+  { message: '报价单号与精准Odoo地址至少填写一项' },
+);

@@ -81,6 +81,9 @@ export const config = {
 
   /** 数据目录（SQLite / LanceDB / CSV）—— DB_DIR 环境变量优先，否则根据运行上下文自动选择 */
   dbDir: getEnv('DB_DIR', resolveDataDir()),
+
+  /** auto worker 鉴权 token —— 与 auto/.env 中的 AUTO_WORKER_TOKEN 保持一致 */
+  autoWorkerToken: getEnv('AUTO_WORKER_TOKEN'),
 } as const;
 
 export type AppConfig = typeof config;

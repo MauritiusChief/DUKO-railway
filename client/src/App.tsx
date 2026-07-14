@@ -6,6 +6,7 @@ import LoginPage from './pages/LoginPage';
 import HistoryPage from './pages/HistoryPage';
 import AllHistoryPage from './pages/AllHistoryPage';
 import TracePage from './pages/TracePage';
+import QuotationTasksPage from './pages/QuotationTasksPage';
 import AuthGuard from './components/AuthGuard';
 import AdminGuard from './components/AdminGuard';
 
@@ -26,6 +27,14 @@ export default function App() {
         element={
           <AuthGuard>
             <HistoryPage />
+          </AuthGuard>
+        }
+      />
+      <Route
+        path="/quotation-tasks"
+        element={
+          <AuthGuard>
+            <QuotationTasksPage />
           </AuthGuard>
         }
       />

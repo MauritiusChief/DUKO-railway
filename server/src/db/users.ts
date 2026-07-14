@@ -125,6 +125,38 @@ export function initUserDB(dbDir: string): void {
     );
     CREATE INDEX IF NOT EXISTS idx_client_received_conversation ON client_received(conversation_id, message_index, id);
     CREATE INDEX IF NOT EXISTS idx_client_received_created ON client_received(created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS quotation_tasks (
+      id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id            INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      username           TEXT    NOT NULL,
+      quotation_number   TEXT    NOT NULL,
+      write_mode         TEXT    NOT NULL CHECK(write_mode IN ('overwrite','append')),
+      status             TEXT    NOT NULL DEFAULT 'queued' CHECK(status IN ('queued','running','completed','partial_failed','failed','cancelled')),
+      odoo_url           TEXT,
+      task_error         TEXT,
+      retry_count        INTEGER NOT NULL DEFAULT 0,
+      last_acked_attempt INTEGER NOT NULL DEFAULT 0,
+      created_at         TEXT    NOT NULL DEFAULT (datetime('now')),
+      updated_at         TEXT    NOT NULL DEFAULT (datetime('now')),
+      started_at         TEXT,
+      completed_at         TEXT,
+      pending_confirmation TEXT,
+      final_lines_snapshot TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_quotation_tasks_user ON quotation_tasks(user_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_quotation_tasks_status ON quotation_tasks(status, created_at ASC);
+
+    CREATE TABLE IF NOT EXISTS quotation_task_lines (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      task_id    INTEGER NOT NULL REFERENCES quotation_tasks(id) ON DELETE CASCADE,
+      line_no    INTEGER NOT NULL,
+      part_model TEXT    NOT NULL,
+      quantity   INTEGER NOT NULL,
+      status     TEXT    NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','success','failed')),
+      error      TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_quotation_task_lines_task ON quotation_task_lines(task_id);
   `);
 }
 
