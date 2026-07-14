@@ -188,6 +188,7 @@ function handleAccepted(conn: WorkerConnection, ws: WebSocket, msg: Extract<Inbo
   // 全局 SSE：Agent 状态变化（activeTask 改变）+ 任务 owner 列表更新
   broadcastAgentStatus();
   broadcastTaskUpdateToOwner(taskId);
+  broadcastQueueUpdate();
 }
 
 function handleLineResult(ws: WebSocket, msg: Extract<InboundMessage, { type: 'line-result' }>): void {
@@ -248,9 +249,10 @@ function handleTaskCompleted(ws: WebSocket, msg: Extract<InboundMessage, { type:
 
   // 任务结束后 worker 会发送 ready，这里不主动派发
 
-  // 全局 SSE：Agent activeTask 清空 + 任务 owner 列表更新 + 队列无变化（但 active 槽释放）
+  // 全局 SSE：Agent activeTask 清空 + 任务 owner 列表更新
   broadcastAgentStatus();
   broadcastTaskUpdateToOwner(taskId);
+  broadcastQueueUpdate();
 }
 
 function handleTaskFailed(ws: WebSocket, msg: Extract<InboundMessage, { type: 'task-failed' }>): void {
@@ -284,6 +286,7 @@ function handleTaskFailed(ws: WebSocket, msg: Extract<InboundMessage, { type: 't
   // 全局 SSE：Agent activeTask 清空 + 任务 owner 列表更新
   broadcastAgentStatus();
   broadcastTaskUpdateToOwner(taskId);
+  broadcastQueueUpdate();
 }
 
 function handleHeartbeat(conn: WorkerConnection, ws: WebSocket): void {
