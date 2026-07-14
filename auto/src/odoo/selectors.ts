@@ -17,8 +17,14 @@
 /** 搜索框 */
 export const SALES_SEARCH_INPUT = 'input.o_searchview_input'
 
-/** "My Quotations" facet 移除按钮 */
-export const FACET_REMOVE_BUTTON = '.o_searchview_facet .o_facet_remove'
+/** facet 容器（每个筛选项一个） */
+export const SALES_FACET = '.o_searchview_facet'
+
+/** facet 内的可见标签文本（如 "My Quotations"、搜索词等） */
+export const SALES_FACET_VALUE = '.o_facet_value'
+
+/** facet 移除按钮（位于 facet 容器内） */
+export const FACET_REMOVE_BUTTON = '.o_facet_remove'
 
 /** 列表容器 */
 export const SALES_LIST_TABLE = 'table.o_list_table'

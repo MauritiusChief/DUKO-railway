@@ -14,7 +14,6 @@ import { useQuotationStore, type QuotationLogEntry } from '../stores/quotationSt
 import type { QuotationTaskSummary, QuotationSnapshotLine } from '../types'
 import './QuotationTasksPage.css'
 import { useI18n } from '../i18n/context'
-
 const STATUS_LABELS: Record<string, { zh: string; cls: string }> = {
   queued: { zh: '排队', cls: 'qt-badge-gray' },
   running: { zh: '执行中', cls: 'qt-badge-blue' },
@@ -62,14 +61,13 @@ export default function QuotationTasksPage() {
 
   const [statusMsg, setStatusMsg] = useState('')
   const [confirmed, setConfirmed] = useState(false)
-  const sseAbortRef = useRef<AbortController | null>(null)
   const logEndRef = useRef<HTMLDivElement>(null)
 
-  // 初始化
+  // 初始化：启动全局 SSE + 加载草稿；卸载时清理
   useEffect(() => {
-    store.fetchTasks()
-    store.fetchActiveStatus()
+    store.initGlobalSSE()
     store.loadDraft()
+    return () => store.cleanupSSE()
   }, [])
 
   // 恢复草稿
@@ -80,18 +78,6 @@ export default function QuotationTasksPage() {
       setWriteMode(store.draft.writeMode || 'append')
     }
   }, [store.draft])
-
-  // SSE 管理
-  useEffect(() => {
-    // 当选中任务且状态为 running 时建立 SSE
-    if (store.selectedTaskId && store.selectedTaskDetail?.status === 'running') {
-      sseAbortRef.current?.abort()
-      sseAbortRef.current = store.subscribeSSE(store.selectedTaskId)
-    }
-    return () => {
-      sseAbortRef.current?.abort()
-    }
-  }, [store.selectedTaskId, store.selectedTaskDetail?.status])
 
   // 日志自动滚动
   useEffect(() => {
@@ -185,6 +171,11 @@ export default function QuotationTasksPage() {
           {store.activeSummary?.activeTask && (
             <span className="qt-active-task">
               当前: {store.activeSummary.activeTask.quotationNumber} ({store.activeSummary.activeTask.username})
+            </span>
+          )}
+          {store.queueSummary && store.queueSummary.queuedCount > 0 && (
+            <span className="qt-queue-status" title={store.queueSummary.tasks.map((t) => `${t.quotationNumber} (${t.username})`).join(', ')}>
+              队列: {store.queueSummary.queuedCount} 排队
             </span>
           )}
         </div>
@@ -318,7 +309,7 @@ export default function QuotationTasksPage() {
 
           {/* ====== 中部分：确认卡片 / 公司 + 已有行信息 ====== */}
           {(showConfirm || showConfirmedInfo) && (
-            <div className={`qt-mid-section ${showConfirm ? 'qt-confirm-pending' : ''}`}>
+            <div className={`qt-mid-section`}>
               <div className="qt-section-label">
                 {showConfirm ? '等待确认' : '已确认'} — 公司: {confirmInfo?.company || '—'}
               </div>
@@ -365,7 +356,7 @@ export default function QuotationTasksPage() {
               </div>
               {showConfirm && (
                 <div className="qt-confirm-actions">
-                  <button className="tp-submit-btn" onClick={() => handleConfirm('confirmed')}>确认</button>
+                  <button className="qt-submit-btn" onClick={() => handleConfirm('confirmed')}>确认</button>
                   <button className="qt-reject-btn" onClick={() => handleConfirm('rejected')}>拒绝</button>
                 </div>
               )}

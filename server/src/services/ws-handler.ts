@@ -45,6 +45,11 @@ import {
 import { setNotifyTaskQueued } from '../routes/quotation.js';
 import { broadcastQuotationEvent } from '../routes/quotation.js';
 import { setAutoOnline, setActiveTask } from './ws-state.js';
+import {
+  broadcastAgentStatus,
+  broadcastQueueUpdate,
+  broadcastTaskUpdateToOwner,
+} from './global-sse-broadcast.js';
 
 // ==================================================================
 //  Worker 连接状态
@@ -147,6 +152,9 @@ function handleHello(conn: WorkerConnection, ws: WebSocket, msg: Extract<Inbound
   setAutoOnline(true);
   console.log('[ws] auto worker 已认证并连接');
 
+  // 通知全局 SSE 订阅者 Agent 已上线
+  broadcastAgentStatus();
+
   // 注意：不在此处派发任务。等 auto 主动发送 ready 后再派发。
   // auto 发送 ready 的时机：连接后立即发送，以及每个任务结束后发送。
 }
@@ -176,6 +184,10 @@ function handleAccepted(conn: WorkerConnection, ws: WebSocket, msg: Extract<Inbo
     type: 'task-status',
     data: { taskId, status: 'running' },
   });
+
+  // 全局 SSE：Agent 状态变化（activeTask 改变）+ 任务 owner 列表更新
+  broadcastAgentStatus();
+  broadcastTaskUpdateToOwner(taskId);
 }
 
 function handleLineResult(ws: WebSocket, msg: Extract<InboundMessage, { type: 'line-result' }>): void {
@@ -235,6 +247,10 @@ function handleTaskCompleted(ws: WebSocket, msg: Extract<InboundMessage, { type:
   });
 
   // 任务结束后 worker 会发送 ready，这里不主动派发
+
+  // 全局 SSE：Agent activeTask 清空 + 任务 owner 列表更新 + 队列无变化（但 active 槽释放）
+  broadcastAgentStatus();
+  broadcastTaskUpdateToOwner(taskId);
 }
 
 function handleTaskFailed(ws: WebSocket, msg: Extract<InboundMessage, { type: 'task-failed' }>): void {
@@ -264,6 +280,10 @@ function handleTaskFailed(ws: WebSocket, msg: Extract<InboundMessage, { type: 't
     type: 'task-completed',
     data: { taskId, status: 'failed', error },
   });
+
+  // 全局 SSE：Agent activeTask 清空 + 任务 owner 列表更新
+  broadcastAgentStatus();
+  broadcastTaskUpdateToOwner(taskId);
 }
 
 function handleHeartbeat(conn: WorkerConnection, ws: WebSocket): void {
@@ -379,6 +399,14 @@ function handleWorkerDisconnect(reason: string): void {
       data: { taskId, status },
     });
     console.log(`[ws] 任务 #${taskId} 回收为 ${status}`);
+    // 全局 SSE：通知该任务 owner 其任务状态变化
+    broadcastTaskUpdateToOwner(taskId);
+  }
+
+  // 全局 SSE：Agent 离线 + 队列可能因回收而变化
+  broadcastAgentStatus();
+  if (runningIds.length > 0) {
+    broadcastQueueUpdate();
   }
 
   // 关闭底层连接（若尚未关闭）

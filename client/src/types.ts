@@ -358,6 +358,17 @@ export interface ActiveTaskSummaryResponse {
   }
 }
 
+/** 全局排队队列摘要（跨用户，公开） */
+export interface QueueSummary {
+  queuedCount: number
+  tasks: {
+    taskId: number
+    quotationNumber: string
+    username: string
+    createdAt: string
+  }[]
+}
+
 /** 草稿（localStorage 持久化） */
 export interface QuotationDraft {
   quotationNumber: string

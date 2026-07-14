@@ -1,20 +1,34 @@
 /**
  * 报价任务 Zustand Store
  *
- * 管理任务列表、当前选中任务详情、active 状态、草稿、SSE 实时日志。
+ * 管理任务列表、当前选中任务详情、active 状态、排队队列、草稿、SSE 实时日志。
+ *
+ * SSE 分两路：
+ *  - 全局 SSE（/api/quotation-tasks/events）：Agent 在线状态、任务列表、排队队列
+ *  - per-task SSE（/api/quotation-tasks/:id/events）：选中任务的逐行日志、确认握手、完成
+ *
+ * 两路均使用 ReconnectingSSE（受控重连 + 指数退避）。
  */
 
 import { create } from 'zustand'
 import { fetchWithAuth } from '../lib/fetchWithAuth'
+import { ReconnectingSSE } from '../lib/sseStream'
 import type {
   QuotationTaskSummary,
   QuotationTaskDetail,
   ActiveTaskSummaryResponse,
   QuotationDraft,
   QuotationSnapshotLine,
+  QueueSummary,
 } from '../types'
 
 const DRAFT_KEY = 'duko_quotation_draft'
+
+const TERMINAL_STATUSES = ['completed', 'partial_failed', 'failed', 'cancelled']
+
+// 模块级 SSE 实例（非响应式，避免触发不必要的渲染）
+let globalSSE: ReconnectingSSE | null = null
+let taskSSE: ReconnectingSSE | null = null
 
 /** SSE 日志条目 */
 export interface QuotationLogEntry {
@@ -25,11 +39,17 @@ export interface QuotationLogEntry {
   timestamp: number
 }
 
+/** Zustand set 的完整签名（支持对象与函数两种形式） */
+type StoreSet = (
+  partial: Partial<QuotationStore> | ((state: QuotationStore) => Partial<QuotationStore>),
+) => void
+
 interface QuotationStore {
   tasks: QuotationTaskSummary[]
   selectedTaskId: number | null
   selectedTaskDetail: QuotationTaskDetail | null
   activeSummary: ActiveTaskSummaryResponse | null
+  queueSummary: QueueSummary | null
   draft: QuotationDraft | null
 
   /** SSE 实时日志（当前观看任务） */
@@ -52,12 +72,18 @@ interface QuotationStore {
   submitting: boolean
 
   fetchTasks: () => Promise<void>
+  fetchActiveStatus: () => Promise<void>
   selectTask: (taskId: number) => Promise<void>
+  refreshSelectedDetail: () => Promise<QuotationTaskDetail | null>
   createTask: (quotationNumber: string, writeMode: 'overwrite' | 'append', lines: { partModel: string; quantity: number }[]) => Promise<number | null>
   cancelTask: (taskId: number) => Promise<boolean>
   confirmTask: (taskId: number, decision: 'confirmed' | 'rejected') => Promise<boolean>
-  fetchActiveStatus: () => Promise<void>
-  subscribeSSE: (taskId: number) => AbortController
+
+  initGlobalSSE: () => void
+  cleanupSSE: () => void
+  subscribeTaskSSE: (taskId: number) => void
+  unsubscribeTaskSSE: () => void
+
   loadDraft: () => void
   saveDraft: (partial: Partial<QuotationDraft>) => void
   clearDraft: () => void
@@ -70,6 +96,7 @@ export const useQuotationStore = create<QuotationStore>((set, get) => ({
   selectedTaskId: null,
   selectedTaskDetail: null,
   activeSummary: null,
+  queueSummary: null,
   draft: null,
   sseLog: [],
   confirmRequest: null,
@@ -91,56 +118,54 @@ export const useQuotationStore = create<QuotationStore>((set, get) => ({
     }
   },
 
+  fetchActiveStatus: async () => {
+    try {
+      const res = await fetchWithAuth('/api/quotation-tasks/active')
+      if (res.ok) {
+        const data: ActiveTaskSummaryResponse = await res.json()
+        set({ activeSummary: data })
+      }
+    } catch { /* ignore */ }
+  },
+
   selectTask: async (taskId: number) => {
-    set({ selectedTaskId: taskId, detailLoading: true, selectedTaskDetail: null, sseLog: [], confirmRequest: null, finalSnapshot: null })
+    const isSwitch = get().selectedTaskId !== taskId
+    // 仅在切换到不同任务时清空实时日志/确认/快照
+    if (isSwitch) {
+      set({
+        sseLog: [],
+        confirmRequest: null,
+        finalSnapshot: null,
+        selectedTaskDetail: null,
+      })
+    }
+    set({ selectedTaskId: taskId, detailLoading: true })
+
+    const detail = await get().refreshSelectedDetail()
+
+    // 非终态任务（queued/running）订阅 per-task SSE；终态任务不维持 SSE
+    if (detail && (detail.status === 'queued' || detail.status === 'running')) {
+      get().subscribeTaskSSE(taskId)
+    } else {
+      get().unsubscribeTaskSSE()
+    }
+
+    set({ detailLoading: false })
+  },
+
+  /** 刷新当前选中任务的详情，合并 sseLog（不清空） */
+  refreshSelectedDetail: async () => {
+    const taskId = get().selectedTaskId
+    if (taskId == null) return null
     try {
       const res = await fetchWithAuth(`/api/quotation-tasks/${taskId}`)
       if (res.ok) {
         const detail: QuotationTaskDetail = await res.json()
-        set({ selectedTaskDetail: detail })
-        // 如果任务是 running 且有 pendingConfirmation，恢复确认卡片
-        if (detail.status === 'running' && detail.pendingConfirmation) {
-          try {
-            const pending = JSON.parse(detail.pendingConfirmation)
-            set({
-              confirmRequest: {
-                taskId: detail.id,
-                company: pending.company ?? '',
-                quotationNumber: pending.quotationNumber ?? '',
-                existingLines: pending.existingLines ?? [],
-                inputLines: pending.inputLines ?? [],
-              },
-            })
-          } catch { /* ignore */ }
-        }
-        // 恢复最终快照
-        if (detail.finalLinesSnapshot) {
-          try {
-            const snapshot = JSON.parse(detail.finalLinesSnapshot)
-            set({ finalSnapshot: snapshot })
-          } catch { /* ignore */ }
-        }
-        // 恢复已有行结果为日志
-        if (detail.lines && detail.lines.length > 0) {
-          const logEntries: QuotationLogEntry[] = detail.lines
-            .filter((l) => l.status !== 'pending')
-            .map((l) => ({
-              id: `rest-${l.lineNo}`,
-              lineNo: l.lineNo,
-              kind: l.status === 'success' ? 'line-success' : 'line-failed',
-              message: l.status === 'success'
-                ? `#${l.lineNo} ${l.partModel} x${l.quantity}`
-                : `#${l.lineNo} ${l.partModel} x${l.quantity} — ${l.error || '失败'}`,
-              timestamp: Date.now(),
-            }))
-          if (logEntries.length > 0) {
-            set({ sseLog: logEntries })
-          }
-        }
+        mergeDetail(detail, set, get)
+        return detail
       }
-    } finally {
-      set({ detailLoading: false })
-    }
+    } catch { /* ignore */ }
+    return null
   },
 
   createTask: async (quotationNumber, writeMode, lines) => {
@@ -153,7 +178,7 @@ export const useQuotationStore = create<QuotationStore>((set, get) => ({
       })
       if (res.ok) {
         const data: QuotationTaskSummary = await res.json()
-        get().fetchTasks()
+        // 全局 SSE 会推送 task-update + queue-update，这里无需手动 fetchTasks
         return data.id
       }
       return null
@@ -166,10 +191,10 @@ export const useQuotationStore = create<QuotationStore>((set, get) => ({
     try {
       const res = await fetchWithAuth(`/api/quotation-tasks/${taskId}/cancel`, { method: 'POST' })
       if (res.ok) {
-        get().fetchTasks()
+        // 全局 SSE 会推送更新；如选中该任务则刷新详情
         const detail = get().selectedTaskDetail
         if (detail && detail.id === taskId) {
-          get().selectTask(taskId)
+          get().refreshSelectedDetail()
         }
         return true
       }
@@ -190,138 +215,56 @@ export const useQuotationStore = create<QuotationStore>((set, get) => ({
     }
   },
 
-  fetchActiveStatus: async () => {
-    try {
-      const res = await fetchWithAuth('/api/quotation-tasks/active')
-      if (res.ok) {
-        const data: ActiveTaskSummaryResponse = await res.json()
-        set({ activeSummary: data })
-      }
-    } catch { /* ignore */ }
+  // ---------- SSE 生命周期 ----------
+
+  initGlobalSSE: () => {
+    // 首次加载做一次轻量 REST 拉取，SSE 随后接管实时更新
+    get().fetchTasks()
+    get().fetchActiveStatus()
+
+    if (globalSSE) return
+    globalSSE = new ReconnectingSSE('/api/quotation-tasks/events', {
+      onEvent: (type, data) => handleGlobalSSEEvent(type, data, set, get),
+      shouldReconnect: (status) => status !== 401 && status !== 403,
+      onStatus: (s) => console.log('[qt-global-sse]', s),
+    })
+    globalSSE.start()
   },
 
-  subscribeSSE: (taskId) => {
-    const controller = new AbortController()
-    const url = `/api/quotation-tasks/${taskId}/events`
-
-    fetchWithAuth(url, { signal: controller.signal }).then(async (res) => {
-      if (!res.ok || !res.body) return
-      const reader = res.body.getReader()
-      const decoder = new TextDecoder()
-      let buffer = ''
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-
-        buffer += decoder.decode(value, { stream: true })
-        const parts = buffer.split('\n\n')
-        buffer = parts.pop() ?? ''
-
-        for (const part of parts) {
-          if (!part.trim()) continue
-          const lines = part.split('\n')
-          let eventType = ''
-          let dataStr = ''
-
-          for (const line of lines) {
-            if (line.startsWith('event: ')) {
-              eventType = line.slice(7).trim()
-            } else if (line.startsWith('data: ')) {
-              dataStr = line.slice(6)
-            }
-          }
-
-          if (!eventType || !dataStr) continue
-
-          try {
-            const data = JSON.parse(dataStr)
-            processSSEvent(get, set, eventType, data)
-          } catch { /* ignore malformed event */ }
-        }
-      }
-    }).catch(() => { /* connection lost */ })
-
-    return controller
+  cleanupSSE: () => {
+    globalSSE?.stop()
+    globalSSE = null
+    taskSSE?.stop()
+    taskSSE = null
   },
 
-  handleSSEEvent: (type: string, data: any) => {
-    const state = get()
-    switch (type) {
-      case 'task-status':
-        if (state.selectedTaskDetail && data.taskId === state.selectedTaskDetail.id) {
-          set({
-            selectedTaskDetail: {
-              ...state.selectedTaskDetail,
-              status: data.status,
-            },
-          })
-        }
-        get().fetchTasks()
-        break
-
-      case 'confirm-request':
-        if (data.taskId === state.selectedTaskId) {
-          set({
-            confirmRequest: {
-              taskId: data.taskId,
-              company: data.company ?? '',
-              quotationNumber: data.quotationNumber ?? '',
-              existingLines: data.existingLines ?? [],
-              inputLines: data.inputLines ?? [],
-            },
-          })
-        }
-        break
-
-      case 'confirm-response':
-        // 用户操作后 server 回执，可用于 UI 反馈
-        break
-
-      case 'line-result':
-        if (data.taskId === state.selectedTaskId) {
-          const entry: QuotationLogEntry = {
-            id: `sse-${data.lineNo}-${Date.now()}`,
-            lineNo: data.lineNo,
-            kind: data.status === 'success' ? 'line-success' : 'line-failed',
-            message: data.status === 'success'
-              ? `#${data.lineNo} 写入成功`
-              : `#${data.lineNo} 写入失败 — ${data.error || '未知错误'}`,
-            timestamp: Date.now(),
-          }
-          set({ sseLog: [...state.sseLog, entry] })
-        }
-        break
-
-      case 'task-completed':
-        if (data.taskId === state.selectedTaskId) {
-          const doneEntry: QuotationLogEntry = {
-            id: `done-${Date.now()}`,
-            kind: 'task-done',
-            message: data.status === 'completed'
-              ? '全部完成'
-              : data.status === 'partial_failed'
-                ? '部分行写入失败'
-                : `任务失败${data.error ? `：${data.error}` : ''}`,
-            timestamp: Date.now(),
-          }
-          set({ sseLog: [...state.sseLog, doneEntry] })
-
-          if (data.finalSnapshot) {
-            set({ finalSnapshot: data.finalSnapshot })
-          }
-
-          // 刷新任务详情
-          get().selectTask(data.taskId)
-          get().fetchTasks()
-        }
-        break
-
-      case 'snapshot':
-        // 初始快照：不做额外处理（selectTask 已处理完）
-        break
-    }
+  subscribeTaskSSE: (taskId: number) => {
+    // 切换任务时先停掉旧连接，避免旧任务事件污染新任务 store
+    taskSSE?.stop()
+    taskSSE = new ReconnectingSSE(`/api/quotation-tasks/${taskId}/events`, {
+      onEvent: (type, data) => {
+        // 丢弃旧任务残留事件
+        if (data.taskId !== undefined && data.taskId !== get().selectedTaskId) return
+        handleTaskSSEEvent(type, data, set, get)
+      },
+      shouldReconnect: (status) => {
+        if (status === 401 || status === 403) return false
+        // 终态任务不重连
+        const d = get().selectedTaskDetail
+        if (d && TERMINAL_STATUSES.includes(d.status)) return false
+        return true
+      },
+      onStatus: (s) => console.log(`[qt-task-sse #${taskId}]`, s),
+    })
+    taskSSE.start()
   },
+
+  unsubscribeTaskSSE: () => {
+    taskSSE?.stop()
+    taskSSE = null
+  },
+
+  // ---------- 草稿 ----------
 
   loadDraft: () => {
     try {
@@ -364,31 +307,83 @@ export const useQuotationStore = create<QuotationStore>((set, get) => ({
 }))
 
 // ==================================================================
-//  SSE 事件处理（独立函数，避免 Zustand create 闭包内的类型问题）
+//  全局 SSE 事件处理
 // ==================================================================
 
-function processSSEvent(
-  get: () => QuotationStore,
-  set: (partial: Partial<QuotationStore>) => void,
+function handleGlobalSSEEvent(
   type: string,
   data: any,
+  set: StoreSet,
+  get: () => QuotationStore,
 ): void {
-  const state = get()
   switch (type) {
-    case 'task-status':
-      if (state.selectedTaskDetail && data.taskId === state.selectedTaskDetail.id) {
-        set({
-          selectedTaskDetail: {
-            ...state.selectedTaskDetail,
-            status: data.status,
-          },
-        })
-      }
-      get().fetchTasks()
+    case 'agent-status':
+      set({ activeSummary: data as ActiveTaskSummaryResponse })
       break
 
-    case 'confirm-request':
-      if (data.taskId === state.selectedTaskId) {
+    case 'my-tasks':
+      set({ tasks: data.tasks as QuotationTaskSummary[] })
+      break
+
+    case 'task-update': {
+      const updated: QuotationTaskSummary = data.task
+      set((s) => {
+        const idx = s.tasks.findIndex((t) => t.id === updated.id)
+        if (idx >= 0) {
+          const tasks = [...s.tasks]
+          tasks[idx] = updated
+          return { tasks }
+        }
+        // 新任务插入到列表头部（按 created_at DESC）
+        return { tasks: [updated, ...s.tasks] }
+      })
+      break
+    }
+
+    case 'queue-update':
+      set({ queueSummary: data as QueueSummary })
+      break
+  }
+}
+
+// ==================================================================
+//  per-task SSE 事件处理
+// ==================================================================
+
+function handleTaskSSEEvent(
+  type: string,
+  data: any,
+  set: StoreSet,
+  get: () => QuotationStore,
+): void {
+  switch (type) {
+    case 'snapshot': {
+      // 更新状态，并通过 REST 刷新完整详情（含 partModel 等 snapshot 缺失的字段）
+      const state = get()
+      if (state.selectedTaskDetail) {
+        set({
+          selectedTaskDetail: { ...state.selectedTaskDetail, status: data.status },
+        })
+      }
+      get().refreshSelectedDetail()
+      break
+    }
+
+    case 'task-status': {
+      const state = get()
+      if (state.selectedTaskDetail && data.taskId === state.selectedTaskId) {
+        set({
+          selectedTaskDetail: { ...state.selectedTaskDetail, status: data.status },
+        })
+      }
+      if (TERMINAL_STATUSES.includes(data.status)) {
+        get().unsubscribeTaskSSE()
+      }
+      break
+    }
+
+    case 'confirm-request': {
+      if (data.taskId === get().selectedTaskId) {
         set({
           confirmRequest: {
             taskId: data.taskId,
@@ -400,12 +395,13 @@ function processSSEvent(
         })
       }
       break
+    }
 
-    case 'confirm-response':
-      break
-
-    case 'line-result':
-      if (data.taskId === state.selectedTaskId) {
+    case 'line-result': {
+      if (data.taskId !== get().selectedTaskId) break
+      set((s) => {
+        // 按 lineNo 去重
+        if (s.sseLog.some((e) => e.lineNo === data.lineNo)) return {}
         const entry: QuotationLogEntry = {
           id: `sse-${data.lineNo}-${Date.now()}`,
           lineNo: data.lineNo,
@@ -415,12 +411,16 @@ function processSSEvent(
             : `#${data.lineNo} 写入失败 — ${data.error || '未知错误'}`,
           timestamp: Date.now(),
         }
-        set({ sseLog: [...state.sseLog, entry] })
-      }
+        return { sseLog: [...s.sseLog, entry] }
+      })
       break
+    }
 
-    case 'task-completed':
-      if (data.taskId === state.selectedTaskId) {
+    case 'task-completed': {
+      if (data.taskId !== get().selectedTaskId) break
+      // 追加完成提示（按 kind 去重，避免重复）
+      set((s) => {
+        if (s.sseLog.some((e) => e.kind === 'task-done')) return {}
         const doneEntry: QuotationLogEntry = {
           id: `done-${Date.now()}`,
           kind: 'task-done',
@@ -431,18 +431,79 @@ function processSSEvent(
               : `任务失败${data.error ? `：${data.error}` : ''}`,
           timestamp: Date.now(),
         }
-        set({ sseLog: [...state.sseLog, doneEntry] })
+        return { sseLog: [...s.sseLog, doneEntry] }
+      })
 
-        if (data.finalSnapshot) {
-          set({ finalSnapshot: data.finalSnapshot })
-        }
-
-        get().selectTask(data.taskId)
-        get().fetchTasks()
+      if (data.finalSnapshot) {
+        set({ finalSnapshot: data.finalSnapshot })
       }
-      break
 
-    case 'snapshot':
+      // 刷新详情（merge 不清空日志），然后关闭终态 SSE
+      get().refreshSelectedDetail()
+      get().unsubscribeTaskSSE()
       break
+    }
+  }
+}
+
+// ==================================================================
+//  详情合并（REST 重建日志与 SSE 实时日志按 lineNo 去重）
+// ==================================================================
+
+function mergeDetail(
+  detail: QuotationTaskDetail,
+  set: StoreSet,
+  get: () => QuotationStore,
+): void {
+  const state = get()
+  set({ selectedTaskDetail: detail })
+
+  // 恢复确认卡片（仅在 store 尚无确认请求时）
+  if (detail.status === 'running' && detail.pendingConfirmation && !state.confirmRequest) {
+    try {
+      const pending = JSON.parse(detail.pendingConfirmation)
+      set({
+        confirmRequest: {
+          taskId: detail.id,
+          company: pending.company ?? '',
+          quotationNumber: pending.quotationNumber ?? '',
+          existingLines: pending.existingLines ?? [],
+          inputLines: pending.inputLines ?? [],
+        },
+      })
+    } catch { /* ignore */ }
+  }
+
+  // 恢复最终快照（仅在 store 尚无快照时，避免覆盖 SSE 已推送的）
+  if (!state.finalSnapshot && detail.finalLinesSnapshot) {
+    try {
+      set({ finalSnapshot: JSON.parse(detail.finalLinesSnapshot) })
+    } catch { /* ignore */ }
+  }
+
+  // 合并行结果到 sseLog（按 lineNo 去重，只追加尚未显示的行）
+  if (detail.lines && detail.lines.length > 0) {
+    const restored: QuotationLogEntry[] = detail.lines
+      .filter((l) => l.status !== 'pending')
+      .map((l) => ({
+        id: `rest-${l.lineNo}`,
+        lineNo: l.lineNo,
+        kind: l.status === 'success' ? 'line-success' : 'line-failed',
+        message: l.status === 'success'
+          ? `#${l.lineNo} ${l.partModel} x${l.quantity}`
+          : `#${l.lineNo} ${l.partModel} x${l.quantity} — ${l.error || '失败'}`,
+        timestamp: Date.now(),
+      }))
+
+    if (restored.length > 0) {
+      set((s) => {
+        const existingLineNos = new Set(
+          s.sseLog.filter((e) => e.lineNo != null).map((e) => e.lineNo),
+        )
+        const toAdd = restored.filter((e) => e.lineNo != null && !existingLineNos.has(e.lineNo))
+        if (toAdd.length === 0) return {}
+        return { sseLog: [...s.sseLog, ...toAdd] }
+      })
+    }
   }
 }

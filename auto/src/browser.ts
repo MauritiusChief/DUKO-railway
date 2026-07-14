@@ -7,7 +7,7 @@
  * 任务流程（步骤 5-6）：
  *   1. 启动浏览器 + 检测登录
  *   2. 导航到 /odoo/sales，移除 "My Quotations" facet
- *   3. 搜索报价单 → 打开首结果
+ *   3. 搜索报价单 → 打开精确匹配结果
  *   4. 核验单号 + 读取公司 + 读取已有行
  *   5. 通过 callbacks.requestConfirmation 向用户请求确认
  *   6. 确认后写入（append/overwrite），逐行回调 onLineResult
@@ -21,7 +21,7 @@ import type {
   LineResult,
   QuotationSnapshotLine,
 } from './protocol.js';
-import { navigateToSales, removeMyQuotationsFacet, searchQuotation, getSearchResultCount, openFirstResult } from './odoo/sales-search.js';
+import { navigateToSales, removeMyQuotationsFacet, searchQuotation, countExactMatches, openExactMatch } from './odoo/sales-search.js';
 import { verifyQuotation, readExistingLines, type QuotationVerification } from './odoo/quotation-verify.js';
 import { writeLines, type WriteLineResult } from './odoo/write-lines.js';
 
@@ -52,14 +52,38 @@ export interface TaskOutcome {
 
 /**
  * 执行一个报价任务（完整流程）。
+ *
+ * @param abortSignal 可选的中止信号；触发 abort 时会立即关闭浏览器上下文，
+ *                   已在飞行中的 Playwright 操作将抛错并被捕获，转为 failed 结果。
+ *                   用于 Worker 断线时尽快终止浏览器任务。
  */
 export async function runQuotationTask(
   task: QuotationTask,
   callbacks: BrowserCallbacks,
+  abortSignal?: AbortSignal,
 ): Promise<TaskOutcome> {
   let context: BrowserContext | null = null;
+  let aborted = false;
+
+  const onAbort = () => {
+    aborted = true;
+    if (context) {
+      // 关闭上下文会使所有在飞 Playwright 操作立即拒绝
+      context.close().catch(() => { /* 已在关闭则忽略 */ });
+    }
+  };
+  abortSignal?.addEventListener('abort', onAbort);
 
   try {
+    if (abortSignal?.aborted) {
+      aborted = true;
+      return {
+        status: 'failed',
+        error: 'worker 断线，任务中止',
+        lineResults: [],
+      };
+    }
+
     context = await chromium.launchPersistentContext(appConfig.profileDir, {
       headless: appConfig.headless,
       viewport: null,
@@ -153,13 +177,16 @@ export async function runQuotationTask(
 
     return { status: finalStatus, lineResults, finalSnapshot };
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = aborted
+      ? 'worker 断线，任务中止'
+      : `浏览器异常：${err instanceof Error ? err.message : String(err)}`;
     return {
       status: 'failed',
-      error: `浏览器异常：${message}`,
+      error: message,
       lineResults: [],
     };
   } finally {
+    abortSignal?.removeEventListener('abort', onAbort);
     if (context) {
       try { await context.close(); } catch { /* ignore */ }
     }
@@ -167,24 +194,27 @@ export async function runQuotationTask(
 }
 
 /**
- * 导航到 /odoo/sales，搜索报价单并打开首结果。
- * 若搜索无结果，抛出错误（调用方转为 task-failed）。
+ * 导航到 /odoo/sales，搜索报价单并打开精确匹配结果。
+ * 若搜索无精确匹配，抛出"未找到该报价单"（调用方转为 task-failed）。
  */
 async function navigateAndSearch(page: Page, quotationNumber: string): Promise<void> {
   await navigateToSales(page);
   await removeMyQuotationsFacet(page);
   await searchQuotation(page, quotationNumber);
 
-  const count = await getSearchResultCount(page);
-  if (count === 0) {
+  const matchCount = await countExactMatches(page, quotationNumber);
+  if (matchCount === 0) {
     throw new Error('未找到该报价单');
   }
 
-  await openFirstResult(page);
+  await openExactMatch(page, quotationNumber);
 }
 
 /**
  * 检测 Odoo 是否处于已登录状态。
+ *
+ * 不依赖 networkidle（Odoo 的长连接/轮询会让它长时间不进入 idle）。
+ * 改为等待"登录表单"或"已登录应用外壳"任一可见，再据其存在判断。
  */
 async function checkOdooLogin(page: Page): Promise<{ loggedIn: boolean }> {
   await page.goto(appConfig.odooBaseUrl, {
@@ -192,21 +222,17 @@ async function checkOdooLogin(page: Page): Promise<{ loggedIn: boolean }> {
     timeout: 60_000,
   });
 
-  try {
-    await page.waitForLoadState('networkidle', { timeout: 30_000 });
-  } catch {
-    // networkidle 超时不一定代表未登录
-  }
+  const loginForm = page.locator('.oe_login_form');
+  const appShell = page.locator('body.o_web_client, .o_navbar').first();
 
-  const currentUrl = page.url();
-  const isLoginUrl = currentUrl.includes('/web/login');
+  // 竞速等待任一标志性元素可见，最多 20s
+  await Promise.race([
+    loginForm.waitFor({ state: 'visible', timeout: 20_000 }).catch(() => {}),
+    appShell.waitFor({ state: 'visible', timeout: 20_000 }).catch(() => {}),
+  ]);
 
-  let hasLoginForm = false;
-  try {
-    hasLoginForm = (await page.locator('.oe_login_form').count()) > 0;
-  } catch {
-    hasLoginForm = false;
-  }
+  const hasLoginForm = (await loginForm.count()) > 0;
+  const hasAppShell = (await appShell.count()) > 0;
 
-  return { loggedIn: !isLoginUrl && !hasLoginForm };
+  return { loggedIn: !hasLoginForm && hasAppShell };
 }

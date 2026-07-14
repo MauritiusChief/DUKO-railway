@@ -273,6 +273,32 @@ export function getNextQueuedTask(): QuotationTaskDetail | undefined {
   return getTaskByIdRaw(queued.id);
 }
 
+/** 取所有排队任务的公开摘要（跨用户，用于全局队列 SSE 广播） */
+export function getQueuedTaskSummaries(): {
+  id: number;
+  quotationNumber: string;
+  username: string;
+  createdAt: string;
+}[] {
+  const d = getDb();
+  return (d.prepare(`
+    SELECT id, quotation_number, username, created_at
+    FROM quotation_tasks
+    WHERE status = 'queued'
+    ORDER BY created_at ASC
+  `).all() as {
+    id: number;
+    quotation_number: string;
+    username: string;
+    created_at: string;
+  }[]).map((r) => ({
+    id: r.id,
+    quotationNumber: r.quotation_number,
+    username: r.username,
+    createdAt: r.created_at,
+  }));
+}
+
 /**
  * 取消任务：仅当状态为 queued 时成功，返回是否取消成功。
  * 同时记录任务被取消（status='cancelled', completed_at=now）。

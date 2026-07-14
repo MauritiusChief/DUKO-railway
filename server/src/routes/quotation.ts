@@ -37,6 +37,12 @@ import {
   broadcast,
   type SSEEvent,
 } from '../services/sse-broadcast.js';
+import {
+  subscribeGlobal,
+  sendInitialSnapshot,
+  broadcastQueueUpdate,
+  broadcastTaskUpdateToOwner,
+} from '../services/global-sse-broadcast.js';
 import { getAutoOnlineState } from '../services/ws-state.js';
 
 export const quotationRouter = Router();
@@ -110,8 +116,31 @@ quotationRouter.post(
 
     const created = getTaskByIdRaw(taskId) as QuotationTaskDetail;
     res.status(201).json(summaryOf(created));
+
+    // 全局 SSE：通知该用户任务列表更新 + 全员队列变化
+    broadcastTaskUpdateToOwner(taskId);
+    broadcastQueueUpdate();
   },
 );
+
+// ==================================================================
+//  GET /api/quotation-tasks/events —— 全局 SSE（Agent 状态 + 任务列表 + 队列）
+//  必须注册在 /:id 之前，否则被 :id 吞掉。
+//  沿用 /api 前缀的 authenticateToken；连接建立后推送初始快照，后续增量推送。
+// ==================================================================
+
+quotationRouter.get('/quotation-tasks/events', (req, res) => {
+  const userId = req.user!.userId;
+  const sse = new SSEConnection(res);
+  const unsubscribe = subscribeGlobal(userId, sse);
+
+  // 推送初始快照（agent-status + queue-update + my-tasks）
+  sendInitialSnapshot(userId, sse);
+
+  res.on('close', () => {
+    unsubscribe();
+  });
+});
 
 // ==================================================================
 //  GET /api/quotation-tasks/:id —— 任务详情（含逐行结果）
@@ -175,6 +204,10 @@ quotationRouter.post('/quotation-tasks/:id/cancel', (req, res) => {
 
   // 广播取消事件给订阅者
   broadcast(taskId, { type: 'task-status', data: { taskId, status: 'cancelled' } });
+
+  // 全局 SSE：通知该用户任务列表更新 + 全员队列变化
+  broadcastTaskUpdateToOwner(taskId);
+  broadcastQueueUpdate();
 
   res.json({ message: '已取消', taskId });
 });
