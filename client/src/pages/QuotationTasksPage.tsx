@@ -186,7 +186,7 @@ export default function QuotationTasksPage() {
             </span>
           )}
         </div>
-        <button className="tp-submit-btn" onClick={() => navigate('/')}>回到主页</button>
+        <button className="qt-submit-btn" onClick={() => navigate('/')}>回到主页</button>
       </div>
 
       {/* 主区域 */}
@@ -280,7 +280,7 @@ export default function QuotationTasksPage() {
                 </label>
               </div>
               <div className="qt-actions">
-                <button className="tp-submit-btn" onClick={handleSubmit} disabled={store.submitting}>
+                <button className="qt-submit-btn" onClick={handleSubmit} disabled={store.submitting}>
                   {store.submitting ? '提交中...' : '提交任务'}
                 </button>
                 <button className="qt-clear-btn" onClick={handleClearDraft}>清空</button>

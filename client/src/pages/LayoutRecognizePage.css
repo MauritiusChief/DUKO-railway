@@ -231,13 +231,12 @@
 /* ====== 通用组件 ====== */
 
 .lr-btn {
+  border: 1px solid #888;
+  border-radius: 4px;
   background: #f0f0f0;
-  border: 1px solid #ccc;
-  border-radius: 3px;
   cursor: pointer;
   font-size: 12px;
   padding: 4px 10px;
-  color: #333;
   white-space: nowrap;
 }
 
