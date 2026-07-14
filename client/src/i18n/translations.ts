@@ -880,22 +880,6 @@ export const messages = {
     zh: '执行日志',
     en: 'Execution Log',
   },
-  写入成功: {
-    zh: '写入成功',
-    en: 'Write OK',
-  },
-  写入失败: {
-    zh: '写入失败',
-    en: 'Write Failed',
-  },
-  全部完成: {
-    zh: '全部完成',
-    en: 'All Complete',
-  },
-  部分行失败: {
-    zh: '部分行写入失败',
-    en: 'Some lines failed',
-  },
   Odoo最终行: {
     zh: 'Odoo 页面最终行（以页面为准）',
     en: 'Odoo Final Lines (Source of Truth)',
@@ -979,25 +963,5 @@ export const messages = {
   返回未选中: {
     zh: '返回',
     en: 'Back',
-  },
-  logLineSuccess: {
-    zh: '#{line} {desc} 写入成功',
-    en: '#{line} {desc} OK',
-  },
-  logLineFailed: {
-    zh: '#{line} {desc} 写入失败 — {error}',
-    en: '#{line} {desc} FAILED — {error}',
-  },
-  logTaskFailed: {
-    zh: '任务失败{error}',
-    en: 'Task failed{error}',
-  },
-  未知错误: {
-    zh: '未知错误',
-    en: 'unknown error',
-  },
-  任务已取消: {
-    zh: '任务已取消',
-    en: 'Task cancelled',
   },
 } as const;

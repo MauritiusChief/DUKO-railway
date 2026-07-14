@@ -107,7 +107,7 @@ export async function runQuotationTask(
     // 若提供精准 Odoo 地址则优先直接进入详情页，失败回退到销售列表搜索
     if (task.odooUrl) {
       try {
-        await callbacks.onProgress('尝试精准地址直接导航…');
+        await callbacks.onProgress('NAVIGATING DIRECTLY TO THE PROVIDED ODOO URL...');
         await page.goto(task.odooUrl, {
           waitUntil: 'domcontentloaded',
           timeout: 30_000,
@@ -116,9 +116,9 @@ export async function runQuotationTask(
           state: 'visible',
           timeout: 15_000,
         });
-        await callbacks.onProgress('精准地址导航成功');
+        await callbacks.onProgress('DIRECT ODOO URL NAVIGATION SUCCEEDED');
       } catch {
-        await callbacks.onProgress('精准地址导航失败，回退到搜索流程');
+        await callbacks.onProgress('DIRECT ODOO URL NAVIGATION FAILED; FALLING BACK TO SEARCH');
         await navigateAndSearch(page, task.quotationNumber);
       }
     } else {
@@ -271,17 +271,17 @@ async function tryManualSave(
 ): Promise<void> {
   const saveButton = page.locator(FORM_SAVE_BUTTON)
   if ((await saveButton.count()) === 0) {
-    await onProgress?.('未检测到手动保存按钮（可能已自动保存）')
+    await onProgress?.('NO MANUAL SAVE BUTTON DETECTED (MAY ALREADY BE SAVED)')
     return
   }
 
-  await onProgress?.('正在保存…')
+  await onProgress?.('SAVING...')
   try {
     await saveButton.first().click()
     // 等待保存完成：按钮消失（hidden 涵盖 detached + 隐藏）
     await saveButton.first().waitFor({ state: 'hidden', timeout: 15_000 })
-    await onProgress?.('已保存')
+    await onProgress?.('SAVED')
   } catch {
-    await onProgress?.('保存等待超时，继续执行')
+    await onProgress?.('SAVE WAIT TIMED OUT; CONTINUING')
   }
 }
