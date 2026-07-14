@@ -910,7 +910,7 @@ export default function TableParsePage() {
                         navigate('/quotation-tasks')
                       }}
                     >
-                      创建报价任务
+                      {t('创建报价任务')}
                     </button>
                   </div>
                 </>

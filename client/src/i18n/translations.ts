@@ -980,4 +980,24 @@ export const messages = {
     zh: '返回',
     en: 'Back',
   },
+  logLineSuccess: {
+    zh: '#{line} {desc} 写入成功',
+    en: '#{line} {desc} OK',
+  },
+  logLineFailed: {
+    zh: '#{line} {desc} 写入失败 — {error}',
+    en: '#{line} {desc} FAILED — {error}',
+  },
+  logTaskFailed: {
+    zh: '任务失败{error}',
+    en: 'Task failed{error}',
+  },
+  未知错误: {
+    zh: '未知错误',
+    en: 'unknown error',
+  },
+  任务已取消: {
+    zh: '任务已取消',
+    en: 'Task cancelled',
+  },
 } as const;

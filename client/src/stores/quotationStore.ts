@@ -13,6 +13,7 @@
 import { create } from 'zustand'
 import { fetchWithAuth } from '../lib/fetchWithAuth'
 import { ReconnectingSSE } from '../lib/sseStream'
+import { tOutside } from '../i18n/context'
 import type {
   QuotationTaskSummary,
   QuotationTaskDetail,
@@ -25,6 +26,47 @@ import type {
 const DRAFT_KEY = 'duko_quotation_draft'
 
 const TERMINAL_STATUSES = ['completed', 'partial_failed', 'failed', 'cancelled']
+
+/**
+ * 构造行结果日志消息（SSE 实时推送与 REST mergeDetail 共用）。
+ * 统一格式为 "#N MODEL xQTY <status>" 或 "#N MODEL xQTY <status> — <error>"。
+ */
+function buildLineResultMessage(
+  lineNo: number,
+  partModel: string,
+  quantity: number,
+  status: 'success' | 'failed',
+  error?: string | null,
+): string {
+  const desc = `${partModel} x${quantity}`
+  if (status === 'success') {
+    return tOutside('logLineSuccess', { line: String(lineNo), desc })
+  }
+  return tOutside('logLineFailed', {
+    line: String(lineNo),
+    desc,
+    error: error || tOutside('未知错误'),
+  })
+}
+
+/**
+ * 构造任务完成/终态日志消息（SSE 实时推送与 REST mergeDetail 共用）。
+ * 返回 undefined 表示当前状态无需生成完成提示。
+ */
+function buildTaskDoneMessage(status: string, taskError?: string | null): string | undefined {
+  switch (status) {
+    case 'completed':
+      return tOutside('全部完成')
+    case 'partial_failed':
+      return tOutside('部分行失败')
+    case 'failed':
+      return tOutside('logTaskFailed', { error: taskError ? `：${taskError}` : '' })
+    case 'cancelled':
+      return tOutside('任务已取消')
+    default:
+      return undefined
+  }
+}
 
 // 模块级 SSE 实例（非响应式，避免触发不必要的渲染）
 let globalSSE: ReconnectingSSE | null = null
@@ -417,14 +459,13 @@ function handleTaskSSEEvent(
         // 按 lineNo 去重
         if (s.sseLog.some((e) => e.lineNo === data.lineNo)) return {}
         const line = s.selectedTaskDetail?.lines.find((l) => l.lineNo === data.lineNo)
-        const desc = line ? `${line.partModel} x${line.quantity}` : ''
+        const partModel = line?.partModel ?? ''
+        const quantity = line?.quantity ?? 0
         const entry: QuotationLogEntry = {
           id: `sse-${data.lineNo}-${Date.now()}`,
           lineNo: data.lineNo,
           kind: data.status === 'success' ? 'line-success' : 'line-failed',
-          message: data.status === 'success'
-            ? `#${data.lineNo} ${desc} 写入成功`
-            : `#${data.lineNo} ${desc} 写入失败 — ${data.error || '未知错误'}`,
+          message: buildLineResultMessage(data.lineNo, partModel, quantity, data.status, data.error),
           timestamp: Date.now(),
         }
         return { sseLog: [...s.sseLog, entry] }
@@ -450,14 +491,12 @@ function handleTaskSSEEvent(
       // 追加完成提示（按 kind 去重，避免重复）
       set((s) => {
         if (s.sseLog.some((e) => e.kind === 'task-done')) return {}
+        const msg = buildTaskDoneMessage(data.status, data.error)
+        if (!msg) return {}
         const doneEntry: QuotationLogEntry = {
           id: `done-${Date.now()}`,
           kind: 'task-done',
-          message: data.status === 'completed'
-            ? '全部完成'
-            : data.status === 'partial_failed'
-              ? '部分行写入失败'
-              : `任务失败${data.error ? `：${data.error}` : ''}`,
+          message: msg,
           timestamp: Date.now(),
         }
         return { sseLog: [...s.sseLog, doneEntry] }
@@ -518,9 +557,13 @@ function mergeDetail(
         id: `rest-${l.lineNo}`,
         lineNo: l.lineNo,
         kind: l.status === 'success' ? 'line-success' : 'line-failed',
-        message: l.status === 'success'
-          ? `#${l.lineNo} ${l.partModel} x${l.quantity}`
-          : `#${l.lineNo} ${l.partModel} x${l.quantity} — ${l.error || '失败'}`,
+        message: buildLineResultMessage(
+          l.lineNo,
+          l.partModel,
+          l.quantity,
+          l.status as 'success' | 'failed',
+          l.error,
+        ),
         timestamp: Date.now(),
       }))
 
@@ -538,12 +581,7 @@ function mergeDetail(
 
   // 终态任务：若 sseLog 尚无完成提示，补一条（页面刷新终态任务时能看到结果摘要）
   if (TERMINAL_STATUSES.includes(detail.status) && !state.sseLog.some((e) => e.kind === 'task-done')) {
-    const doneMessage =
-      detail.status === 'completed' ? '全部完成'
-      : detail.status === 'partial_failed' ? '部分行写入失败'
-      : detail.status === 'failed' ? `任务失败${detail.taskError ? `：${detail.taskError}` : ''}`
-      : detail.status === 'cancelled' ? '任务已取消'
-      : ''
+    const doneMessage = buildTaskDoneMessage(detail.status, detail.taskError)
     if (doneMessage) {
       set((s) => ({
         sseLog: [...s.sseLog, {

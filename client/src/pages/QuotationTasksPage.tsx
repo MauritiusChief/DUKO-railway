@@ -306,7 +306,7 @@ export default function QuotationTasksPage() {
                     className="qt-input"
                     value={quotationNumber}
                     onChange={(e) => setQuotationNumber(e.target.value)}
-                    placeholder="例如 S0159713"
+                    placeholder="e.g. S0159713"
                   />
                 </div>
                 <div className="qt-field">
