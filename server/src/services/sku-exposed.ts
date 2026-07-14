@@ -96,9 +96,6 @@ const SHAPE_TYPE_ALIAS_RULES: InjectRule[] = [
   { condition: (_, t, s) => t === 'OV' && s === '331524', value: 'W' },
   { condition: (c, t, s) => EUROPEAN_STYLE_CODES.includes(c) && t === 'PNL' && s === '2596', value: 'RRP' },
   { condition: (c, t) => EUROPEAN_STYLE_CODES.includes(c) && t === 'BEP', value: 'DWP' },
-  { condition: (c, t, s) => EUROPEAN_STYLE_CODES.includes(c) && t === 'WF' && (s === '330' || s === '630'), value: 'BF' },
-  { condition: (c, t, s) => (NONE_EURO_STYLE_CODES.includes(c)) && t === 'TF' && s === '3', value: 'WF,BF' },
-  { condition: (c, t, s) => (NONE_EURO_STYLE_CODES.includes(c)) && t === 'TF' && s === '6', value: 'WF,BF' },
 ];
 
 // #region SHAPE SIZE ALIAS
@@ -110,8 +107,7 @@ const SHAPE_SIZE_ALIAS_RULES: InjectRule[] = [
   // 例：
   { condition: (c, t, s) => AMERICAN_STYLE_CODES.includes(c) && t === 'PNL' && s === '2496H', value: '2596' },
   { condition: (c, t, s) => AMERICAN_STYLE_CODES.includes(c) && t === 'PNL' && s === '3696Q', value: '3496' },
-  { condition: (c, t, s) => (NONE_EURO_STYLE_CODES.includes(c)) && t === 'TF' && s === '3', value: '396' },
-  { condition: (c, t, s) => (NONE_EURO_STYLE_CODES.includes(c)) && t === 'TF' && s === '6', value: '696' },
+  { condition: (c, t, s) => EUROPEAN_STYLE_CODES.includes(c) && t === 'TF' && (s === '396' || s === '696'), value: 'WF,BF' },
   ...europeanStyleOvenCabSize,
 ];
 
