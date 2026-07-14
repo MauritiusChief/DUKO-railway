@@ -46,6 +46,10 @@
 - 再明确 stuffed_gap 和 gaplike_item 类型的定义。
   - 现在的问题是，WR301512（酒架/填充开口区域）被当作 stuffed_gap, 而绿色标记线老是被认作 VAL
 
+- 检查任务列表、Auto Worker 离线在线状态、底部滚动 log 是不是真的 SSE 实现的实时效果
+- Auto Worker 打开页面后停了一段时间，需要检查
+- Auto Worker 以极快的速度关掉默认筛选并填入单号然后点击第一个，疑似没等单号的搜索结果加载好就直接点了导致总是出错
+
 - layout-recognzie 需要在墙已经建好之后再连接不同的墙
 - layout-recognzie 允许改自动滑动方向
 - 每次去 layout-recognize 或 debug, 以及再回到主页面时都需要重新登录，很烦人
