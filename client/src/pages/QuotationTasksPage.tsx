@@ -11,7 +11,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuotationStore, type QuotationLogEntry } from '../stores/quotationStore'
-import type { QuotationTaskSummary, QuotationSnapshotLine } from '../types'
+import type { QuotationSnapshotLine } from '../types'
 import './QuotationTasksPage.css'
 import { useI18n } from '../i18n/context'
 const STATUS_LABELS: Record<string, { zh: string; cls: string }> = {
@@ -137,18 +137,35 @@ export default function QuotationTasksPage() {
   }, [store.selectedTaskId])
 
   // 复制失败行 CSV
+  // 提取失败行 CSV 文本
+  const failedLinesCsv = store.selectedTaskDetail
+    ? store.selectedTaskDetail.lines
+        .filter((l) => l.status === 'failed')
+        .map((l) => `${l.partModel},${l.quantity}`)
+        .join('\n')
+    : ''
+
+  // 当前选中任务是否为终态
+  const selectedIsTerminal = !!store.selectedTaskDetail
+    && store.selectedTaskDetail.status !== 'running'
+    && store.selectedTaskDetail.status !== 'queued'
+
+  // 复制失败行到剪贴板
   const handleCopyFailed = useCallback(() => {
-    const detail = store.selectedTaskDetail
-    if (!detail) return
-    const failed = detail.lines.filter((l) => l.status === 'failed')
-    if (failed.length === 0) return
-    const csv = failed.map((l) => `${l.partModel},${l.quantity}`).join('\n')
-    navigator.clipboard.writeText(csv).then(() => {
+    if (!failedLinesCsv) return
+    navigator.clipboard.writeText(failedLinesCsv).then(() => {
       setStatusMsg('失败行已复制到剪贴板')
     }).catch(() => {
       setStatusMsg('复制失败')
     })
-  }, [store.selectedTaskDetail])
+  }, [failedLinesCsv])
+
+  // 将失败行填入 CSV 输入区（覆盖）
+  const handleFillFailed = useCallback(() => {
+    if (!failedLinesCsv) return
+    setCsvText(failedLinesCsv)
+    setStatusMsg('失败行已填入输入框')
+  }, [failedLinesCsv])
 
   // 判断是否显示确认卡片（待操作）
   const showConfirm = store.confirmRequest && store.selectedTaskDetail?.status === 'running' && !confirmed
@@ -401,71 +418,20 @@ export default function QuotationTasksPage() {
                 </div>
               )}
 
-              {/* 复制失败行 */}
-              {store.selectedTaskDetail && store.selectedTaskDetail.lines.some((l) => l.status === 'failed') && (
-                <div className="qt-copy-failed-row">
-                  <button className="tp-submit-btn qt-copy-failed-btn" onClick={handleCopyFailed}>
-                    复制失败行 CSV
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* 选中任务的详情（非 running 状态，从 REST 加载） */}
-          {store.selectedTaskDetail && store.selectedTaskDetail.status !== 'running' && store.sseLog.length === 0 && (
-            <div className="qt-bot-section">
-              <div className="qt-section-label">任务结果</div>
-              {store.selectedTaskDetail.lines && store.selectedTaskDetail.lines.length > 0 && (
-                <div className="qt-table-wrap">
-                  <table className="qt-table">
-                    <thead>
-                      <tr><th>#</th><th>SKU</th><th>数量</th><th>状态</th><th>错误</th></tr>
-                    </thead>
-                    <tbody>
-                      {store.selectedTaskDetail.lines.map((l) => (
-                        <tr key={l.lineNo} className={l.status === 'failed' ? 'qt-row-failed' : l.status === 'success' ? 'qt-row-ok' : ''}>
-                          <td>{l.lineNo}</td>
-                          <td>{l.partModel}</td>
-                          <td>{l.quantity}</td>
-                          <td>{l.status}</td>
-                          <td className="qt-td-err">{l.error || ''}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-              {store.selectedTaskDetail.finalLinesSnapshot && (
-                <div className="qt-snapshot-section">
-                  <div className="qt-section-label">Odoo 页面最终行</div>
-                  <div className="qt-table-wrap">
-                    <table className="qt-table">
-                      <thead>
-                        <tr><th>型号</th><th>数量</th></tr>
-                      </thead>
-                      <tbody>
-                        {(() => {
-                          try {
-                            const snap: QuotationSnapshotLine[] = JSON.parse(store.selectedTaskDetail.finalLinesSnapshot)
-                            return snap.map((l, i) => (
-                              <tr key={i}>
-                                <td>{l.productModel}</td>
-                                <td>{l.quantity}</td>
-                              </tr>
-                            ))
-                          } catch { return null }
-                        })()}
-                        {/* fallback if parse failed */}
-                        {(() => { try { JSON.parse(store.selectedTaskDetail.finalLinesSnapshot || ''); return false } catch { return true } })() && (
-                          <tr><td colSpan={2} className="qt-td-empty">无法解析快照数据</td></tr>
-                        )}
-                      </tbody>
-                    </table>
+              {/* 失败行 CSV（终态 + 有失败行时显示，供复制回输入框补写） */}
+              {selectedIsTerminal && failedLinesCsv && (
+                <div className="qt-failed-csv-section">
+                  <div className="qt-section-label">失败行（可直接复制回输入框补写）</div>
+                  <pre className="qt-failed-csv-text">{failedLinesCsv}</pre>
+                  <div className="qt-failed-csv-actions">
+                    <button className="qt-submit-btn" onClick={handleCopyFailed}>复制到剪贴板</button>
+                    <button className="qt-clear-btn" onClick={handleFillFailed}>填入输入框</button>
                   </div>
                 </div>
               )}
-              {store.selectedTaskDetail.taskError && (
+
+              {/* 任务错误（终态 + 有错误时显示） */}
+              {selectedIsTerminal && store.selectedTaskDetail?.taskError && (
                 <div className="qt-task-error">错误: {store.selectedTaskDetail.taskError}</div>
               )}
             </div>

@@ -506,4 +506,24 @@ function mergeDetail(
       })
     }
   }
+
+  // 终态任务：若 sseLog 尚无完成提示，补一条（页面刷新终态任务时能看到结果摘要）
+  if (TERMINAL_STATUSES.includes(detail.status) && !state.sseLog.some((e) => e.kind === 'task-done')) {
+    const doneMessage =
+      detail.status === 'completed' ? '全部完成'
+      : detail.status === 'partial_failed' ? '部分行写入失败'
+      : detail.status === 'failed' ? `任务失败${detail.taskError ? `：${detail.taskError}` : ''}`
+      : detail.status === 'cancelled' ? '任务已取消'
+      : ''
+    if (doneMessage) {
+      set((s) => ({
+        sseLog: [...s.sseLog, {
+          id: `done-rest-${detail.id}`,
+          kind: 'task-done',
+          message: doneMessage,
+          timestamp: Date.now(),
+        }],
+      }))
+    }
+  }
 }

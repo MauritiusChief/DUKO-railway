@@ -540,6 +540,30 @@
   font-size: 12px !important;
 }
 
+/* ====== 失败行 CSV 文本块 ====== */
+.qt-failed-csv-section {
+  margin-bottom: 12px;
+}
+
+.qt-failed-csv-text {
+  margin: 4px 0 8px;
+  padding: 8px 12px;
+  background: #fff5f5;
+  border: 1px solid #ef9a9a;
+  border-radius: 4px;
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 13px;
+  white-space: pre;
+  overflow-x: auto;
+  user-select: all;
+  color: #b71c1c;
+}
+
+.qt-failed-csv-actions {
+  display: flex;
+  gap: 8px;
+}
+
 /* ====== 任务结果表格 ====== */
 /* .qt-row-ok {
 } */

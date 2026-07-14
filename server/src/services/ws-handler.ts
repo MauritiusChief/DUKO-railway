@@ -108,8 +108,8 @@ function tryDispatch(): void {
     quotationNumber: task.quotationNumber,
     writeMode: task.writeMode,
     lines: task.lines.map((l) => ({
-      lineNo: l.line_no,
-      partModel: l.part_model,
+      lineNo: l.lineNo,
+      partModel: l.partModel,
       quantity: l.quantity,
     })),
   };

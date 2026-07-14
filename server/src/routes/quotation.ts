@@ -298,7 +298,7 @@ quotationRouter.get('/quotation-tasks/:id/events', (req, res) => {
     taskId: task.id,
     status: task.status,
     lines: task.lines.map((l) => ({
-      lineNo: l.line_no,
+      lineNo: l.lineNo,
       status: l.status,
       error: l.error,
     })),

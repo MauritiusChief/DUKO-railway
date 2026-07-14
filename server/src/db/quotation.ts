@@ -54,6 +54,15 @@ export interface QuotationTaskLineRow {
   error: string | null;
 }
 
+/** API 返回的逐行结果（camelCase，由 rowToLine 映射） */
+export interface QuotationTaskLine {
+  lineNo: number;
+  partModel: string;
+  quantity: number;
+  status: QuotationLineStatus;
+  error: string | null;
+}
+
 /** 创建任务时的输入行 */
 export interface NewQuotationLine {
   partModel: string;
@@ -80,7 +89,7 @@ export interface QuotationTaskSummary {
 
 /** API 返回的任务详情（含逐行结果） */
 export interface QuotationTaskDetail extends QuotationTaskSummary {
-  lines: QuotationTaskLineRow[];
+  lines: QuotationTaskLine[];
   pendingConfirmation: string | null;
   finalLinesSnapshot: string | null;
 }
@@ -135,6 +144,17 @@ function rowToSummary(
     lineCount: r.line_count,
     successCount: r.success_count,
     failedCount: r.failed_count,
+  };
+}
+
+/** 将 DB 行（snake_case）映射为 API 返回的逐行结果（camelCase） */
+function rowToLine(r: QuotationTaskLineRow): QuotationTaskLine {
+  return {
+    lineNo: r.line_no,
+    partModel: r.part_model,
+    quantity: r.quantity,
+    status: r.status,
+    error: r.error,
   };
 }
 
@@ -243,7 +263,7 @@ export function getTaskByIdRaw(taskId: number): QuotationTaskDetail | undefined 
 
   return {
     ...rowToSummary(task),
-    lines,
+    lines: lines.map(rowToLine),
     pendingConfirmation: task.pending_confirmation,
     finalLinesSnapshot: task.final_lines_snapshot,
   };
