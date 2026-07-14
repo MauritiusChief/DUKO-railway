@@ -274,6 +274,7 @@ class AutoClient {
     const task: QuotationTask = {
       taskId: msg.taskId,
       quotationNumber: msg.quotationNumber,
+      odooUrl: msg.odooUrl,
       writeMode: msg.writeMode,
       lines: msg.lines,
     };

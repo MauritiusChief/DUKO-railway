@@ -43,6 +43,7 @@ export interface TaskLine {
 export interface QuotationTask {
   taskId: number;
   quotationNumber: string;
+  odooUrl: string;
   writeMode: QuotationWriteMode;
   lines: TaskLine[];
 }
@@ -62,7 +63,8 @@ export interface LineResult {
 export const taskAssignedSchema = z.object({
   type: z.literal('task-assigned'),
   taskId: z.number().int().positive(),
-  quotationNumber: z.string().min(1),
+  quotationNumber: z.string(),
+  odooUrl: z.string(),
   writeMode: z.enum(['overwrite', 'append']),
   lines: z.array(
     z.object({

@@ -24,7 +24,7 @@ import type {
 import { navigateToSales, removeMyQuotationsFacet, searchQuotation, countExactMatches, openExactMatch } from './odoo/sales-search.js';
 import { verifyQuotation, readExistingLines, type QuotationVerification } from './odoo/quotation-verify.js';
 import { writeLines, type WriteLineResult } from './odoo/write-lines.js';
-import { FORM_SAVE_BUTTON } from './odoo/selectors.js';
+import { FORM_SAVE_BUTTON, DETAIL_QUOTATION_NUMBER } from './odoo/selectors.js';
 
 /** 确认请求载荷 */
 export interface ConfirmationRequest {
@@ -103,8 +103,27 @@ export async function runQuotationTask(
       };
     }
 
-    // ---- 2. 导航到 /odoo/sales，移除 "My Quotations" facet ----
-    await navigateAndSearch(page, task.quotationNumber);
+    // ---- 2. 导航到目标报价单 ----
+    // 若提供精准 Odoo 地址则优先直接进入详情页，失败回退到销售列表搜索
+    if (task.odooUrl) {
+      try {
+        await callbacks.onProgress('尝试精准地址直接导航…');
+        await page.goto(task.odooUrl, {
+          waitUntil: 'domcontentloaded',
+          timeout: 30_000,
+        });
+        await page.waitForSelector(DETAIL_QUOTATION_NUMBER, {
+          state: 'visible',
+          timeout: 15_000,
+        });
+        await callbacks.onProgress('精准地址导航成功');
+      } catch {
+        await callbacks.onProgress('精准地址导航失败，回退到搜索流程');
+        await navigateAndSearch(page, task.quotationNumber);
+      }
+    } else {
+      await navigateAndSearch(page, task.quotationNumber);
+    }
 
     // ---- 3. 核验报价单 + 读取公司 + 已有行 ----
     let verification: QuotationVerification;

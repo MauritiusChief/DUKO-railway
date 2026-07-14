@@ -924,6 +924,10 @@ export const messages = {
     zh: '请输入报价单号',
     en: 'Enter quotation number',
   },
+  报价或地址缺一提示: {
+    zh: '报价单号与精准Odoo地址至少填写一项',
+    en: 'Provide either a quotation number or a precise Odoo URL',
+  },
   CSV提示: {
     zh: '请在文本区输入有效的 CSV 数据',
     en: 'Enter valid CSV data in the text area',
@@ -971,10 +975,6 @@ export const messages = {
   失败行标题: {
     zh: '失败行（可直接复制回输入框补写）',
     en: 'Failed lines (can copy back to input for retry)',
-  },
-  Odoo地址提示: {
-    zh: '自定义 Odoo 地址（暂未开放）',
-    en: 'Custom Odoo URL (not available yet)',
   },
   返回未选中: {
     zh: '返回',

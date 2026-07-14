@@ -102,13 +102,14 @@ quotationRouter.post(
   validate(createQuotationTaskSchema),
   (req, res) => {
     const { userId, username } = req.user!;
-    const { quotationNumber, writeMode, lines } = req.body as {
+    const { quotationNumber, odooUrl, writeMode, lines } = req.body as {
       quotationNumber: string;
+      odooUrl: string;
       writeMode: 'overwrite' | 'append';
       lines: { partModel: string; quantity: number }[];
     };
 
-    const taskId = createTask(userId, username, quotationNumber, writeMode, lines);
+    const taskId = createTask(userId, username, quotationNumber, odooUrl, writeMode, lines);
 
     // 创建后通知 ws-handler 尝试派发（若有 auto worker 在线）
     // ws-handler 通过 notifyTaskQueued 主动查询 queued 任务

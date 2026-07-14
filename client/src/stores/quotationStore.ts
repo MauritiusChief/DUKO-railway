@@ -117,7 +117,7 @@ interface QuotationStore {
   fetchActiveStatus: () => Promise<void>
   selectTask: (taskId: number) => Promise<void>
   refreshSelectedDetail: () => Promise<QuotationTaskDetail | null>
-  createTask: (quotationNumber: string, writeMode: 'overwrite' | 'append', lines: { partModel: string; quantity: number }[]) => Promise<number | null>
+  createTask: (quotationNumber: string, odooUrl: string, writeMode: 'overwrite' | 'append', lines: { partModel: string; quantity: number }[]) => Promise<number | null>
   cancelTask: (taskId: number) => Promise<boolean>
   confirmTask: (taskId: number, decision: 'confirmed' | 'rejected') => Promise<boolean>
 
@@ -224,13 +224,13 @@ export const useQuotationStore = create<QuotationStore>((set, get) => ({
     return null
   },
 
-  createTask: async (quotationNumber, writeMode, lines) => {
+  createTask: async (quotationNumber, odooUrl, writeMode, lines) => {
     set({ submitting: true })
     try {
       const res = await fetchWithAuth('/api/quotation-tasks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ quotationNumber, writeMode, lines }),
+        body: JSON.stringify({ quotationNumber, odooUrl, writeMode, lines }),
       })
       if (res.ok) {
         const data: QuotationTaskSummary = await res.json()
@@ -335,6 +335,7 @@ export const useQuotationStore = create<QuotationStore>((set, get) => ({
   saveDraft: (partial) => {
     const current = get().draft ?? {
       quotationNumber: '',
+      odooUrl: '',
       writeMode: 'append',
       csvText: '',
       savedAt: 0,
