@@ -820,13 +820,9 @@ export const messages = {
     zh: '报价单号',
     en: 'Quotation Number',
   },
-  自定义Odoo地址: {
-    zh: '自定义 Odoo 地址',
-    en: 'Custom Odoo URL',
-  },
-  URL未开放提示: {
-    zh: '自定义 Odoo 地址（暂未开放）',
-    en: 'Custom Odoo URL (not yet available)',
+  精准Odoo地址: {
+    zh: '精准 Odoo 地址 (可选)',
+    en: 'Precise Odoo URL (Optional)',
   },
   CSV数据: {
     zh: 'CSV 数据 (partModel, quantity)',

@@ -13,6 +13,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQuotationStore, type QuotationLogEntry } from '../stores/quotationStore'
 import type { QuotationTaskSummary, QuotationSnapshotLine } from '../types'
 import './QuotationTasksPage.css'
+import { useI18n } from '../i18n/context'
 
 const STATUS_LABELS: Record<string, { zh: string; cls: string }> = {
   queued: { zh: '排队', cls: 'qt-badge-gray' },
@@ -50,6 +51,7 @@ function parseCSV(csv: string): { partModel: string; quantity: number }[] {
 }
 
 export default function QuotationTasksPage() {
+  const { t } = useI18n();
   const navigate = useNavigate()
   const store = useQuotationStore()
 
@@ -251,7 +253,7 @@ export default function QuotationTasksPage() {
                 />
               </div>
               <div className="qt-field">
-                <label className="qt-label">自定义 Odoo 地址</label>
+                <label className="qt-label">{t("精准Odoo地址")}</label>
                 <input
                   className="qt-input qt-input-disabled"
                   value="https://dukouserp.com/odoo/"
