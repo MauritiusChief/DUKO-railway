@@ -14,7 +14,7 @@ import { z } from 'zod';
 // ==================================================================
 
 /** 当前协议版本 */
-export const PROTOCOL_VERSION = '1';
+export const PROTOCOL_VERSION = '2';
 
 /** 心跳超时阈值（毫秒）：超过此时间未收到 heartbeat 视为断线 */
 export const HEARTBEAT_TIMEOUT_MS = 90_000;
@@ -122,6 +122,22 @@ export const progressMessageSchema = z.object({
   attempt: z.number().int().positive(),
 });
 
+export const inventoryTrendResultMessageSchema = z.object({
+  type: z.literal('inventory-trend-result'),
+  taskId: z.number().int(),
+  result: z.object({
+    name: z.string().min(1),
+    moves: z.array(
+      z.object({
+        date: z.string(),
+        qty: z.number(),
+        dir: z.enum(['in', 'out']),
+      }),
+    ),
+  }),
+  attempt: z.number().int().positive(),
+});
+
 /** auto → Server 入站消息的联合校验 schema */
 export const inboundMessageSchema = z.discriminatedUnion('type', [
   helloMessageSchema,
@@ -133,6 +149,7 @@ export const inboundMessageSchema = z.discriminatedUnion('type', [
   heartbeatMessageSchema,
   confirmRequestMessageSchema,
   progressMessageSchema,
+  inventoryTrendResultMessageSchema,
 ]);
 
 // ==================================================================
@@ -148,6 +165,7 @@ export type TaskFailedMessage = z.infer<typeof taskFailedMessageSchema>;
 export type HeartbeatMessage = z.infer<typeof heartbeatMessageSchema>;
 export type ConfirmRequestMessage = z.infer<typeof confirmRequestMessageSchema>;
 export type ProgressMessage = z.infer<typeof progressMessageSchema>;
+export type InventoryTrendResultMessage = z.infer<typeof inventoryTrendResultMessageSchema>;
 
 export type InboundMessage = z.infer<typeof inboundMessageSchema>;
 

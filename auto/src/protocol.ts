@@ -14,7 +14,7 @@ import { z } from 'zod';
 // ==================================================================
 
 /** 当前协议版本（必须与 server 一致） */
-export const PROTOCOL_VERSION = '1';
+export const PROTOCOL_VERSION = '2';
 
 /** 应用层心跳间隔（毫秒） */
 export const HEARTBEAT_INTERVAL_MS = 30_000;
@@ -255,6 +255,13 @@ export interface ProgressMessage {
   attempt: number;
 }
 
+export interface InventoryTrendResultMessage {
+  type: 'inventory-trend-result';
+  taskId: number;
+  result: TrendItemResult;
+  attempt: number;
+}
+
 export type OutboundMessage =
   | HelloMessage
   | ReadyMessage
@@ -264,4 +271,5 @@ export type OutboundMessage =
   | TaskFailedMessage
   | HeartbeatMessage
   | ConfirmRequestMessage
-  | ProgressMessage;
+  | ProgressMessage
+  | InventoryTrendResultMessage;

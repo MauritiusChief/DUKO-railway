@@ -240,7 +240,8 @@ class AutoClient {
           m.type === 'task-completed' ||
           m.type === 'task-failed' ||
           m.type === 'confirm-request' ||
-          m.type === 'progress') &&
+          m.type === 'progress' ||
+          m.type === 'inventory-trend-result') &&
         m.taskId === msg.taskId &&
         m.attempt === msg.attempt,
     );
@@ -327,12 +328,21 @@ class AutoClient {
     }
   }
 
-  /** 进度回调工厂（inventory download / trend 共用） */
-  private makeProgressCallback(taskId: number): InventoryCallbacks {
+  /** Inventory 回调工厂（download / trend 共用） */
+  private makeInventoryCallbacks(taskId: number): InventoryCallbacks {
     return {
       onProgress: async (message: string) => {
         const progressAttempt = ++this.currentTaskAttempt;
         this.sendTracked({ type: 'progress', taskId, message, attempt: progressAttempt });
+      },
+      onTrendResult: async (result) => {
+        const resultAttempt = ++this.currentTaskAttempt;
+        this.sendTracked({
+          type: 'inventory-trend-result',
+          taskId,
+          result,
+          attempt: resultAttempt,
+        });
       },
     };
   }
@@ -438,7 +448,7 @@ class AutoClient {
   private async runInventoryDownloadFlow(taskId: number): Promise<void> {
     console.log(`[auto] 开始 inventory-download 任务 #${taskId}`);
     const outcome = await runInventoryDownloadTask(
-      this.makeProgressCallback(taskId),
+      this.makeInventoryCallbacks(taskId),
       this.currentAbort!.signal,
     );
 
@@ -470,7 +480,7 @@ class AutoClient {
     console.log(`[auto] 开始 inventory-trend 任务 #${taskId} (${items.length} 项)`);
     const outcome = await runInventoryTrendTask(
       items,
-      this.makeProgressCallback(taskId),
+      this.makeInventoryCallbacks(taskId),
       this.currentAbort!.signal,
     );
 

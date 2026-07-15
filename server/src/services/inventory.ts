@@ -5,8 +5,8 @@
  *   auto 模式：download 任务（worker 下载 CSV）→ cleanCSVFromString → 筛选低库存 → 自动 startTrend → classify
  *   upload 模式：cleanCSVFromString → 筛选低库存 → startTrend → classify
  *
- * 每个 job 的状态保存在内存 Map 中；最终结果由前端存入 localStorage。
- * 通过 inventory-sse 向订阅者推送 phase/progress/low-stock/complete/error 事件。
+ * 每个 job 的状态保存在内存 Map 中；分类结果由前端存入 localStorage。
+ * 通过 inventory-sse 向订阅者推送 phase/progress/low-stock/trend-result/complete/error 事件。
  *
  * worker 借用：通过 ws-handler.enqueueInventoryTask 入队（负数 taskId 命名空间），
  * 回调驱动状态机推进。
@@ -56,6 +56,7 @@ interface TrendResultDTO {
 
 type Phase = 'download' | 'cleaning' | 'filtering' | 'trend' | 'classifying' | 'completed' | 'failed';
 type JobStatus = 'running' | 'completed' | 'failed';
+type ClassificationBucket = 'warning' | 'reminder' | 'info';
 
 interface InventoryJob {
   jobId: string;
@@ -169,10 +170,78 @@ function cleanAndFilter(job: InventoryJob, csv: string): void {
 //  趋势查验
 // ==================================================================
 
+function emptyClassification(job: InventoryJob): Classification {
+  return {
+    warning: [],
+    reminder: [],
+    info: [],
+    noAttentionCount: Math.max(
+      0,
+      (job.totalCleaned ?? 0) - (job.lowStockItems ?? []).length,
+    ),
+  };
+}
+
+function classifyTrendItem(
+  job: InventoryJob,
+  item: LowStockItem,
+  trend: TrendResultDTO,
+): { bucket: ClassificationBucket; item: ClassifiedItem } {
+  let net = 0;
+  for (const move of trend.moves) net += move.dir === 'in' ? move.qty : -move.qty;
+
+  const classifiedItem: ClassifiedItem = { ...item, net };
+  const bucket = net <= -job.trendThreshold
+    ? 'warning'
+    : net < 0
+      ? 'reminder'
+      : 'info';
+  return { bucket, item: classifiedItem };
+}
+
+function upsertClassification(
+  classification: Classification,
+  bucket: ClassificationBucket,
+  item: ClassifiedItem,
+): void {
+  classification.warning = classification.warning.filter((entry) => entry.name !== item.name);
+  classification.reminder = classification.reminder.filter((entry) => entry.name !== item.name);
+  classification.info = classification.info.filter((entry) => entry.name !== item.name);
+  classification[bucket].push(item);
+
+  classification.warning.sort((a, b) => a.net - b.net);
+  classification.reminder.sort((a, b) => a.net - b.net);
+  classification.info.sort((a, b) => a.qtyOnHand - b.qtyOnHand);
+}
+
+function recordTrendResult(job: InventoryJob, trend: TrendResultDTO): void {
+  if (job.status !== 'running') return;
+  const item = (job.lowStockItems ?? []).find((candidate) => candidate.name === trend.name);
+  if (!item) return;
+
+  job.trendResults ??= [];
+  const existingIndex = job.trendResults.findIndex((entry) => entry.name === trend.name);
+  if (existingIndex >= 0) job.trendResults[existingIndex] = trend;
+  else job.trendResults.push(trend);
+
+  job.classification ??= emptyClassification(job);
+  const classified = classifyTrendItem(job, item, trend);
+  upsertClassification(job.classification, classified.bucket, classified.item);
+
+  emit(job.jobId, 'trend-result', {
+    ...classified,
+    processed: job.trendResults.length,
+    total: (job.lowStockItems ?? []).length,
+    noAttentionCount: job.classification.noAttentionCount,
+  });
+}
+
 /** 启动趋势任务（借用 worker） */
 function startTrend(job: InventoryJob): void {
   if (job.status !== 'running') return;
   const items = (job.lowStockItems ?? []).map((i) => i.name);
+  job.trendResults = [];
+  job.classification = emptyClassification(job);
   if (items.length === 0) {
     // 无低库存项 → 直接分类完成
     classifyAndComplete(job);
@@ -190,6 +259,7 @@ function startTrend(job: InventoryJob): void {
     'inventory-trend',
     {
       onProgress: (message) => progress(job, message),
+      onTrendResult: (result) => recordTrendResult(job, result),
       onComplete: (result) => {
         try {
           const r = (result ?? {}) as { items?: TrendResultDTO[] };
@@ -212,37 +282,25 @@ function startTrend(job: InventoryJob): void {
 
 /** 计算净变化并分桶，标记完成 */
 function classifyAndComplete(job: InventoryJob): void {
+  if (job.status !== 'running') return;
   setPhase(job, 'classifying');
 
   const trendByName = new Map<string, TrendResultDTO>();
   for (const t of job.trendResults ?? []) trendByName.set(t.name, t);
 
-  const warning: ClassifiedItem[] = [];
-  const reminder: ClassifiedItem[] = [];
-  const info: ClassifiedItem[] = [];
+  const classification = emptyClassification(job);
 
   for (const item of job.lowStockItems ?? []) {
-    const trend = trendByName.get(item.name);
-    const moves = trend?.moves ?? [];
-    let net = 0;
-    for (const m of moves) net += m.dir === 'in' ? m.qty : -m.qty;
-    const ci: ClassifiedItem = { ...item, net };
-    if (net <= -job.trendThreshold) warning.push(ci);
-    else if (net < 0) reminder.push(ci);
-    else info.push(ci);
+    const trend = trendByName.get(item.name) ?? { name: item.name, moves: [] };
+    const classified = classifyTrendItem(job, item, trend);
+    upsertClassification(classification, classified.bucket, classified.item);
   }
 
-  warning.sort((a, b) => a.net - b.net);
-  reminder.sort((a, b) => a.net - b.net);
-  info.sort((a, b) => a.qtyOnHand - b.qtyOnHand);
-
-  const noAttentionCount = (job.totalCleaned ?? 0) - (job.lowStockItems ?? []).length;
-
-  job.classification = { warning, reminder, info, noAttentionCount };
+  job.classification = classification;
   job.status = 'completed';
   job.phase = 'completed';
 
-  progress(job, `分类完成：警告 ${warning.length} / 提醒 ${reminder.length} / 信息 ${info.length} / 无需注意 ${noAttentionCount}`);
+  progress(job, `分类完成：警告 ${classification.warning.length} / 提醒 ${classification.reminder.length} / 信息 ${classification.info.length} / 无需注意 ${classification.noAttentionCount}`);
   emit(job.jobId, 'complete', { classification: job.classification });
 }
 

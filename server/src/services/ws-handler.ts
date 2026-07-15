@@ -82,9 +82,15 @@ const HEARTBEAT_TIMEOUT = HEARTBEAT_TIMEOUT_MS;
 export interface InventoryTaskHandlers {
   onAccepted?: () => void;
   onProgress?: (message: string) => void;
+  onTrendResult?: (result: InventoryTrendResult) => void;
   onComplete?: (result: unknown) => void;
   onFailed?: (error: string) => void;
 }
+
+export type InventoryTrendResult = Extract<
+  InboundMessage,
+  { type: 'inventory-trend-result' }
+>['result'];
 
 interface InventoryTaskEntry {
   taskId: number;
@@ -515,6 +521,21 @@ function handleProgress(ws: WebSocket, msg: Extract<InboundMessage, { type: 'pro
   });
 }
 
+function handleInventoryTrendResult(
+  ws: WebSocket,
+  msg: Extract<InboundMessage, { type: 'inventory-trend-result' }>,
+): void {
+  if (!worker?.authenticated) return;
+  const { taskId, result, attempt } = msg;
+  const entry = inventoryTaskMap.get(taskId);
+
+  if (entry?.kind === 'inventory-trend' && attempt > entry.lastAttempt) {
+    entry.lastAttempt = attempt;
+    entry.handlers.onTrendResult?.(result);
+  }
+  sendAck(ws, taskId, attempt);
+}
+
 // ==================================================================
 //  消息路由
 // ==================================================================
@@ -572,6 +593,9 @@ function handleMessage(conn: WorkerConnection, ws: WebSocket, raw: string): void
       break;
     case 'progress':
       handleProgress(ws, msg);
+      break;
+    case 'inventory-trend-result':
+      handleInventoryTrendResult(ws, msg);
       break;
   }
 }

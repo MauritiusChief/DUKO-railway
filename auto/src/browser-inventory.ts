@@ -17,6 +17,7 @@ import type { TrendItemResult } from './protocol.js'
 
 export interface InventoryCallbacks {
   onProgress: (message: string) => Promise<void>
+  onTrendResult?: (result: TrendItemResult) => Promise<void>
 }
 
 export interface InventoryDownloadOutcome {
@@ -119,14 +120,17 @@ export async function runInventoryTrendTask(
     for (let i = 0; i < items.length; i++) {
       const name = items[i]
       await callbacks.onProgress(`TREND: (${i + 1}/${items.length}) 开始查验 ${name}`)
+      let result: TrendItemResult
       try {
         const moves = await extractTrendForItem(page, name, callbacks.onProgress)
-        results.push({ name, moves })
+        result = { name, moves }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
         await callbacks.onProgress(`TREND: ${name} 查验异常：${msg}`)
-        results.push({ name, moves: [] })
+        result = { name, moves: [] }
       }
+      results.push(result)
+      await callbacks.onTrendResult?.(result)
     }
     return { status: 'completed', items: results }
   } finally {

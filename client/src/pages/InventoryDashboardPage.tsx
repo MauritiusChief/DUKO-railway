@@ -12,8 +12,6 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAuthStore } from '../stores/authStore';
 import { fetchWithAuth } from '../lib/fetchWithAuth';
 import { ReconnectingSSE } from '../lib/sseStream';
 import './InventoryDashboardPage.css';
@@ -49,10 +47,36 @@ function loadLastResult(): {
   }
 }
 
-export default function InventoryDashboardPage() {
-  const navigate = useNavigate();
-  const logout = useAuthStore((s) => s.logout);
+function clearLastResult(): void {
+  try {
+    localStorage.removeItem(LS_KEY);
+  } catch {
+    /* 忽略存储访问错误 */
+  }
+}
 
+type ClassificationBucket = 'warning' | 'reminder' | 'info';
+
+function upsertClassifiedItem(
+  current: Classification | null,
+  bucket: ClassificationBucket,
+  item: ClassifiedItem,
+  noAttentionCount: number,
+): Classification {
+  const next: Classification = {
+    warning: (current?.warning ?? []).filter((entry) => entry.name !== item.name),
+    reminder: (current?.reminder ?? []).filter((entry) => entry.name !== item.name),
+    info: (current?.info ?? []).filter((entry) => entry.name !== item.name),
+    noAttentionCount,
+  };
+  next[bucket].push(item);
+  next.warning.sort((a, b) => a.net - b.net);
+  next.reminder.sort((a, b) => a.net - b.net);
+  next.info.sort((a, b) => a.qtyOnHand - b.qtyOnHand);
+  return next;
+}
+
+export default function InventoryDashboardPage() {
   const [threshold, setThreshold] = useState(5);
   const [trendThreshold, setTrendThreshold] = useState(10);
 
@@ -82,6 +106,25 @@ export default function InventoryDashboardPage() {
       setTrendThreshold(last.trendThreshold ?? 20);
     }
   }, []);
+
+  // 每次表格或统计数据更新时同步覆盖本地结果。
+  useEffect(() => {
+    if (!classification) return;
+    try {
+      localStorage.setItem(
+        LS_KEY,
+        JSON.stringify({
+          ts: Date.now(),
+          threshold,
+          trendThreshold,
+          totalCleaned: totalCleaned ?? 0,
+          classification,
+        }),
+      );
+    } catch {
+      /* 忽略配额错误 */
+    }
+  }, [classification, threshold, trendThreshold, totalCleaned]);
 
   // 挂载时拉取一次 worker 在线状态
   useEffect(() => {
@@ -144,14 +187,38 @@ export default function InventoryDashboardPage() {
             if (d.message) appendLog(String(d.message));
             break;
           case 'low-stock':
-            if (typeof d.totalCleaned === 'number') setTotalCleaned(d.totalCleaned);
-            if (typeof d.lowStockCount === 'number') setLowStockCount(d.lowStockCount);
+            if (typeof d.totalCleaned === 'number' && typeof d.lowStockCount === 'number') {
+              setTotalCleaned(d.totalCleaned);
+              setLowStockCount(d.lowStockCount);
+              setClassification({
+                warning: [],
+                reminder: [],
+                info: [],
+                noAttentionCount: Math.max(0, d.totalCleaned - d.lowStockCount),
+              });
+            }
             break;
+          case 'trend-result': {
+            const bucket = d.bucket;
+            const item = d.item as ClassifiedItem | undefined;
+            if (
+              (bucket === 'warning' || bucket === 'reminder' || bucket === 'info')
+              && item
+              && typeof d.noAttentionCount === 'number'
+            ) {
+              setClassification((current) => upsertClassifiedItem(
+                current,
+                bucket,
+                item,
+                d.noAttentionCount as number,
+              ));
+            }
+            break;
+          }
           case 'complete':
             if (d.classification) {
               const c = d.classification as Classification;
               setClassification(c);
-              saveResult(c);
             }
             setStatus('completed');
             finishSSE();
@@ -174,30 +241,21 @@ export default function InventoryDashboardPage() {
     setTimeout(() => sseRef.current?.stop(), 500);
   }
 
-  function saveResult(c: Classification) {
-    try {
-      localStorage.setItem(
-        LS_KEY,
-        JSON.stringify({
-          ts: Date.now(),
-          threshold,
-          trendThreshold,
-          totalCleaned: totalCleaned ?? 0,
-          classification: c,
-        }),
-      );
-    } catch {
-      /* 忽略配额错误 */
-    }
-  }
-
   function resetForNewJob() {
+    clearLastResult();
     setLog([]);
     setError(null);
     setClassification(null);
     setTotalCleaned(null);
     setLowStockCount(null);
     setStatus('running');
+  }
+
+  function handleClearTables() {
+    clearLastResult();
+    setClassification(null);
+    setTotalCleaned(null);
+    setLowStockCount(null);
   }
 
   async function handleDownload() {
@@ -302,8 +360,8 @@ export default function InventoryDashboardPage() {
                 <td colSpan={3} className={`iv-td-empty ${colClass}`}>—</td>
               </tr>
             )}
-            {items.map((it, i) => (
-              <tr key={i}>
+            {items.map((it) => (
+              <tr key={it.name}>
                 <td>{it.name}</td>
                 <td className="iv-td-num">{it.qtyOnHand.toFixed(0)}</td>
                 <td className="iv-td-num">{fmtNet(it.net)}</td>
@@ -329,16 +387,7 @@ export default function InventoryDashboardPage() {
           )}
         </div>
         <div className="iv-header-right">
-          <button className="iv-btn" onClick={() => navigate('/')}>回到主页</button>
-          <button
-            className="iv-btn"
-            onClick={async () => {
-              await logout();
-              navigate('/login');
-            }}
-          >
-            登出
-          </button>
+          <button className="iv-btn" onClick={handleClearTables} disabled={busy}>清空表格</button>
         </div>
       </div>
 
