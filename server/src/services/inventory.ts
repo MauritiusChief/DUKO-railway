@@ -20,7 +20,6 @@ import {
   isWorkerConnected,
 } from './ws-handler.js';
 import { broadcastInventory } from './inventory-sse.js';
-import { getAutoOnlineState } from './ws-state.js';
 
 // ==================================================================
 //  类型
@@ -86,7 +85,6 @@ export interface JobSnapshot {
   status: JobStatus;
   threshold: number;
   trendThreshold: number;
-  autoOnline: boolean;
   totalCleaned?: number;
   lowStockCount?: number;
   lowStockItems?: LowStockItem[];
@@ -343,7 +341,6 @@ export function createUploadJob(
 export function getJobSnapshot(jobId: string): JobSnapshot | null {
   const job = jobs.get(jobId);
   if (!job) return null;
-  const { online } = getAutoOnlineState();
   return {
     jobId: job.jobId,
     mode: job.mode,
@@ -351,7 +348,6 @@ export function getJobSnapshot(jobId: string): JobSnapshot | null {
     status: job.status,
     threshold: job.threshold,
     trendThreshold: job.trendThreshold,
-    autoOnline: online,
     totalCleaned: job.totalCleaned,
     lowStockCount: job.lowStockItems?.length,
     lowStockItems: job.lowStockItems,

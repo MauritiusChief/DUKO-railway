@@ -76,6 +76,9 @@ export function cleanCSVFromString(
 
     // 跳过 Name / Descriptipn 为空的行（这些不属于有效产品数据）
     if (!name || !desc) continue;
+    
+    // 跳过 -OL 后缀（已确认这些是无效产品数据）
+    if (name.endsWith('-OL')) continue;
 
     if (isStandardName(name)) {
       kept.push({ name, reason: 'standard', row });

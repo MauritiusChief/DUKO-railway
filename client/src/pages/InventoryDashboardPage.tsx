@@ -54,12 +54,12 @@ export default function InventoryDashboardPage() {
   const logout = useAuthStore((s) => s.logout);
 
   const [threshold, setThreshold] = useState(5);
-  const [trendThreshold, setTrendThreshold] = useState(20);
+  const [trendThreshold, setTrendThreshold] = useState(10);
 
   const [jobId, setJobId] = useState<string | null>(null);
   const [phase, setPhase] = useState('');
   const [status, setStatus] = useState<'idle' | 'running' | 'completed' | 'failed'>('idle');
-  const [autoOnline, setAutoOnline] = useState(true);
+  const [autoOnline, setAutoOnline] = useState(false);
   const [log, setLog] = useState<string[]>([]);
   const [classification, setClassification] = useState<Classification | null>(null);
   const [totalCleaned, setTotalCleaned] = useState<number | null>(null);
@@ -81,6 +81,22 @@ export default function InventoryDashboardPage() {
       setThreshold(last.threshold ?? 5);
       setTrendThreshold(last.trendThreshold ?? 20);
     }
+  }, []);
+
+  // 挂载时拉取一次 worker 在线状态
+  useEffect(() => {
+    let cancelled = false;
+    fetchWithAuth('/api/auto-worker/status')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled && data && typeof data.autoOnline === 'boolean') {
+          setAutoOnline(data.autoOnline);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // 日志自动滚动
@@ -111,7 +127,6 @@ export default function InventoryDashboardPage() {
         switch (type) {
           case 'snapshot': {
             if (d.phase) setPhase(String(d.phase));
-            if (typeof d.autoOnline === 'boolean') setAutoOnline(d.autoOnline);
             if (typeof d.totalCleaned === 'number') setTotalCleaned(d.totalCleaned);
             if (typeof d.lowStockCount === 'number') setLowStockCount(d.lowStockCount);
             if (d.classification) setClassification(d.classification as Classification);

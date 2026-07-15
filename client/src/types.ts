@@ -349,7 +349,6 @@ export interface QuotationSnapshotLine {
 }
 
 export interface ActiveTaskSummaryResponse {
-  autoOnline: boolean
   activeTask?: {
     taskId: number
     quotationNumber: string
@@ -357,6 +356,10 @@ export interface ActiveTaskSummaryResponse {
     startedAt: string
     status: QuotationTaskStatus
   }
+}
+
+export interface WorkerStatusResponse {
+  autoOnline: boolean
 }
 
 /** 全局排队队列摘要（跨用户，公开） */

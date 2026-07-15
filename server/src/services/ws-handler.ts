@@ -47,6 +47,7 @@ import { broadcastQuotationEvent } from '../routes/quotation.js';
 import { setAutoOnline, setActiveTask } from './ws-state.js';
 import {
   broadcastAgentStatus,
+  broadcastWorkerStatus,
   broadcastQueueUpdate,
   broadcastTaskUpdateToOwner,
 } from './global-sse-broadcast.js';
@@ -260,6 +261,7 @@ function handleHello(conn: WorkerConnection, ws: WebSocket, msg: Extract<Inbound
   console.log('[ws] auto worker 已认证并连接');
 
   // 通知全局 SSE 订阅者 Agent 已上线
+  broadcastWorkerStatus();
   broadcastAgentStatus();
 
   // 注意：不在此处派发任务。等 auto 主动发送 ready 后再派发。
@@ -616,6 +618,7 @@ function handleWorkerDisconnect(reason: string): void {
   }
 
   // 全局 SSE：Agent 离线 + 队列可能因回收而变化
+  broadcastWorkerStatus();
   broadcastAgentStatus();
   if (runningIds.length > 0) {
     broadcastQueueUpdate();

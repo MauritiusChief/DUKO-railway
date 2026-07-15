@@ -214,11 +214,9 @@ export default function QuotationTasksPage() {
       <div className="qt-header">
         <div className="qt-header-left">
           <div className="qt-header-title">{t('报价任务页标题')}</div>
-          {store.activeSummary && (
-            <span className={`qt-auto-status ${store.activeSummary.autoOnline ? 'qt-auto-online' : 'qt-auto-offline'}`}>
-              {store.activeSummary.autoOnline ? t('Auto在线') : t('Auto离线')}
-            </span>
-          )}
+          <span className={`qt-auto-status ${store.workerOnline ? 'qt-auto-online' : 'qt-auto-offline'}`}>
+            {store.workerOnline ? t('Auto在线') : t('Auto离线')}
+          </span>
           {store.activeSummary?.activeTask && (
             <span className="qt-active-task">
               {t('当前执行')}: {store.activeSummary.activeTask.quotationNumber} ({store.activeSummary.activeTask.username})

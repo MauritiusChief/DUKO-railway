@@ -14,7 +14,6 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { validate } from '../middleware/validate.js';
 import { SSEConnection } from '../middleware/sse.js';
-import { getAutoOnlineState } from '../services/ws-state.js';
 import { subscribeInventory } from '../services/inventory-sse.js';
 import {
   createDownloadJob,
@@ -96,11 +95,8 @@ inventoryRouter.get('/inventory/jobs/:jobId/events', (req, res) => {
   const sse = new SSEConnection(res);
   const unsubscribe = subscribeInventory(req.params.jobId, sse);
 
-  // 推送初始快照（含 auto 在线状态、当前 phase、已累积的低库存列表等）
-  sse.send('snapshot', {
-    ...snapshot,
-    autoOnline: getAutoOnlineState().online,
-  });
+  // 推送初始快照（当前 phase、已累积的低库存列表等）
+  sse.send('snapshot', snapshot);
   // 若已终态，补发 complete/error
   if (snapshot.status === 'completed' && snapshot.classification) {
     sse.send('complete', { classification: snapshot.classification });

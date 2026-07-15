@@ -98,7 +98,6 @@ export interface QuotationTaskDetail extends QuotationTaskSummary {
 
 /** 当前活跃任务的公开摘要（不暴露敏感信息） */
 export interface ActiveTaskSummary {
-  autoOnline: boolean;
   activeTask?: {
     taskId: number;
     quotationNumber: string;
