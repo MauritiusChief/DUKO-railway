@@ -221,7 +221,7 @@ describe('generateMaterialList', () => {
     const result = generateMaterialList(makeLayout([wall]));
 
     // gaplike_item 进清单
-    expect(qty(result, 'VAL')).toBe(1);
+    expect(qty(result, '14VAL')).toBe(1);
     // BEP：4 个外露侧（两端边缘 + 两侧朝 gaplike_item，因为 gaplike_item 不挡两侧）
     expect(qty(result, '14BEP')).toBe(4);
     // 无颜色分类不应产生 warning
@@ -411,7 +411,7 @@ describe('generateMaterialList', () => {
     const result = generateMaterialList(makeLayout([wall]));
 
     // filler 进清单
-    expect(qty(result, 'BF3')).toBe(2);
+    expect(qty(result, '14BF3')).toBe(2);
     // TK 包含 filler 的长度
     expect(lenOf(result, '14TK')).toBe(60);
     // QR 正面 60 + 2 侧 2×24, filler 的长度
@@ -501,7 +501,7 @@ describe('generateMaterialList', () => {
     const result = generateMaterialList(makeLayout([wall]));
 
     // 原始产品行不应用 filler 出现
-    expect(qty(result, 'TF3')).toBe(0);
+    expect(qty(result, '14TF3')).toBe(0);
     // 高电器不应在清单中，因为其不是实际售卖的产品
     expect(qty(result, 'refrigerator')).toBe(0);
   });
@@ -517,7 +517,7 @@ describe('generateMaterialList', () => {
     const result = generateMaterialList(makeLayout([wall]));
 
     // filler 被清除
-    expect(qty(result, 'BF3')).toBe(0);
+    expect(qty(result, '14BF3')).toBe(0);
     // DWP 辅料应正常生成
     expect(qty(result, '14DWP')).toBe(2);
   });

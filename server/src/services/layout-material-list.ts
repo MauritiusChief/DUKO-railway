@@ -167,9 +167,10 @@ function blockColor(block: SectionBlock): string | undefined {
   return c && c.length > 0 ? c : undefined;
 }
 
-/** 颜色前缀拼接：有颜色则 `${color}${shape}`，无颜色则仅 shape */
-function withColor(colorCode: string | undefined, shape: string): string {
-  return colorCode ? `${colorCode}${shape}` : shape;
+/** 颜色前缀拼接：有颜色则 `${color}${sku}`，无颜色或 sku 里已有颜色则仅 sku */
+function withColor(colorCode: string | undefined, sku: string): string {
+  if (!colorCode || sku.startsWith(colorCode)) return sku;
+  return `${colorCode}${sku}`;
 }
 
 /** 是否 UNIPACK 颜色 */
@@ -425,7 +426,7 @@ function collectOriginalItems(layout: LayoutDocument, acc: Accumulator): void {
         // 双轨物品（tall_cabinet / tall_appliance）按 id 去重
         if (acc.seenItemIds.has(item.id)) continue;
         acc.seenItemIds.add(item.id);
-        addDiscrete(acc, item.sku, 1);
+        addDiscrete(acc, withColor(blockColor(block), item.sku), 1);
       }
     }
   }
@@ -945,9 +946,9 @@ function removeAdjacentFillers(layout: LayoutDocument, acc: Accumulator): void {
           const currentQty = acc.itemQuantityBySku.get(item.sku);
           if (currentQty != null && currentQty > 0) {
             if (currentQty <= 1) {
-              acc.itemQuantityBySku.delete(item.sku);
+              acc.itemQuantityBySku.delete(withColor(blockColor(pos.block), item.sku));
             } else {
-              acc.itemQuantityBySku.set(item.sku, currentQty - 1);
+              acc.itemQuantityBySku.set(withColor(blockColor(pos.block), item.sku), currentQty - 1);
             }
           }
         }
