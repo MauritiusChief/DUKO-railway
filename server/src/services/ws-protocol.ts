@@ -41,13 +41,13 @@ export const readyMessageSchema = z.object({
 
 export const acceptedMessageSchema = z.object({
   type: z.literal('accepted'),
-  taskId: z.number().int().positive(),
+  taskId: z.number().int(),
   attempt: z.number().int().positive(),
 });
 
 export const lineResultMessageSchema = z.object({
   type: z.literal('line-result'),
-  taskId: z.number().int().positive(),
+  taskId: z.number().int(),
   lineNo: z.number().int().positive(),
   status: z.enum(['success', 'failed']),
   error: z.string().optional(),
@@ -56,9 +56,11 @@ export const lineResultMessageSchema = z.object({
 
 export const taskCompletedMessageSchema = z.object({
   type: z.literal('task-completed'),
-  taskId: z.number().int().positive(),
+  taskId: z.number().int(),
   status: z.enum(['completed', 'partial_failed']),
   attempt: z.number().int().positive(),
+  // 任务种类（区分 quotation / inventory-download / inventory-trend）
+  kind: z.enum(['quotation', 'inventory-download', 'inventory-trend']).optional(),
   lines: z
     .array(
       z.object({
@@ -68,7 +70,8 @@ export const taskCompletedMessageSchema = z.object({
         status: z.enum(['pending', 'success', 'failed']),
         error: z.string().optional(),
       }),
-    ),
+    )
+    .optional(),
   finalSnapshot: z
     .array(
       z.object({
@@ -77,11 +80,13 @@ export const taskCompletedMessageSchema = z.object({
       }),
     )
     .optional(),
+  // inventory 任务的 kind 专属产出（download→{csv}; trend→{items:[...]})
+  result: z.unknown().optional(),
 });
 
 export const taskFailedMessageSchema = z.object({
   type: z.literal('task-failed'),
-  taskId: z.number().int().positive(),
+  taskId: z.number().int(),
   error: z.string(),
   attempt: z.number().int().positive(),
 });
@@ -92,7 +97,7 @@ export const heartbeatMessageSchema = z.object({
 
 export const confirmRequestMessageSchema = z.object({
   type: z.literal('confirm-request'),
-  taskId: z.number().int().positive(),
+  taskId: z.number().int(),
   company: z.string(),
   quotationNumber: z.string(),
   existingLines: z.array(
@@ -112,7 +117,7 @@ export const confirmRequestMessageSchema = z.object({
 
 export const progressMessageSchema = z.object({
   type: z.literal('progress'),
-  taskId: z.number().int().positive(),
+  taskId: z.number().int(),
   message: z.string().min(1),
   attempt: z.number().int().positive(),
 });
@@ -150,20 +155,42 @@ export type InboundMessage = z.infer<typeof inboundMessageSchema>;
 //  出站消息（Server → auto）TypeScript 类型
 // ==================================================================
 
+/** 任务种类 */
+export type TaskKind = 'quotation' | 'inventory-download' | 'inventory-trend';
+
 export interface TaskAssignedLine {
   lineNo: number;
   partModel: string;
   quantity: number;
 }
 
-export interface TaskAssignedMessage {
+export interface QuotationTaskAssignedMessage {
   type: 'task-assigned';
   taskId: number;
+  kind: 'quotation';
   quotationNumber: string;
   odooUrl: string;
   writeMode: 'overwrite' | 'append';
   lines: TaskAssignedLine[];
 }
+
+export interface InventoryDownloadTaskAssignedMessage {
+  type: 'task-assigned';
+  taskId: number;
+  kind: 'inventory-download';
+}
+
+export interface InventoryTrendTaskAssignedMessage {
+  type: 'task-assigned';
+  taskId: number;
+  kind: 'inventory-trend';
+  items: string[];
+}
+
+export type TaskAssignedMessage =
+  | QuotationTaskAssignedMessage
+  | InventoryDownloadTaskAssignedMessage
+  | InventoryTrendTaskAssignedMessage;
 
 export interface AckMessage {
   type: 'ack';
@@ -186,9 +213,16 @@ export interface ConfirmResponseMessage {
   decision: 'confirmed' | 'rejected';
 }
 
+/** 中止任务（server → auto）：让 worker 立即中止指定任务 */
+export interface AbortTaskMessage {
+  type: 'abort';
+  taskId: number;
+}
+
 export type OutboundMessage =
   | TaskAssignedMessage
   | AckMessage
   | HeartbeatAckMessage
   | ServerErrorMessage
-  | ConfirmResponseMessage;
+  | ConfirmResponseMessage
+  | AbortTaskMessage;

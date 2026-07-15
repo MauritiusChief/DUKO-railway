@@ -478,6 +478,9 @@ export default function TableParsePage() {
           <button className="tp-submit-btn tp-download-btn" onClick={() => navigate('/quotation-tasks')}>
             {t('前往报价任务')}
           </button>
+          <button className="tp-submit-btn tp-download-btn" onClick={() => navigate('/inventory')}>
+            库存看板
+          </button>
           <button className="tp-submit-btn tp-download-btn" onClick={handleDownloadScript}>
             {t('下载脚本')}
           </button>

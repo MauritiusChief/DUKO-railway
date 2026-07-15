@@ -240,6 +240,7 @@ export default function QuotationTasksPage() {
             onChange={setLang}
           />
           <button className="qt-submit-btn" onClick={() => navigate('/')}>{t('回到主页')}</button>
+          <button className="qt-submit-btn" onClick={() => navigate('/inventory')}>库存看板</button>
         </div>
       </div>
 

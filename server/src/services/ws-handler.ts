@@ -70,6 +70,108 @@ let heartbeatCheckTimer: ReturnType<typeof setInterval> | null = null;
 const HEARTBEAT_TIMEOUT = HEARTBEAT_TIMEOUT_MS;
 
 // ==================================================================
+//  Inventory 内存任务（借用同一 worker，不落库）
+// ==================================================================
+//
+//  inventory 任务用负数 taskId 命名空间，绝不与 quotation 正数 DB id 冲突。
+//  派发优先级：worker 空闲时先抽 quotation 队列，队空才跑 inventory。
+//  入站结果按 taskId 路由：在 inventoryTaskMap 中 → 调 inventory 回调（跳过 DB）；
+//  否则走原 quotation 处理器。
+
+export interface InventoryTaskHandlers {
+  onAccepted?: () => void;
+  onProgress?: (message: string) => void;
+  onComplete?: (result: unknown) => void;
+  onFailed?: (error: string) => void;
+}
+
+interface InventoryTaskEntry {
+  taskId: number;
+  kind: 'inventory-download' | 'inventory-trend';
+  /** trend 任务的项目名列表（download 无） */
+  items?: string[];
+  handlers: InventoryTaskHandlers;
+  /** 内存幂等：已处理的最大 attempt */
+  lastAttempt: number;
+}
+
+/** 待派发的 inventory 任务（单槽；inventory 一次只跑一个查询） */
+let pendingInventoryTask: InventoryTaskEntry | null = null;
+/** 已派发、正在等待结果的 inventory 任务（同一时刻最多一个） */
+let runningInventoryTask: InventoryTaskEntry | null = null;
+/** 所有在途 inventory 任务（pending + running）的回调登记 */
+const inventoryTaskMap = new Map<number, InventoryTaskEntry>();
+/** inventory 负数 taskId 自增序列 */
+let inventoryTaskIdSeq = 0;
+
+function nextInventoryTaskId(): number {
+  inventoryTaskIdSeq -= 1;
+  return inventoryTaskIdSeq;
+}
+
+/** 判断 taskId 是否属于 inventory（负数命名空间） */
+function isInventoryTaskId(taskId: number): boolean {
+  return taskId < 0;
+}
+
+/**
+ * 入队一个 inventory 任务，等待 worker 空闲后派发。
+ * 返回分配的（负数）taskId。
+ */
+export function enqueueInventoryTask(
+  kind: 'inventory-download' | 'inventory-trend',
+  handlers: InventoryTaskHandlers,
+  items?: string[],
+): number {
+  const taskId = nextInventoryTaskId();
+  const entry: InventoryTaskEntry = { taskId, kind, handlers, lastAttempt: 0, items };
+  // 若已有 pending 任务，先拒绝旧的（inventory 一次一个查询）
+  if (pendingInventoryTask) {
+    pendingInventoryTask.handlers.onFailed?.('被更新的 inventory 任务取代');
+    inventoryTaskMap.delete(pendingInventoryTask.taskId);
+  }
+  pendingInventoryTask = entry;
+  inventoryTaskMap.set(taskId, entry);
+  tryDispatch();
+  return taskId;
+}
+
+/** 中止一个 inventory 任务（已派发→发 abort；未派发→直接拒绝） */
+export function abortInventoryTask(taskId: number): boolean {
+  const entry = inventoryTaskMap.get(taskId);
+  if (!entry) return false;
+  if (runningInventoryTask?.taskId === taskId && worker?.authenticated && worker.ws.readyState === WebSocket.OPEN) {
+    sendMessage(worker.ws, { type: 'abort', taskId });
+    return true;
+  }
+  // 未派发：直接拒绝
+  if (pendingInventoryTask?.taskId === taskId) pendingInventoryTask = null;
+  inventoryTaskMap.delete(taskId);
+  entry.handlers.onFailed?.('用户取消');
+  return true;
+}
+
+/** worker 空闲且无 quotation 排队时，派发 pending inventory 任务 */
+function dispatchInventoryIfIdle(): void {
+  if (!pendingInventoryTask) return;
+  if (!worker || !worker.authenticated || !worker.ready) return;
+  if (worker.ws.readyState !== WebSocket.OPEN) return;
+
+  const entry = pendingInventoryTask;
+  pendingInventoryTask = null;
+  runningInventoryTask = entry;
+  worker.ready = false;
+
+  let assigned: TaskAssignedMessage;
+  if (entry.kind === 'inventory-download') {
+    assigned = { type: 'task-assigned', taskId: entry.taskId, kind: 'inventory-download' };
+  } else {
+    assigned = { type: 'task-assigned', taskId: entry.taskId, kind: 'inventory-trend', items: entry.items ?? [] };
+  }
+  sendMessage(worker.ws, assigned);
+}
+
+// ==================================================================
 //  出站消息发送
 // ==================================================================
 
@@ -91,30 +193,34 @@ function sendAck(ws: WebSocket, taskId: number, attempt: number): void {
 //  任务派发
 // ==================================================================
 
-/** 尝试向空闲 worker 派发队头任务 */
+/** 尝试向空闲 worker 派发队头任务（quotation 优先，队空则借给 inventory） */
 function tryDispatch(): void {
   if (!worker || !worker.authenticated || !worker.ready) return;
   if (worker.ws.readyState !== WebSocket.OPEN) return;
 
   const task = getNextQueuedTask();
-  if (!task) return; // 无排队任务，保持 worker ready 等待
+  if (task) {
+    // quotation 队列优先
+    worker.ready = false;
+    const assigned: TaskAssignedMessage = {
+      type: 'task-assigned',
+      taskId: task.id,
+      kind: 'quotation',
+      quotationNumber: task.quotationNumber,
+      odooUrl: task.odooUrl,
+      writeMode: task.writeMode,
+      lines: task.lines.map((l) => ({
+        lineNo: l.lineNo,
+        partModel: l.partModel,
+        quantity: l.quantity,
+      })),
+    };
+    sendMessage(worker.ws, assigned);
+    return;
+  }
 
-  // 标记 worker 忙碌，避免重复派发
-  worker.ready = false;
-
-  const assigned: TaskAssignedMessage = {
-    type: 'task-assigned',
-    taskId: task.id,
-    quotationNumber: task.quotationNumber,
-    odooUrl: task.odooUrl,
-    writeMode: task.writeMode,
-    lines: task.lines.map((l) => ({
-      lineNo: l.lineNo,
-      partModel: l.partModel,
-      quantity: l.quantity,
-    })),
-  };
-  sendMessage(worker.ws, assigned);
+  // quotation 队空 → 尝试借给 inventory
+  dispatchInventoryIfIdle();
 }
 
 // ==================================================================
@@ -170,6 +276,18 @@ function handleAccepted(conn: WorkerConnection, ws: WebSocket, msg: Extract<Inbo
   if (!conn.authenticated) return;
 
   const { taskId, attempt } = msg;
+
+  // inventory 任务：跳过 DB，仅 ack + 回调
+  if (isInventoryTaskId(taskId)) {
+    const entry = inventoryTaskMap.get(taskId);
+    if (entry && attempt > entry.lastAttempt) {
+      entry.lastAttempt = attempt;
+      entry.handlers.onAccepted?.();
+    }
+    sendAck(ws, taskId, attempt);
+    return;
+  }
+
   if (isDuplicate(taskId, attempt)) {
     sendAck(ws, taskId, attempt);
     return;
@@ -196,6 +314,12 @@ function handleLineResult(ws: WebSocket, msg: Extract<InboundMessage, { type: 'l
   if (!worker?.authenticated) return;
   const { taskId, lineNo, status, error, attempt } = msg;
 
+  // inventory 不产生 line-result，防御性忽略
+  if (isInventoryTaskId(taskId)) {
+    sendAck(ws, taskId, attempt);
+    return;
+  }
+
   if (isDuplicate(taskId, attempt)) {
     sendAck(ws, taskId, attempt);
     return;
@@ -213,7 +337,24 @@ function handleLineResult(ws: WebSocket, msg: Extract<InboundMessage, { type: 'l
 
 function handleTaskCompleted(ws: WebSocket, msg: Extract<InboundMessage, { type: 'task-completed' }>): void {
   if (!worker?.authenticated) return;
-  const { taskId, status, attempt, finalSnapshot } = msg;
+  const { taskId, attempt, result } = msg;
+
+  // inventory 任务：跳过 DB，回调后清理
+  if (isInventoryTaskId(taskId)) {
+    const entry = inventoryTaskMap.get(taskId);
+    if (entry && attempt > entry.lastAttempt) {
+      entry.lastAttempt = attempt;
+      entry.handlers.onComplete?.(result);
+    }
+    sendAck(ws, taskId, attempt);
+    if (entry) {
+      inventoryTaskMap.delete(taskId);
+      if (runningInventoryTask?.taskId === taskId) runningInventoryTask = null;
+    }
+    return;
+  }
+
+  const { status, finalSnapshot } = msg;
 
   if (isDuplicate(taskId, attempt)) {
     sendAck(ws, taskId, attempt);
@@ -260,6 +401,21 @@ function handleTaskFailed(ws: WebSocket, msg: Extract<InboundMessage, { type: 't
   if (!worker?.authenticated) return;
   const { taskId, error, attempt } = msg;
 
+  // inventory 任务：跳过 DB，回调后清理
+  if (isInventoryTaskId(taskId)) {
+    const entry = inventoryTaskMap.get(taskId);
+    if (entry && attempt > entry.lastAttempt) {
+      entry.lastAttempt = attempt;
+      entry.handlers.onFailed?.(error);
+    }
+    sendAck(ws, taskId, attempt);
+    if (entry) {
+      inventoryTaskMap.delete(taskId);
+      if (runningInventoryTask?.taskId === taskId) runningInventoryTask = null;
+    }
+    return;
+  }
+
   if (isDuplicate(taskId, attempt)) {
     sendAck(ws, taskId, attempt);
     return;
@@ -299,6 +455,12 @@ function handleConfirmRequest(ws: WebSocket, msg: Extract<InboundMessage, { type
   if (!worker?.authenticated) return;
   const { taskId, company, quotationNumber, existingLines, inputLines, attempt } = msg;
 
+  // inventory 不产生 confirm-request，防御性忽略
+  if (isInventoryTaskId(taskId)) {
+    sendAck(ws, taskId, attempt);
+    return;
+  }
+
   if (isDuplicate(taskId, attempt)) {
     sendAck(ws, taskId, attempt);
     return;
@@ -325,6 +487,17 @@ function handleConfirmRequest(ws: WebSocket, msg: Extract<InboundMessage, { type
 function handleProgress(ws: WebSocket, msg: Extract<InboundMessage, { type: 'progress' }>): void {
   if (!worker?.authenticated) return;
   const { taskId, message, attempt } = msg;
+
+  // inventory 任务：跳过 DB，仅 ack + 回调
+  if (isInventoryTaskId(taskId)) {
+    const entry = inventoryTaskMap.get(taskId);
+    if (entry && attempt > entry.lastAttempt) {
+      entry.lastAttempt = attempt;
+      entry.handlers.onProgress?.(message);
+    }
+    sendAck(ws, taskId, attempt);
+    return;
+  }
 
   if (isDuplicate(taskId, attempt)) {
     sendAck(ws, taskId, attempt);
@@ -414,6 +587,20 @@ function handleWorkerDisconnect(reason: string): void {
   worker = null;
   setAutoOnline(false);
   setActiveTask(null);
+
+  // 拒绝在途 inventory 任务（pending + running）
+  if (pendingInventoryTask) {
+    const e = pendingInventoryTask;
+    pendingInventoryTask = null;
+    inventoryTaskMap.delete(e.taskId);
+    e.handlers.onFailed?.('worker 断线，任务中止');
+  }
+  if (runningInventoryTask) {
+    const e = runningInventoryTask;
+    runningInventoryTask = null;
+    inventoryTaskMap.delete(e.taskId);
+    e.handlers.onFailed?.('worker 断线，任务中止');
+  }
 
   // 回收所有 running 任务
   const runningIds = getRunningTaskIds();
@@ -549,6 +736,10 @@ export function resetWebSocketState(): void {
     heartbeatCheckTimer = null;
   }
   setNotifyTaskQueued(null);
+  pendingInventoryTask = null;
+  runningInventoryTask = null;
+  inventoryTaskMap.clear();
+  inventoryTaskIdSeq = 0;
 }
 
 /** 获取当前 worker 是否已连接且已认证 */
