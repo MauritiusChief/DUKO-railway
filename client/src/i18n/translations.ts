@@ -754,4 +754,214 @@ export const messages = {
     zh: '种子管理员账户不允许此操作',
     en: 'Seed admin account is protected',
   },
+
+  /* ---- QuotationTasksPage ---- */
+  报价任务页标题: {
+    zh: '报价任务',
+    en: 'Quotation Tasks',
+  },
+  Auto在线: {
+    zh: 'Auto: 在线',
+    en: 'Auto: Online',
+  },
+  Auto离线: {
+    zh: 'Auto: 离线',
+    en: 'Auto: Offline',
+  },
+  当前执行: {
+    zh: '当前',
+    en: 'Current',
+  },
+  任务列表: {
+    zh: '任务列表',
+    en: 'Task List',
+  },
+  加载中: {
+    zh: '加载中...',
+    en: 'Loading...',
+  },
+  暂无任务: {
+    zh: '暂无任务',
+    en: 'No tasks yet',
+  },
+  排队: {
+    zh: '排队',
+    en: 'Queued',
+  },
+  执行中: {
+    zh: '执行中',
+    en: 'Running',
+  },
+  完成: {
+    zh: '完成',
+    en: 'Completed',
+  },
+  部分失败: {
+    zh: '部分失败',
+    en: 'Partial Failed',
+  },
+  失败: {
+    zh: '失败',
+    en: 'Failed',
+  },
+  已取消: {
+    zh: '已取消',
+    en: 'Cancelled',
+  },
+  成功: {
+    zh: '成功',
+    en: 'Success',
+  },
+  取消任务: {
+    zh: '取消',
+    en: 'Cancel',
+  },
+  报价单号: {
+    zh: '报价单号',
+    en: 'Quotation Number',
+  },
+  精准Odoo地址: {
+    zh: '精准 Odoo 地址 (可选)',
+    en: 'Precise Odoo URL (Optional)',
+  },
+  CSV数据: {
+    zh: 'CSV 数据 (partModel, quantity)',
+    en: 'CSV Data (partModel, quantity)',
+  },
+  覆写模式: {
+    zh: '清空原有行后重建（覆写模式）',
+    en: 'Clear existing rows and rebuild (Overwrite)',
+  },
+  提交任务: {
+    zh: '提交任务',
+    en: 'Submit Task',
+  },
+  提交中: {
+    zh: '提交中...',
+    en: 'Submitting...',
+  },
+  清空: {
+    zh: '清空',
+    en: 'Clear',
+  },
+  预览: {
+    zh: '预览',
+    en: 'Preview',
+  },
+  等待确认: {
+    zh: '等待确认',
+    en: 'Awaiting Confirmation',
+  },
+  已确认: {
+    zh: '已确认',
+    en: 'Confirmed',
+  },
+  Odoo已有行: {
+    zh: 'Odoo 已有行',
+    en: 'Existing Lines (Odoo)',
+  },
+  即将写入行: {
+    zh: '即将写入行',
+    en: 'Lines to Write',
+  },
+  无已有行: {
+    zh: '无已有行',
+    en: 'No existing lines',
+  },
+  确认: {
+    zh: '确认',
+    en: 'Confirm',
+  },
+  拒绝: {
+    zh: '拒绝',
+    en: 'Reject',
+  },
+  执行日志: {
+    zh: '执行日志',
+    en: 'Execution Log',
+  },
+  Odoo最终行: {
+    zh: 'Odoo 页面最终行（以页面为准）',
+    en: 'Odoo Final Lines (Source of Truth)',
+  },
+  复制失败行: {
+    zh: '复制失败行 CSV',
+    en: 'Copy Failed Lines CSV',
+  },
+  复制失败行成功: {
+    zh: '失败行已复制到剪贴板',
+    en: 'Failed lines copied to clipboard',
+  },
+  复制失败: {
+    zh: '复制失败',
+    en: 'Copy failed',
+  },
+  任务创建成功: {
+    zh: '任务已创建',
+    en: 'Task created',
+  },
+  任务创建失败: {
+    zh: '任务创建失败',
+    en: 'Task creation failed',
+  },
+  输入提示: {
+    zh: '请输入报价单号',
+    en: 'Enter quotation number',
+  },
+  报价或地址缺一提示: {
+    zh: '报价单号与精准Odoo地址至少填写一项',
+    en: 'Provide either a quotation number or a precise Odoo URL',
+  },
+  CSV提示: {
+    zh: '请在文本区输入有效的 CSV 数据',
+    en: 'Enter valid CSV data in the text area',
+  },
+  选择任务提示: {
+    zh: '创建新任务或选择左侧任务查看详情',
+    en: 'Create a new task or select one on the left',
+  },
+  任务结果: {
+    zh: '任务结果',
+    en: 'Task Result',
+  },
+  错误: {
+    zh: '错误',
+    en: 'Error',
+  },
+  创建报价任务: {
+    zh: '创建报价任务',
+    en: 'Create Quotation Task',
+  },
+  型号: {
+    zh: '型号',
+    en: 'Model',
+  },
+  前往报价任务: {
+    zh: '报价任务',
+    en: 'Quotation Tasks',
+  },
+  队列排队: {
+    zh: '队列: {n} 排队',
+    en: 'Queue: {n} queued',
+  },
+  复制到剪贴板: {
+    zh: '复制到剪贴板',
+    en: 'Copy to clipboard',
+  },
+  填入输入框: {
+    zh: '填入输入框',
+    en: 'Fill into input',
+  },
+  失败行已填入输入框: {
+    zh: '失败行已填入输入框',
+    en: 'Failed lines filled into input',
+  },
+  失败行标题: {
+    zh: '失败行（可直接复制回输入框补写）',
+    en: 'Failed lines (can copy back to input for retry)',
+  },
+  返回未选中: {
+    zh: '返回',
+    en: 'Back',
+  },
 } as const;

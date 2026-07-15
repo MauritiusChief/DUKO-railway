@@ -19,7 +19,7 @@
 
 import { readFileSync, writeFileSync } from 'fs';
 import Papa from 'papaparse';
-import { AMERICAN_STYLE_CODES } from '../constants.js';
+import { AMERICAN_STYLE_CODES, EUROPEAN_STYLE_CODES, NONE_EURO_STYLE_CODES } from '../constants.js';
 
 // 颜色文本黑名单 —— 包含任一子串则排除该颜色候选
 const COLOR_BLACKLIST = new Set<string>([
@@ -67,6 +67,22 @@ const PART_WHITELIST: Record<string, string> = {
       [`30B${size}F-C`, `30B${size}-C`]
   ])),
   ...wallUseOvenDoor,
+  // 欧式: BF3→WF330, BF6→WF630
+  ...Object.fromEntries(EUROPEAN_STYLE_CODES.flatMap(color => [
+    [`${color}BF3`, `${color}WF330`],
+    [`${color}BF6`, `${color}WF630`],
+  ])),
+  // 非欧式: WF396→TF3, WF696→TF6, BF396→TF3, BF696→TF6
+  ...Object.fromEntries(NONE_EURO_STYLE_CODES.flatMap(color => [
+    [`${color}WF396`, `${color}TF3`],
+    [`${color}WF696`, `${color}TF6`],
+    [`${color}BF396`, `${color}TF3`],
+    [`${color}BF696`, `${color}TF6`],
+  ])),
+  // 美式: PNL2496Q→SK2496
+  ...Object.fromEntries(AMERICAN_STYLE_CODES.flatMap(color => [
+    [`${color}PNL2496Q`, `${color}SK2496`],
+  ])),
 };
 
 // ---- 类型 ----

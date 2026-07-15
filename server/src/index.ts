@@ -31,16 +31,19 @@ import { historyRouter, adminHistoryRouter } from './routes/history.js';
 import { notesRouter } from './routes/notes.js';
 import { layoutGenerateListRouter } from './routes/layoutGenerateList.js';
 import { traceRouter } from './routes/trace.js';
+import { quotationRouter } from './routes/quotation.js';
 import { authenticateToken } from './middleware/auth.js';
-import { authLimiter, apiLimiter, llmLimiter } from './middleware/rateLimit.js';
+import { apiLimiter, llmLimiter } from './middleware/rateLimit.js';
 import { config, validateSecrets } from './config/env.js';
 import { initDB } from './db/lance.js';
 import { initSkuDB, getRecordCount } from './db/sku.js';
 import { initUserDB, seedAdminUser, getUserDb } from './db/users.js';
+import { initQuotationDB } from './db/quotation.js';
 import { initTraceDB, cleanupOldTraces } from './services/trace.js';
 import { ingestFromFile, loadAllReferenceData } from './services/sku-ingest.js';
 import { initBm25Index } from './services/bm25.js';
 import { runAllSteps } from './process-cli.js';
+import { initWebSocketServer } from './services/ws-handler.js';
 
 // ESM 模式下自行推导 __dirname
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -80,7 +83,7 @@ app.use(helmet({
 // ---- API 路由 ----
 
 // 认证路由：不施加 authenticateToken（自身有独立限流与校验）
-app.use('/api', authLimiter, authRouter);
+app.use('/api/auth', authRouter);
 
 // 当前用户查询：已受 authenticateToken 保护，使用较为宽松的 apiLimiter
 app.get('/api/me', apiLimiter, authenticateToken, meHandler);
@@ -125,11 +128,13 @@ app.get('/api/script/download', apiLimiter, (_req, res) => {
 
 // ---- 非 LLM 路由（/api 前缀 + apiLimiter）----
 app.use('/api', apiLimiter, authenticateToken);
+
 app.use('/api', tableParseRouter);    // GET /api/colors / POST /api/check-exposed / POST /api/generate-products
 app.use('/api', debugRouter);         // POST /api/debug/tool —— 工具测试接口（debug 用）
 app.use('/api', historyRouter);       // GET/POST/DELETE /api/history[/:id] —— 历史记录
 app.use('/api', notesRouter);         // GET/POST /api/notes —— 用户笔记
 app.use('/api', layoutGenerateListRouter); // POST /api/layout/generate-list —— 物料清单
+app.use('/api', quotationRouter);     // GET/POST /api/quotation-tasks[/:id[/cancel|/events]] —— 报价任务
 
 // ---- 前端静态文件（生产模式） ----
 const clientDist = path.resolve(__dirname, '../../client/dist');
@@ -150,6 +155,7 @@ app.get('*', (_req, res) => {
   const dbDir = config.dbDir;
   initUserDB(dbDir);
   initTraceDB(getUserDb());
+  initQuotationDB(getUserDb());
   cleanupOldTraces();
   const adminHash = bcrypt.hashSync(config.adminPassword, 12);
   seedAdminUser(config.adminUsername, adminHash);
@@ -192,7 +198,10 @@ app.get('*', (_req, res) => {
   console.log('BM25 描述文本索引已就绪.');
 
   // 启动 HTTP 监听
-  app.listen(PORT, '0.0.0.0', () => {
+  const httpServer = app.listen(PORT, '0.0.0.0', () => {
     console.log(`服务器正在监听 ${PORT} 端口`);
   });
+
+  // 在 HTTP server 上挂载 WebSocket（auto worker 连接）
+  initWebSocketServer(httpServer, '/api/auto/connect');
 })();

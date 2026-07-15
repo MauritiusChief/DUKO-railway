@@ -25,9 +25,6 @@ import { z } from 'zod';
 
 export const historyRouter = Router();
 
-/** 管理员历史记录路由 —— 供 index.ts 单独挂载，施加 requireAdmin */
-export const adminHistoryRouter = Router();
-
 const saveHistorySchema = z.object({
   input: z.string(),
   colorHints: z.array(z.string()),
@@ -113,6 +110,9 @@ historyRouter.delete('/history/:id', (req, res) => {
 // ==================================================================
 //  管理员路由：全量历史记录浏览
 // ==================================================================
+
+/** 管理员历史记录路由 —— 供 index.ts 单独挂载，施加 requireAdmin */
+export const adminHistoryRouter = Router();
 
 // GET /api/admin/history —— 所有用户的记录摘要列表（含归属用户信息）
 adminHistoryRouter.get('/history', requireAdmin, (_req, res) => {
