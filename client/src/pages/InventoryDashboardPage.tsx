@@ -3,7 +3,7 @@
  *
  * 功能：
  *  - 自动下载查询（worker 从 Odoo 下载 CSV）或手动上传 CSV
- *  - 套用 sku-clean 清洗 + 低库存阈值筛选
+ *  - 套用 sku-clean 清洗 + 可用库存阈值筛选
  *  - 自动衔接趋势查验（worker 逐项查 ATL/Stock 近3月出入库）
  *  - 结果分为警告(红)/提醒(黄)/信息(灰) 三表 + 无需注意计数
  *
@@ -18,8 +18,8 @@ import './InventoryDashboardPage.css';
 
 interface ClassifiedItem {
   name: string;
-  qtyOnHand: number;
-  freeToUse?: number;
+  freeToUse: number;
+  qtyOnHand?: number;
   forecasted?: number;
   net: number;
 }
@@ -72,7 +72,7 @@ function upsertClassifiedItem(
   next[bucket].push(item);
   next.warning.sort((a, b) => a.net - b.net);
   next.reminder.sort((a, b) => a.net - b.net);
-  next.info.sort((a, b) => a.qtyOnHand - b.qtyOnHand);
+  next.info.sort((a, b) => a.freeToUse - b.freeToUse);
   return next;
 }
 
@@ -350,7 +350,7 @@ export default function InventoryDashboardPage() {
           <thead>
             <tr>
               <th>型号</th>
-              <th style={{ textAlign: 'right' }}>库存</th>
+              <th style={{ textAlign: 'right' }}>可用库存</th>
               <th style={{ textAlign: 'right' }}>净变化(3月)</th>
             </tr>
           </thead>
@@ -363,7 +363,7 @@ export default function InventoryDashboardPage() {
             {items.map((it) => (
               <tr key={it.name}>
                 <td>{it.name}</td>
-                <td className="iv-td-num">{it.qtyOnHand.toFixed(0)}</td>
+                <td className="iv-td-num">{it.freeToUse.toFixed(0)}</td>
                 <td className="iv-td-num">{fmtNet(it.net)}</td>
               </tr>
             ))}
@@ -394,7 +394,7 @@ export default function InventoryDashboardPage() {
       {/* 控件 */}
       <div className="iv-controls">
         <div className="iv-field">
-          低库存阈值
+          可用库存阈值
           <input
             className="iv-input"
             type="number"
@@ -439,7 +439,7 @@ export default function InventoryDashboardPage() {
 
       {(totalCleaned !== null || lowStockCount !== null) && (
         <div className="iv-low-stock-info">
-          清洗后共 {totalCleaned ?? '—'} 项，低于阈值 {lowStockCount ?? '—'} 项
+          清洗后共 {totalCleaned ?? '—'} 项，可用库存低于阈值 {lowStockCount ?? '—'} 项
         </div>
       )}
 
@@ -448,14 +448,14 @@ export default function InventoryDashboardPage() {
         <div className="iv-row iv-row-top">
           <div className="iv-col iv-col-red">
             <div className="iv-col-title">
-              <span>警告 · 低于阈值且近期下降明显</span>
+              <span>警告 · 可用库存低于阈值且近期下降明显</span>
               <span>{warn.length}</span>
             </div>
             {renderTable(warn, 'iv-col-red')}
           </div>
           <div className="iv-col iv-col-yellow">
             <div className="iv-col-title">
-              <span>提醒 · 低于阈值且有下降</span>
+              <span>提醒 · 可用库存低于阈值且有下降</span>
               <span>{remind.length}</span>
             </div>
             {renderTable(remind, 'iv-col-yellow')}
@@ -464,14 +464,14 @@ export default function InventoryDashboardPage() {
         <div className="iv-row iv-row-bottom">
           <div className="iv-col iv-col-gray">
             <div className="iv-col-title">
-              <span>信息 · 低于阈值但近期无下降</span>
+              <span>信息 · 可用库存低于阈值但近期无下降</span>
               <span>{info.length}</span>
             </div>
             {renderTable(info, 'iv-col-gray')}
           </div>
           <div className="iv-col iv-col-count">
             <div className="iv-count-num">{noAttention}</div>
-            <div className="iv-count-label">无需注意（≥阈值）</div>
+            <div className="iv-count-label">无需注意（可用库存 ≥ 阈值）</div>
           </div>
         </div>
       </div>

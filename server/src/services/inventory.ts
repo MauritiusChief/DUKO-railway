@@ -27,8 +27,8 @@ import { broadcastInventory } from './inventory-sse.js';
 
 export interface LowStockItem {
   name: string;
-  qtyOnHand: number;
-  freeToUse?: number;
+  freeToUse: number;
+  qtyOnHand?: number;
   forecasted?: number;
 }
 
@@ -140,25 +140,28 @@ function cleanAndFilter(job: InventoryJob, csv: string): void {
   setPhase(job, 'filtering');
   const low: LowStockItem[] = [];
   for (const r of records) {
-    const qtyRaw = r.row['Quantity On Hand'] ?? r.row['qty_available'] ?? '';
-    const qty = parseFloat(qtyRaw);
-    if (isNaN(qty)) continue;
-    if (qty < job.threshold) {
-      const freeRaw = parseFloat(r.row['Free to use Quantity'] ?? '');
+    const freeToUse = parseFloat(
+      r.row['Free to use Quantity'] ?? r.row['free_qty'] ?? '',
+    );
+    if (isNaN(freeToUse)) continue;
+    if (freeToUse < job.threshold) {
+      const qtyOnHand = parseFloat(
+        r.row['Quantity On Hand'] ?? r.row['qty_available'] ?? '',
+      );
       const foreRaw = parseFloat(r.row['Forecasted Quantity'] ?? r.row['virtual_available'] ?? '');
       low.push({
         name: r.name,
-        qtyOnHand: qty,
-        freeToUse: isNaN(freeRaw) ? undefined : freeRaw,
+        freeToUse,
+        qtyOnHand: isNaN(qtyOnHand) ? undefined : qtyOnHand,
         forecasted: isNaN(foreRaw) ? undefined : foreRaw,
       });
     }
   }
-  // 库存越低越靠前
-  low.sort((a, b) => a.qtyOnHand - b.qtyOnHand);
+  // 可用库存越低越靠前
+  low.sort((a, b) => a.freeToUse - b.freeToUse);
   job.lowStockItems = low;
 
-  progress(job, `筛选完成：${low.length} 个低于阈值 ${job.threshold}`);
+  progress(job, `筛选完成：${low.length} 个可用库存低于阈值 ${job.threshold}`);
   emit(job.jobId, 'low-stock', {
     totalCleaned: job.totalCleaned,
     lowStockCount: low.length,
@@ -211,7 +214,7 @@ function upsertClassification(
 
   classification.warning.sort((a, b) => a.net - b.net);
   classification.reminder.sort((a, b) => a.net - b.net);
-  classification.info.sort((a, b) => a.qtyOnHand - b.qtyOnHand);
+  classification.info.sort((a, b) => a.freeToUse - b.freeToUse);
 }
 
 function recordTrendResult(job: InventoryJob, trend: TrendResultDTO): void {
