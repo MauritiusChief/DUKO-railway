@@ -13,7 +13,6 @@
 import { create } from 'zustand'
 import { fetchWithAuth } from '../lib/fetchWithAuth'
 import { ReconnectingSSE } from '../lib/sseStream'
-import { tOutside } from '../i18n/context'
 import type {
   QuotationTaskSummary,
   QuotationTaskDetail,
@@ -40,13 +39,9 @@ function buildLineResultMessage(
 ): string {
   const desc = `${partModel} x${quantity}`
   if (status === 'success') {
-    return tOutside('logLineSuccess', { line: String(lineNo), desc })
+    return `#${lineNo} ${desc} OK`
   }
-  return tOutside('logLineFailed', {
-    line: String(lineNo),
-    desc,
-    error: error || tOutside('未知错误'),
-  })
+  return `#${lineNo} ${desc} FAILED: ${error || 'UNKNOWN ERROR'}`
 }
 
 /**
@@ -56,13 +51,13 @@ function buildLineResultMessage(
 function buildTaskDoneMessage(status: string, taskError?: string | null): string | undefined {
   switch (status) {
     case 'completed':
-      return tOutside('全部完成')
+      return 'ALL COMPLETE'
     case 'partial_failed':
-      return tOutside('部分行失败')
+      return 'SOME LINES FAILED'
     case 'failed':
-      return tOutside('logTaskFailed', { error: taskError ? `：${taskError}` : '' })
+      return `TASK FAILED${taskError ? `: ${taskError}` : ''}`
     case 'cancelled':
-      return tOutside('任务已取消')
+      return 'TASK CANCELLED'
     default:
       return undefined
   }
@@ -117,7 +112,7 @@ interface QuotationStore {
   fetchActiveStatus: () => Promise<void>
   selectTask: (taskId: number) => Promise<void>
   refreshSelectedDetail: () => Promise<QuotationTaskDetail | null>
-  createTask: (quotationNumber: string, writeMode: 'overwrite' | 'append', lines: { partModel: string; quantity: number }[]) => Promise<number | null>
+  createTask: (quotationNumber: string, odooUrl: string, writeMode: 'overwrite' | 'append', lines: { partModel: string; quantity: number }[]) => Promise<number | null>
   cancelTask: (taskId: number) => Promise<boolean>
   confirmTask: (taskId: number, decision: 'confirmed' | 'rejected') => Promise<boolean>
 
@@ -224,13 +219,13 @@ export const useQuotationStore = create<QuotationStore>((set, get) => ({
     return null
   },
 
-  createTask: async (quotationNumber, writeMode, lines) => {
+  createTask: async (quotationNumber, odooUrl, writeMode, lines) => {
     set({ submitting: true })
     try {
       const res = await fetchWithAuth('/api/quotation-tasks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ quotationNumber, writeMode, lines }),
+        body: JSON.stringify({ quotationNumber, odooUrl, writeMode, lines }),
       })
       if (res.ok) {
         const data: QuotationTaskSummary = await res.json()
@@ -335,6 +330,7 @@ export const useQuotationStore = create<QuotationStore>((set, get) => ({
   saveDraft: (partial) => {
     const current = get().draft ?? {
       quotationNumber: '',
+      odooUrl: '',
       writeMode: 'append',
       csvText: '',
       savedAt: 0,

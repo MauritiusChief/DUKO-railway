@@ -83,7 +83,9 @@ export default function QuotationTasksPage() {
   }
 
   // 本地表单状态
+  const DEFAULT_ODOO_PREFIX = 'https://dukouserp.com/odoo/sales/'
   const [quotationNumber, setQuotationNumber] = useState('')
+  const [odooUrl, setOdooUrl] = useState(DEFAULT_ODOO_PREFIX)
   const [csvText, setCsvText] = useState('')
   const [writeMode, setWriteMode] = useState<'overwrite' | 'append'>('append')
 
@@ -102,6 +104,7 @@ export default function QuotationTasksPage() {
   useEffect(() => {
     if (store.draft) {
       setQuotationNumber(store.draft.quotationNumber || '')
+      setOdooUrl(store.draft.odooUrl ?? DEFAULT_ODOO_PREFIX)
       setCsvText(store.draft.csvText || '')
       setWriteMode(store.draft.writeMode || 'append')
     }
@@ -118,6 +121,7 @@ export default function QuotationTasksPage() {
   // 清空草稿
   const handleClearDraft = () => {
     setQuotationNumber('')
+    setOdooUrl(DEFAULT_ODOO_PREFIX)
     setCsvText('')
     setWriteMode('append')
     store.clearDraft()
@@ -130,15 +134,17 @@ export default function QuotationTasksPage() {
       setStatusMsg(t('CSV提示'))
       return
     }
-    if (!quotationNumber.trim()) {
-      setStatusMsg(t('输入提示'))
+    const hasQuotation = quotationNumber.trim() !== ''
+    const hasOdooUrl = odooUrl.trim() !== ''
+    if (!hasQuotation && !hasOdooUrl) {
+      setStatusMsg(t('报价或地址缺一提示'))
       return
     }
 
     setStatusMsg('')
-    const taskId = await store.createTask(quotationNumber.trim(), writeMode, lines)
+    const taskId = await store.createTask(quotationNumber.trim(), odooUrl.trim(), writeMode, lines)
     if (taskId !== null) {
-      store.saveDraft({ quotationNumber: quotationNumber.trim(), writeMode, csvText })
+      store.saveDraft({ quotationNumber: quotationNumber.trim(), odooUrl: odooUrl.trim(), writeMode, csvText })
       await store.selectTask(taskId)
       setStatusMsg(t('任务创建成功'))
     } else {
@@ -312,10 +318,9 @@ export default function QuotationTasksPage() {
                 <div className="qt-field">
                   <label className="qt-label">{t('精准Odoo地址')}</label>
                   <input
-                    className="qt-input qt-input-disabled"
-                    value="https://dukouserp.com/odoo/"
-                    disabled
-                    title={t('Odoo地址提示')}
+                    className="qt-input"
+                    value={odooUrl}
+                    onChange={(e) => setOdooUrl(e.target.value)}
                   />
                 </div>
                 <div className="qt-field qt-field-grow">

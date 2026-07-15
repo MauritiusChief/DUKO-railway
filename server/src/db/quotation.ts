@@ -31,6 +31,7 @@ export interface QuotationTaskRow {
   user_id: number;
   username: string;
   quotation_number: string;
+  odoo_url: string;
   write_mode: QuotationWriteMode;
   status: QuotationTaskStatus;
   task_error: string | null;
@@ -75,6 +76,7 @@ export interface QuotationTaskSummary {
   userId: number;
   username: string;
   quotationNumber: string;
+  odooUrl: string;
   writeMode: QuotationWriteMode;
   status: QuotationTaskStatus;
   taskError: string | null;
@@ -134,6 +136,7 @@ function rowToSummary(
     userId: r.user_id,
     username: r.username,
     quotationNumber: r.quotation_number,
+    odooUrl: r.odoo_url,
     writeMode: r.write_mode,
     status: r.status,
     taskError: r.task_error,
@@ -173,13 +176,14 @@ export function createTask(
   userId: number,
   username: string,
   quotationNumber: string,
+  odooUrl: string | null,
   writeMode: QuotationWriteMode,
   lines: NewQuotationLine[],
 ): number {
   const d = getDb();
   const insertTask = d.prepare(`
-    INSERT INTO quotation_tasks (user_id, username, quotation_number, write_mode)
-    VALUES (?, ?, ?, ?)
+    INSERT INTO quotation_tasks (user_id, username, quotation_number, odoo_url, write_mode)
+    VALUES (?, ?, ?, ?, ?)
   `);
   const insertLine = d.prepare(`
     INSERT INTO quotation_task_lines (task_id, line_no, part_model, quantity)
@@ -199,7 +203,7 @@ export function createTask(
   `);
 
   const tx = d.transaction(() => {
-    const result = insertTask.run(userId, username, quotationNumber, writeMode);
+    const result = insertTask.run(userId, username, quotationNumber, odooUrl, writeMode);
     const taskId = Number(result.lastInsertRowid);
     lines.forEach((line, idx) => {
       insertLine.run(taskId, idx + 1, line.partModel, line.quantity);

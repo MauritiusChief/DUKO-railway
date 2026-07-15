@@ -157,7 +157,8 @@ export const quotationTaskStatusSchema = z.enum([
 
 /** POST /api/quotation-tasks —— 创建报价任务 */
 export const createQuotationTaskSchema = z.object({
-  quotationNumber: z.string().min(1, '报价单号不能为空'),
+  quotationNumber: z.string().optional().default(''),
+  odooUrl: z.string().optional().default(''),
   writeMode: quotationWriteModeSchema,
   lines: z
     .array(
@@ -167,4 +168,7 @@ export const createQuotationTaskSchema = z.object({
       }),
     )
     .min(1, '至少需要一行产品'),
-});
+}).refine(
+  (data) => data.quotationNumber.trim() !== '' || data.odooUrl.trim() !== '',
+  { message: '报价单号与精准Odoo地址至少填写一项' },
+);

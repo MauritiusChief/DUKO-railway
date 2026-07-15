@@ -24,7 +24,7 @@ import type {
 import { navigateToSales, removeMyQuotationsFacet, searchQuotation, countExactMatches, openExactMatch } from './odoo/sales-search.js';
 import { verifyQuotation, readExistingLines, type QuotationVerification } from './odoo/quotation-verify.js';
 import { writeLines, type WriteLineResult } from './odoo/write-lines.js';
-import { FORM_SAVE_BUTTON } from './odoo/selectors.js';
+import { FORM_SAVE_BUTTON, DETAIL_QUOTATION_NUMBER } from './odoo/selectors.js';
 
 /** 确认请求载荷 */
 export interface ConfirmationRequest {
@@ -103,8 +103,27 @@ export async function runQuotationTask(
       };
     }
 
-    // ---- 2. 导航到 /odoo/sales，移除 "My Quotations" facet ----
-    await navigateAndSearch(page, task.quotationNumber);
+    // ---- 2. 导航到目标报价单 ----
+    // 若提供精准 Odoo 地址则优先直接进入详情页，失败回退到销售列表搜索
+    if (task.odooUrl) {
+      try {
+        await callbacks.onProgress('NAVIGATING DIRECTLY TO THE PROVIDED ODOO URL...');
+        await page.goto(task.odooUrl, {
+          waitUntil: 'domcontentloaded',
+          timeout: 30_000,
+        });
+        await page.waitForSelector(DETAIL_QUOTATION_NUMBER, {
+          state: 'visible',
+          timeout: 15_000,
+        });
+        await callbacks.onProgress('DIRECT ODOO URL NAVIGATION SUCCEEDED');
+      } catch {
+        await callbacks.onProgress('DIRECT ODOO URL NAVIGATION FAILED; FALLING BACK TO SEARCH');
+        await navigateAndSearch(page, task.quotationNumber);
+      }
+    } else {
+      await navigateAndSearch(page, task.quotationNumber);
+    }
 
     // ---- 3. 核验报价单 + 读取公司 + 已有行 ----
     let verification: QuotationVerification;
@@ -252,17 +271,17 @@ async function tryManualSave(
 ): Promise<void> {
   const saveButton = page.locator(FORM_SAVE_BUTTON)
   if ((await saveButton.count()) === 0) {
-    await onProgress?.('未检测到手动保存按钮（可能已自动保存）')
+    await onProgress?.('NO MANUAL SAVE BUTTON DETECTED (MAY ALREADY BE SAVED)')
     return
   }
 
-  await onProgress?.('正在保存…')
+  await onProgress?.('SAVING...')
   try {
     await saveButton.first().click()
     // 等待保存完成：按钮消失（hidden 涵盖 detached + 隐藏）
     await saveButton.first().waitFor({ state: 'hidden', timeout: 15_000 })
-    await onProgress?.('已保存')
+    await onProgress?.('SAVED')
   } catch {
-    await onProgress?.('保存等待超时，继续执行')
+    await onProgress?.('SAVE WAIT TIMED OUT; CONTINUING')
   }
 }

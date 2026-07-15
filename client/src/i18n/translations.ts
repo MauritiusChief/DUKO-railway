@@ -880,22 +880,6 @@ export const messages = {
     zh: '执行日志',
     en: 'Execution Log',
   },
-  写入成功: {
-    zh: '写入成功',
-    en: 'Write OK',
-  },
-  写入失败: {
-    zh: '写入失败',
-    en: 'Write Failed',
-  },
-  全部完成: {
-    zh: '全部完成',
-    en: 'All Complete',
-  },
-  部分行失败: {
-    zh: '部分行写入失败',
-    en: 'Some lines failed',
-  },
   Odoo最终行: {
     zh: 'Odoo 页面最终行（以页面为准）',
     en: 'Odoo Final Lines (Source of Truth)',
@@ -923,6 +907,10 @@ export const messages = {
   输入提示: {
     zh: '请输入报价单号',
     en: 'Enter quotation number',
+  },
+  报价或地址缺一提示: {
+    zh: '报价单号与精准Odoo地址至少填写一项',
+    en: 'Provide either a quotation number or a precise Odoo URL',
   },
   CSV提示: {
     zh: '请在文本区输入有效的 CSV 数据',
@@ -972,32 +960,8 @@ export const messages = {
     zh: '失败行（可直接复制回输入框补写）',
     en: 'Failed lines (can copy back to input for retry)',
   },
-  Odoo地址提示: {
-    zh: '自定义 Odoo 地址（暂未开放）',
-    en: 'Custom Odoo URL (not available yet)',
-  },
   返回未选中: {
     zh: '返回',
     en: 'Back',
-  },
-  logLineSuccess: {
-    zh: '#{line} {desc} 写入成功',
-    en: '#{line} {desc} OK',
-  },
-  logLineFailed: {
-    zh: '#{line} {desc} 写入失败 — {error}',
-    en: '#{line} {desc} FAILED — {error}',
-  },
-  logTaskFailed: {
-    zh: '任务失败{error}',
-    en: 'Task failed{error}',
-  },
-  未知错误: {
-    zh: '未知错误',
-    en: 'unknown error',
-  },
-  任务已取消: {
-    zh: '任务已取消',
-    en: 'Task cancelled',
   },
 } as const;

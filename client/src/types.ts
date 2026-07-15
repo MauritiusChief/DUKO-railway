@@ -324,6 +324,7 @@ export interface QuotationTaskSummary {
   userId: number
   username: string
   quotationNumber: string
+  odooUrl: string
   writeMode: 'overwrite' | 'append'
   status: QuotationTaskStatus
   taskError: string | null
@@ -372,6 +373,7 @@ export interface QueueSummary {
 /** 草稿（localStorage 持久化） */
 export interface QuotationDraft {
   quotationNumber: string
+  odooUrl: string
   writeMode: 'overwrite' | 'append'
   csvText: string
   savedAt: number

@@ -106,6 +106,7 @@ function tryDispatch(): void {
     type: 'task-assigned',
     taskId: task.id,
     quotationNumber: task.quotationNumber,
+    odooUrl: task.odooUrl,
     writeMode: task.writeMode,
     lines: task.lines.map((l) => ({
       lineNo: l.lineNo,

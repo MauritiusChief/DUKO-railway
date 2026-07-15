@@ -98,7 +98,8 @@ export async function verifyQuotation(
     throw new Error('报价单号读取失败：页面标题未包含单号')
   }
 
-  if (quotationNumber !== expectedQuotationNumber) {
+  // 仅当提供了期望单号时才核验一致性；纯 odooUrl 模式下跳过比对
+  if (expectedQuotationNumber && quotationNumber !== expectedQuotationNumber) {
     throw new Error(
       `报价单号核验不一致：期望 ${expectedQuotationNumber}，实际打开 ${quotationNumber}`,
     )

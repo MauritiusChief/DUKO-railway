@@ -133,6 +133,7 @@ export function initUserDB(dbDir: string): void {
       quotation_number   TEXT    NOT NULL,
       write_mode         TEXT    NOT NULL CHECK(write_mode IN ('overwrite','append')),
       status             TEXT    NOT NULL DEFAULT 'queued' CHECK(status IN ('queued','running','completed','partial_failed','failed','cancelled')),
+      odoo_url           TEXT,
       task_error         TEXT,
       retry_count        INTEGER NOT NULL DEFAULT 0,
       last_acked_attempt INTEGER NOT NULL DEFAULT 0,

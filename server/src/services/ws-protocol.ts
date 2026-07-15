@@ -160,6 +160,7 @@ export interface TaskAssignedMessage {
   type: 'task-assigned';
   taskId: number;
   quotationNumber: string;
+  odooUrl: string;
   writeMode: 'overwrite' | 'append';
   lines: TaskAssignedLine[];
 }
