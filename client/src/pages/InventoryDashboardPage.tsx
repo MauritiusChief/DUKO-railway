@@ -4,7 +4,7 @@
  * 功能：
  *  - 自动下载查询（worker 从 Odoo 下载 CSV）或手动上传 CSV
  *  - 套用 sku-clean 清洗 + 可用库存阈值筛选
- *  - 自动衔接趋势查验（worker 逐项查 ATL/Stock 近3月出入库）
+ *  - 自动衔接趋势查验（worker 逐项查 ATL/Stock 指定月份的出入库）
  *  - 结果分为警告(红)/提醒(黄)/信息(灰) 三表 + 无需注意计数
  *
  * SSE 仅在查询过程中开启；完成后关闭。结果存 localStorage（单 key 覆盖）。
@@ -21,7 +21,8 @@ interface ClassifiedItem {
   freeToUse: number;
   qtyOnHand?: number;
   forecasted?: number;
-  net: number;
+  inbound: number;
+  outbound: number;
 }
 interface Classification {
   warning: ClassifiedItem[];
@@ -37,6 +38,7 @@ function loadLastResult(): {
   totalCleaned: number;
   threshold: number;
   trendThreshold: number;
+  recentMonths: number;
 } | null {
   try {
     const raw = localStorage.getItem(LS_KEY);
@@ -56,6 +58,9 @@ function clearLastResult(): void {
 }
 
 type ClassificationBucket = 'warning' | 'reminder' | 'info';
+type SortMode = 'stock' | 'outbound';
+
+const INFO_PAGE_SIZE = 100;
 
 function upsertClassifiedItem(
   current: Classification | null,
@@ -70,15 +75,16 @@ function upsertClassifiedItem(
     noAttentionCount,
   };
   next[bucket].push(item);
-  next.warning.sort((a, b) => a.net - b.net);
-  next.reminder.sort((a, b) => a.net - b.net);
-  next.info.sort((a, b) => a.freeToUse - b.freeToUse);
   return next;
 }
 
 export default function InventoryDashboardPage() {
   const [threshold, setThreshold] = useState(5);
   const [trendThreshold, setTrendThreshold] = useState(10);
+  const [recentMonths, setRecentMonths] = useState(3);
+  const [warningSort, setWarningSort] = useState<SortMode>('outbound');
+  const [reminderSort, setReminderSort] = useState<SortMode>('outbound');
+  const [infoPage, setInfoPage] = useState(1);
 
   const [jobId, setJobId] = useState<string | null>(null);
   const [phase, setPhase] = useState('');
@@ -103,7 +109,8 @@ export default function InventoryDashboardPage() {
       setClassification(last.classification);
       setTotalCleaned(last.totalCleaned ?? null);
       setThreshold(last.threshold ?? 5);
-      setTrendThreshold(last.trendThreshold ?? 20);
+      setTrendThreshold(last.trendThreshold ?? 10);
+      setRecentMonths(last.recentMonths ?? 3);
     }
   }, []);
 
@@ -117,6 +124,7 @@ export default function InventoryDashboardPage() {
           ts: Date.now(),
           threshold,
           trendThreshold,
+          recentMonths,
           totalCleaned: totalCleaned ?? 0,
           classification,
         }),
@@ -124,7 +132,12 @@ export default function InventoryDashboardPage() {
     } catch {
       /* 忽略配额错误 */
     }
-  }, [classification, threshold, trendThreshold, totalCleaned]);
+  }, [classification, threshold, trendThreshold, recentMonths, totalCleaned]);
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil((classification?.info.length ?? 0) / INFO_PAGE_SIZE));
+    setInfoPage((current) => Math.min(current, totalPages));
+  }, [classification?.info.length]);
 
   // 挂载时拉取一次 worker 在线状态
   useEffect(() => {
@@ -248,6 +261,7 @@ export default function InventoryDashboardPage() {
     setClassification(null);
     setTotalCleaned(null);
     setLowStockCount(null);
+    setInfoPage(1);
     setStatus('running');
   }
 
@@ -256,6 +270,7 @@ export default function InventoryDashboardPage() {
     setClassification(null);
     setTotalCleaned(null);
     setLowStockCount(null);
+    setInfoPage(1);
   }
 
   async function handleDownload() {
@@ -265,7 +280,7 @@ export default function InventoryDashboardPage() {
       const res = await fetchWithAuth('/api/inventory/jobs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ threshold, trendThreshold }),
+        body: JSON.stringify({ threshold, trendThreshold, recentMonths }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -293,7 +308,7 @@ export default function InventoryDashboardPage() {
       const res = await fetchWithAuth('/api/inventory/upload', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ csv, threshold, trendThreshold }),
+        body: JSON.stringify({ csv, threshold, trendThreshold, recentMonths }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -323,8 +338,8 @@ export default function InventoryDashboardPage() {
     setError('用户取消');
   }
 
-  function fmtNet(net: number): string {
-    return (net >= 0 ? '+' : '') + net.toFixed(1);
+  function fmtQuantity(quantity: number): string {
+    return quantity.toFixed(1);
   }
 
   const phaseLabel: Record<string, string> = {
@@ -338,9 +353,17 @@ export default function InventoryDashboardPage() {
     failed: '失败',
   };
 
-  const warn = classification?.warning ?? [];
-  const remind = classification?.reminder ?? [];
-  const info = classification?.info ?? [];
+  function sortItems(items: ClassifiedItem[], mode: SortMode): ClassifiedItem[] {
+    return [...items].sort(mode === 'stock'
+      ? (a, b) => a.freeToUse - b.freeToUse
+      : (a, b) => b.outbound - a.outbound);
+  }
+
+  const warn = sortItems(classification?.warning ?? [], warningSort);
+  const remind = sortItems(classification?.reminder ?? [], reminderSort);
+  const info = sortItems(classification?.info ?? [], 'stock');
+  const infoTotalPages = Math.max(1, Math.ceil(info.length / INFO_PAGE_SIZE));
+  const pagedInfo = info.slice((infoPage - 1) * INFO_PAGE_SIZE, infoPage * INFO_PAGE_SIZE);
   const noAttention = classification?.noAttentionCount ?? 0;
 
   function renderTable(items: ClassifiedItem[], colClass: string) {
@@ -351,20 +374,22 @@ export default function InventoryDashboardPage() {
             <tr>
               <th>型号</th>
               <th style={{ textAlign: 'right' }}>可用库存</th>
-              <th style={{ textAlign: 'right' }}>净变化(3月)</th>
+              <th style={{ textAlign: 'right' }}>近期出库</th>
+              <th style={{ textAlign: 'right' }}>近期入库</th>
             </tr>
           </thead>
           <tbody>
             {items.length === 0 && (
               <tr>
-                <td colSpan={3} className={`iv-td-empty ${colClass}`}>—</td>
+                <td colSpan={4} className={`iv-td-empty ${colClass}`}>—</td>
               </tr>
             )}
             {items.map((it) => (
               <tr key={it.name}>
                 <td>{it.name}</td>
                 <td className="iv-td-num">{it.freeToUse.toFixed(0)}</td>
-                <td className="iv-td-num">{fmtNet(it.net)}</td>
+                <td className="iv-td-num">{fmtQuantity(it.outbound)}</td>
+                <td className="iv-td-num">{fmtQuantity(it.inbound)}</td>
               </tr>
             ))}
           </tbody>
@@ -409,8 +434,21 @@ export default function InventoryDashboardPage() {
           <input
             className="iv-input"
             type="number"
+            min={0}
             value={trendThreshold}
-            onChange={(e) => setTrendThreshold(Number(e.target.value))}
+            onChange={(e) => setTrendThreshold(Math.max(0, Number(e.target.value) || 0))}
+            disabled={busy}
+          />
+        </div>
+        <div className="iv-field">
+          近期（月）
+          <input
+            className="iv-input"
+            type="number"
+            min={1}
+            step={1}
+            value={recentMonths}
+            onChange={(e) => setRecentMonths(Math.max(1, Math.floor(Number(e.target.value) || 1)))}
             disabled={busy}
           />
         </div>
@@ -448,15 +486,35 @@ export default function InventoryDashboardPage() {
         <div className="iv-row iv-row-top">
           <div className="iv-col iv-col-red">
             <div className="iv-col-title">
-              <span>警告 · 可用库存低于阈值且近期下降明显</span>
-              <span>{warn.length}</span>
+              <span>警告 · 可用库存低于阈值且近期出库达到警告阈值</span>
+              <div className="iv-title-actions">
+                <select
+                  className="iv-sort-select"
+                  value={warningSort}
+                  onChange={(e) => setWarningSort(e.target.value as SortMode)}
+                >
+                  <option value="outbound">出库量从多到少</option>
+                  <option value="stock">可用库存从少到多</option>
+                </select>
+                <span>{warn.length}</span>
+              </div>
             </div>
             {renderTable(warn, 'iv-col-red')}
           </div>
           <div className="iv-col iv-col-yellow">
             <div className="iv-col-title">
-              <span>提醒 · 可用库存低于阈值且有下降</span>
-              <span>{remind.length}</span>
+              <span>提醒 · 可用库存低于阈值且近期有出库</span>
+              <div className="iv-title-actions">
+                <select
+                  className="iv-sort-select"
+                  value={reminderSort}
+                  onChange={(e) => setReminderSort(e.target.value as SortMode)}
+                >
+                  <option value="outbound">出库量从多到少</option>
+                  <option value="stock">可用库存从少到多</option>
+                </select>
+                <span>{remind.length}</span>
+              </div>
             </div>
             {renderTable(remind, 'iv-col-yellow')}
           </div>
@@ -464,10 +522,33 @@ export default function InventoryDashboardPage() {
         <div className="iv-row iv-row-bottom">
           <div className="iv-col iv-col-gray">
             <div className="iv-col-title">
-              <span>信息 · 可用库存低于阈值但近期无下降</span>
+              <span>信息 · 可用库存低于阈值但近期无出库</span>
               <span>{info.length}</span>
             </div>
-            {renderTable(info, 'iv-col-gray')}
+            {renderTable(pagedInfo, 'iv-col-gray')}
+            <div className="iv-pagination">
+              <span>
+                {info.length === 0 ? '0' : `${(infoPage - 1) * INFO_PAGE_SIZE + 1}-${Math.min(infoPage * INFO_PAGE_SIZE, info.length)}`}
+                {' / '}{info.length} 条
+              </span>
+              <div className="iv-pagination-actions">
+                <button
+                  className="iv-page-btn"
+                  onClick={() => setInfoPage((page) => Math.max(1, page - 1))}
+                  disabled={infoPage === 1}
+                >
+                  上一页
+                </button>
+                <span>{infoPage} / {infoTotalPages}</span>
+                <button
+                  className="iv-page-btn"
+                  onClick={() => setInfoPage((page) => Math.min(infoTotalPages, page + 1))}
+                  disabled={infoPage === infoTotalPages}
+                >
+                  下一页
+                </button>
+              </div>
+            </div>
           </div>
           <div className="iv-col iv-col-count">
             <div className="iv-count-num">{noAttention}</div>

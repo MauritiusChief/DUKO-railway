@@ -33,7 +33,8 @@ export interface LowStockItem {
 }
 
 export interface ClassifiedItem extends LowStockItem {
-  net: number;
+  inbound: number;
+  outbound: number;
 }
 
 export interface Classification {
@@ -65,6 +66,7 @@ interface InventoryJob {
   mode: 'auto' | 'upload';
   threshold: number;
   trendThreshold: number;
+  recentMonths: number;
   phase: Phase;
   status: JobStatus;
   rawCsv?: string;
@@ -86,6 +88,7 @@ export interface JobSnapshot {
   status: JobStatus;
   threshold: number;
   trendThreshold: number;
+  recentMonths: number;
   totalCleaned?: number;
   lowStockCount?: number;
   lowStockItems?: LowStockItem[];
@@ -190,13 +193,17 @@ function classifyTrendItem(
   item: LowStockItem,
   trend: TrendResultDTO,
 ): { bucket: ClassificationBucket; item: ClassifiedItem } {
-  let net = 0;
-  for (const move of trend.moves) net += move.dir === 'in' ? move.qty : -move.qty;
+  let inbound = 0;
+  let outbound = 0;
+  for (const move of trend.moves) {
+    if (move.dir === 'in') inbound += Math.abs(move.qty);
+    else outbound += Math.abs(move.qty);
+  }
 
-  const classifiedItem: ClassifiedItem = { ...item, net };
-  const bucket = net <= -job.trendThreshold
+  const classifiedItem: ClassifiedItem = { ...item, inbound, outbound };
+  const bucket = outbound > 0 && outbound >= job.trendThreshold
     ? 'warning'
-    : net < 0
+    : outbound > 0
       ? 'reminder'
       : 'info';
   return { bucket, item: classifiedItem };
@@ -211,10 +218,6 @@ function upsertClassification(
   classification.reminder = classification.reminder.filter((entry) => entry.name !== item.name);
   classification.info = classification.info.filter((entry) => entry.name !== item.name);
   classification[bucket].push(item);
-
-  classification.warning.sort((a, b) => a.net - b.net);
-  classification.reminder.sort((a, b) => a.net - b.net);
-  classification.info.sort((a, b) => a.freeToUse - b.freeToUse);
 }
 
 function recordTrendResult(job: InventoryJob, trend: TrendResultDTO): void {
@@ -275,6 +278,7 @@ function startTrend(job: InventoryJob): void {
       onFailed: (error) => failJob(job, `趋势查验失败：${error}`),
     },
     items,
+    job.recentMonths,
   );
   job.trendTaskId = taskId;
 }
@@ -283,7 +287,7 @@ function startTrend(job: InventoryJob): void {
 //  分类
 // ==================================================================
 
-/** 计算净变化并分桶，标记完成 */
+/** 汇总近期出入库并按出库量分桶，标记完成 */
 function classifyAndComplete(job: InventoryJob): void {
   if (job.status !== 'running') return;
   setPhase(job, 'classifying');
@@ -317,6 +321,7 @@ export function createDownloadJob(
   username: string,
   threshold: number,
   trendThreshold: number,
+  recentMonths: number,
 ): string {
   const job: InventoryJob = {
     jobId: randomUUID(),
@@ -325,6 +330,7 @@ export function createDownloadJob(
     mode: 'auto',
     threshold,
     trendThreshold,
+    recentMonths,
     phase: 'download',
     status: 'running',
     createdAt: Date.now(),
@@ -370,6 +376,7 @@ export function createUploadJob(
   csv: string,
   threshold: number,
   trendThreshold: number,
+  recentMonths: number,
 ): string {
   const job: InventoryJob = {
     jobId: randomUUID(),
@@ -378,6 +385,7 @@ export function createUploadJob(
     mode: 'upload',
     threshold,
     trendThreshold,
+    recentMonths,
     phase: 'cleaning',
     status: 'running',
     rawCsv: csv,
@@ -409,6 +417,7 @@ export function getJobSnapshot(jobId: string): JobSnapshot | null {
     status: job.status,
     threshold: job.threshold,
     trendThreshold: job.trendThreshold,
+    recentMonths: job.recentMonths,
     totalCleaned: job.totalCleaned,
     lowStockCount: job.lowStockItems?.length,
     lowStockItems: job.lowStockItems,

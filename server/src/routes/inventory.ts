@@ -30,13 +30,15 @@ export const inventoryRouter = Router();
 
 const downloadJobSchema = z.object({
   threshold: z.number().min(0).default(5),
-  trendThreshold: z.number().default(20),
+  trendThreshold: z.number().default(10),
+  recentMonths: z.number().int().min(1).default(3),
 });
 
 const uploadJobSchema = z.object({
   csv: z.string().min(1),
   threshold: z.number().min(0).default(5),
-  trendThreshold: z.number().default(20),
+  trendThreshold: z.number().default(10),
+  recentMonths: z.number().int().min(1).default(3),
 });
 
 // ==================================================================
@@ -45,11 +47,12 @@ const uploadJobSchema = z.object({
 
 inventoryRouter.post('/inventory/jobs', validate(downloadJobSchema), (req, res) => {
   const { userId, username } = req.user!;
-  const { threshold, trendThreshold } = req.body as {
+  const { threshold, trendThreshold, recentMonths } = req.body as {
     threshold: number;
     trendThreshold: number;
+    recentMonths: number;
   };
-  const jobId = createDownloadJob(userId, username, threshold, trendThreshold);
+  const jobId = createDownloadJob(userId, username, threshold, trendThreshold, recentMonths);
   res.status(201).json({ jobId });
 });
 
@@ -59,12 +62,13 @@ inventoryRouter.post('/inventory/jobs', validate(downloadJobSchema), (req, res) 
 
 inventoryRouter.post('/inventory/upload', validate(uploadJobSchema), (req, res) => {
   const { userId, username } = req.user!;
-  const { csv, threshold, trendThreshold } = req.body as {
+  const { csv, threshold, trendThreshold, recentMonths } = req.body as {
     csv: string;
     threshold: number;
     trendThreshold: number;
+    recentMonths: number;
   };
-  const jobId = createUploadJob(userId, username, csv, threshold, trendThreshold);
+  const jobId = createUploadJob(userId, username, csv, threshold, trendThreshold, recentMonths);
   res.status(201).json({ jobId });
 });
 

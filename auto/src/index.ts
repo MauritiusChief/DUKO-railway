@@ -307,7 +307,7 @@ class AutoClient {
           await this.runInventoryDownloadFlow(taskId);
           break;
         case 'inventory-trend':
-          await this.runInventoryTrendFlow(taskId, msg.items);
+          await this.runInventoryTrendFlow(taskId, msg.items, msg.recentMonths);
           break;
       }
     } finally {
@@ -476,10 +476,11 @@ class AutoClient {
 
   // ---------- inventory-trend 流程 ----------
 
-  private async runInventoryTrendFlow(taskId: number, items: string[]): Promise<void> {
+  private async runInventoryTrendFlow(taskId: number, items: string[], recentMonths: number): Promise<void> {
     console.log(`[auto] 开始 inventory-trend 任务 #${taskId} (${items.length} 项)`);
     const outcome = await runInventoryTrendTask(
       items,
+      recentMonths,
       this.makeInventoryCallbacks(taskId),
       this.currentAbort!.signal,
     );

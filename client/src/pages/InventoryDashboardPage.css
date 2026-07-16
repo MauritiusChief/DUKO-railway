@@ -199,6 +199,21 @@
   justify-content: space-between;
   align-items: center;
 }
+.iv-title-actions,
+.iv-pagination-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.iv-sort-select {
+  max-width: 150px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  padding: 3px 6px;
+  background: rgba(255, 255, 255, 0.7);
+  color: inherit;
+  font-size: 12px;
+}
 
 /* 红：警告 */
 .iv-col-red {
@@ -311,4 +326,28 @@
   font-size: 12px;
   color: #666;
   margin-bottom: 8px;
+}
+.iv-pagination {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 10px;
+  border-top: 1px solid #ddd;
+  background: #eee;
+  color: #666;
+  font-size: 12px;
+}
+.iv-page-btn {
+  border: 1px solid #bbb;
+  border-radius: 4px;
+  padding: 3px 8px;
+  background: #fff;
+  color: #555;
+  cursor: pointer;
+}
+.iv-page-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }

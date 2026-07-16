@@ -97,6 +97,8 @@ interface InventoryTaskEntry {
   kind: 'inventory-download' | 'inventory-trend';
   /** trend 任务的项目名列表（download 无） */
   items?: string[];
+  /** trend 任务的回溯月数（download 无） */
+  recentMonths?: number;
   handlers: InventoryTaskHandlers;
   /** 内存幂等：已处理的最大 attempt */
   lastAttempt: number;
@@ -129,9 +131,10 @@ export function enqueueInventoryTask(
   kind: 'inventory-download' | 'inventory-trend',
   handlers: InventoryTaskHandlers,
   items?: string[],
+  recentMonths?: number,
 ): number {
   const taskId = nextInventoryTaskId();
-  const entry: InventoryTaskEntry = { taskId, kind, handlers, lastAttempt: 0, items };
+  const entry: InventoryTaskEntry = { taskId, kind, handlers, lastAttempt: 0, items, recentMonths };
   // 若已有 pending 任务，先拒绝旧的（inventory 一次一个查询）
   if (pendingInventoryTask) {
     pendingInventoryTask.handlers.onFailed?.('被更新的 inventory 任务取代');
@@ -173,7 +176,13 @@ function dispatchInventoryIfIdle(): void {
   if (entry.kind === 'inventory-download') {
     assigned = { type: 'task-assigned', taskId: entry.taskId, kind: 'inventory-download' };
   } else {
-    assigned = { type: 'task-assigned', taskId: entry.taskId, kind: 'inventory-trend', items: entry.items ?? [] };
+    assigned = {
+      type: 'task-assigned',
+      taskId: entry.taskId,
+      kind: 'inventory-trend',
+      items: entry.items ?? [],
+      recentMonths: entry.recentMonths ?? 3,
+    };
   }
   sendMessage(worker.ws, assigned);
 }

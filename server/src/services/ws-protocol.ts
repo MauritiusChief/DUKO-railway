@@ -203,6 +203,7 @@ export interface InventoryTrendTaskAssignedMessage {
   taskId: number;
   kind: 'inventory-trend';
   items: string[];
+  recentMonths: number;
 }
 
 export type TaskAssignedMessage =

@@ -4,7 +4,7 @@
  * 对每个低库存项目：
  *   1. 导航到 /odoo/action-809 并搜索项目名
  *   2. 在结果中点击 "ATL/Stock" 行的 History 按钮 → 跳转到库存移动页
- *   3. 提取近 3 个月内的库存移动（按日期倒序读到超 3 月即停）
+ *   3. 提取配置月份内的库存移动（按日期倒序读到截止日期即停）
  *      location_id === ATL/Stock → 出库(out)；location_dest_id === ATL/Stock → 入库(in)
  *
  * 等待策略：搜索后等 facet + 数据行稳定；History 后等移动表渲染；不盲点、不翻页。
@@ -31,9 +31,6 @@ const SETTLE_POLL_MS = 200
 
 /** 主仓库（仅查验该库位的出入库趋势） */
 const WAREHOUSE = 'ATL/Stock'
-
-/** 趋势回溯窗口（月） */
-const TREND_WINDOW_MONTHS = 3
 
 // ==================================================================
 //  导航与搜索
@@ -142,10 +139,10 @@ async function waitForMoveTable(page: Page): Promise<void> {
 }
 
 /**
- * 从当前库存移动表提取近 3 个月的出入库记录。
- * 假设列表按日期倒序：遇到超 3 月的行即停止。
+ * 从当前库存移动表提取指定月份内的出入库记录。
+ * 假设列表按日期倒序：遇到截止日期前的行即停止。
  */
-async function extractMoves(page: Page): Promise<TrendMove[]> {
+async function extractMoves(page: Page, recentMonths: number): Promise<TrendMove[]> {
   const raw = await page.evaluate(
     ({ rowSel, dateSel, locSel, destSel, qtySel }) => {
       const rows = Array.from(document.querySelectorAll(rowSel))
@@ -166,7 +163,7 @@ async function extractMoves(page: Page): Promise<TrendMove[]> {
   )
 
   const cutoff = new Date()
-  cutoff.setMonth(cutoff.getMonth() - TREND_WINDOW_MONTHS)
+  cutoff.setMonth(cutoff.getMonth() - recentMonths)
 
   const moves: TrendMove[] = []
   for (const r of raw) {
@@ -194,11 +191,12 @@ async function extractMoves(page: Page): Promise<TrendMove[]> {
 
 /**
  * 查验单个项目的库存移动趋势。
- * @returns 该项目近 3 月的出入库记录（无 ATL/Stock 行或无移动则返回空数组）
+ * @returns 该项目指定月份内的出入库记录（无 ATL/Stock 行或无移动则返回空数组）
  */
 export async function extractTrendForItem(
   page: Page,
   itemName: string,
+  recentMonths: number,
   onProgress: (m: string) => Promise<void>,
 ): Promise<TrendMove[]> {
   await navigateToInventoryReport(page)
@@ -219,7 +217,7 @@ export async function extractTrendForItem(
   }
 
   await waitForMoveTable(page)
-  const moves = await extractMoves(page)
+  const moves = await extractMoves(page, recentMonths)
   await onProgress(`TREND: ${itemName} 提取到 ${moves.length} 条移动`)
   return moves
 }

@@ -106,6 +106,7 @@ export async function runInventoryDownloadTask(
  */
 export async function runInventoryTrendTask(
   items: string[],
+  recentMonths: number,
   callbacks: InventoryCallbacks,
   abortSignal?: AbortSignal,
 ): Promise<InventoryTrendOutcome> {
@@ -122,7 +123,7 @@ export async function runInventoryTrendTask(
       await callbacks.onProgress(`TREND: (${i + 1}/${items.length}) 开始查验 ${name}`)
       let result: TrendItemResult
       try {
-        const moves = await extractTrendForItem(page, name, callbacks.onProgress)
+        const moves = await extractTrendForItem(page, name, recentMonths, callbacks.onProgress)
         result = { name, moves }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)

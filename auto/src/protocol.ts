@@ -93,6 +93,7 @@ export const taskAssignedSchema = z.object({
     )
     .optional(),
   items: z.array(z.string()).optional(),
+  recentMonths: z.number().int().min(1).optional(),
 });
 
 export const ackSchema = z.object({
@@ -154,6 +155,7 @@ export interface InventoryTrendTaskAssignedMessage {
   taskId: number;
   kind: 'inventory-trend';
   items: string[];
+  recentMonths: number;
 }
 export type TaskAssignedMessage =
   | QuotationTaskAssignedMessage
