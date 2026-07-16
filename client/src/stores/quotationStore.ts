@@ -4,7 +4,7 @@
  * 管理任务列表、当前选中任务详情、active 状态、排队队列、草稿、SSE 实时日志。
  *
  * SSE 分两路：
- *  - 全局 SSE（/api/quotation-tasks/events）：Agent 在线状态、任务列表、排队队列
+ *  - 全局 SSE（/api/quotation-tasks/events）：Worker 在线状态、活跃任务、任务列表、排队队列
  *  - per-task SSE（/api/quotation-tasks/:id/events）：选中任务的逐行日志、确认握手、完成
  *
  * 两路均使用 ReconnectingSSE（受控重连 + 指数退避）。
@@ -17,6 +17,7 @@ import type {
   QuotationTaskSummary,
   QuotationTaskDetail,
   ActiveTaskSummaryResponse,
+  WorkerStatusResponse,
   QuotationDraft,
   QuotationSnapshotLine,
   QueueSummary,
@@ -86,6 +87,7 @@ interface QuotationStore {
   selectedTaskId: number | null
   selectedTaskDetail: QuotationTaskDetail | null
   activeSummary: ActiveTaskSummaryResponse | null
+  workerOnline: boolean
   queueSummary: QueueSummary | null
   draft: QuotationDraft | null
 
@@ -110,6 +112,7 @@ interface QuotationStore {
 
   fetchTasks: () => Promise<void>
   fetchActiveStatus: () => Promise<void>
+  fetchWorkerStatus: () => Promise<void>
   selectTask: (taskId: number) => Promise<void>
   refreshSelectedDetail: () => Promise<QuotationTaskDetail | null>
   createTask: (quotationNumber: string, odooUrl: string, writeMode: 'overwrite' | 'append', lines: { partModel: string; quantity: number }[]) => Promise<number | null>
@@ -134,6 +137,7 @@ export const useQuotationStore = create<QuotationStore>((set, get) => ({
   selectedTaskId: null,
   selectedTaskDetail: null,
   activeSummary: null,
+  workerOnline: false,
   queueSummary: null,
   draft: null,
   sseLog: [],
@@ -162,6 +166,16 @@ export const useQuotationStore = create<QuotationStore>((set, get) => ({
       if (res.ok) {
         const data: ActiveTaskSummaryResponse = await res.json()
         set({ activeSummary: data })
+      }
+    } catch { /* ignore */ }
+  },
+
+  fetchWorkerStatus: async () => {
+    try {
+      const res = await fetchWithAuth('/api/auto-worker/status')
+      if (res.ok) {
+        const data: WorkerStatusResponse = await res.json()
+        set({ workerOnline: data.autoOnline })
       }
     } catch { /* ignore */ }
   },
@@ -272,6 +286,7 @@ export const useQuotationStore = create<QuotationStore>((set, get) => ({
     // 首次加载做一次轻量 REST 拉取，SSE 随后接管实时更新
     get().fetchTasks()
     get().fetchActiveStatus()
+    get().fetchWorkerStatus()
 
     if (globalSSE) return
     globalSSE = new ReconnectingSSE('/api/quotation-tasks/events', {
@@ -369,6 +384,10 @@ function handleGlobalSSEEvent(
   get: () => QuotationStore,
 ): void {
   switch (type) {
+    case 'worker-status':
+      set({ workerOnline: Boolean(data.autoOnline) })
+      break
+
     case 'agent-status':
       set({ activeSummary: data as ActiveTaskSummaryResponse })
       break

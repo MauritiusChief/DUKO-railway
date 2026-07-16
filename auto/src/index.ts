@@ -36,6 +36,11 @@ import {
   type ConfirmationRequest,
   type ConfirmationResult,
 } from './browser.js';
+import {
+  runInventoryDownloadTask,
+  runInventoryTrendTask,
+  type InventoryCallbacks,
+} from './browser-inventory.js';
 
 // ==================================================================
 //  重连参数
@@ -206,7 +211,7 @@ class AutoClient {
     const msg = result.data;
     switch (msg.type) {
       case 'task-assigned':
-        await this.handleTaskAssigned(msg);
+        await this.handleTaskAssigned(msg as TaskAssignedMessage);
         break;
       case 'ack':
         this.handleAck(msg);
@@ -216,6 +221,9 @@ class AutoClient {
         break;
       case 'confirm-response':
         this.handleConfirmResponse(msg);
+        break;
+      case 'abort':
+        this.handleAbort(msg);
         break;
       case 'error':
         console.warn('[auto] server 报错:', msg.message);
@@ -232,7 +240,8 @@ class AutoClient {
           m.type === 'task-completed' ||
           m.type === 'task-failed' ||
           m.type === 'confirm-request' ||
-          m.type === 'progress') &&
+          m.type === 'progress' ||
+          m.type === 'inventory-trend-result') &&
         m.taskId === msg.taskId &&
         m.attempt === msg.attempt,
     );
@@ -249,6 +258,14 @@ class AutoClient {
     clearTimeout(entry.timer);
     this.confirmResolvers.delete(msg.taskId);
     entry.resolve(msg.decision);
+  }
+
+  /** 处理来自 server 的中止指令（用户取消 inventory 任务） */
+  private handleAbort(msg: Extract<InboundMessage, { type: 'abort' }>): void {
+    if (this.currentTaskId === msg.taskId && this.currentAbort) {
+      console.log(`[auto] 收到 abort，中止任务 #${msg.taskId}`);
+      this.currentAbort.abort();
+    }
   }
 
   // ---------- 确认握手 ----------
@@ -271,14 +288,6 @@ class AutoClient {
       return;
     }
 
-    const task: QuotationTask = {
-      taskId: msg.taskId,
-      quotationNumber: msg.quotationNumber,
-      odooUrl: msg.odooUrl,
-      writeMode: msg.writeMode,
-      lines: msg.lines,
-    };
-
     this.currentTaskId = taskId;
     this.currentAbort = new AbortController();
     this.currentTaskAttempt = 0;
@@ -287,110 +296,214 @@ class AutoClient {
       // 1. 发送 accepted（加入待 ack 队列）
       this.currentTaskAttempt += 1;
       const attempt = this.currentTaskAttempt;
-      this.sendTracked({
-        type: 'accepted',
-        taskId: task.taskId,
-        attempt,
-      });
+      this.sendTracked({ type: 'accepted', taskId, attempt });
 
-      console.log(
-        `[auto] 开始任务 #${task.taskId} (${task.quotationNumber}, ${task.lines.length} 行)`,
-      );
-
-      // 2. 执行浏览器任务
-      const outcome = await runQuotationTask(task, {
-        onLineResult: async (lineResult: LineResult) => {
-          const lineAttempt = ++this.currentTaskAttempt;
-          this.sendTracked({
-            type: 'line-result',
-            taskId: task.taskId,
-            lineNo: lineResult.lineNo,
-            status: lineResult.status,
-            error: lineResult.error,
-            attempt: lineAttempt,
-          });
-        },
-        requestConfirmation: async (req: ConfirmationRequest): Promise<ConfirmationResult> => {
-          return new Promise((resolve) => {
-            const confirmAttempt = ++this.currentTaskAttempt;
-            const timer = setTimeout(() => {
-              this.confirmResolvers.delete(task.taskId);
-              resolve('timeout');
-            }, appConfig.confirmTimeoutMs);
-
-            this.confirmResolvers.set(task.taskId, { resolve, timer });
-
-            const confirmMsg: ConfirmRequestMessage = {
-              type: 'confirm-request',
-              taskId: task.taskId,
-              company: req.company,
-              quotationNumber: req.quotationNumber,
-              existingLines: req.existingLines,
-              inputLines: req.inputLines,
-              attempt: confirmAttempt,
-            };
-            this.sendTracked(confirmMsg);
-          });
-        },
-        onProgress: async (message: string) => {
-          const progressAttempt = ++this.currentTaskAttempt;
-          this.sendTracked({
-            type: 'progress',
-            taskId: task.taskId,
-            message,
-            attempt: progressAttempt,
-          });
-        },
-      }, this.currentAbort.signal);
-
-      // 3. 上报最终结果
-      const finalAttempt = ++this.currentTaskAttempt;
-      if (outcome.status === 'failed' && outcome.lineResults.length === 0) {
-        this.sendTracked({
-          type: 'task-failed',
-          taskId: task.taskId,
-          error: outcome.error ?? '未知任务级错误',
-          attempt: finalAttempt,
-        });
-        console.error(`[auto] 任务 #${task.taskId} 失败: ${outcome.error}`);
-      } else {
-        const status: 'completed' | 'partial_failed' =
-          outcome.status === 'completed' ? 'completed' : 'partial_failed';
-        this.sendTracked({
-          type: 'task-completed',
-          taskId: task.taskId,
-          status,
-          lines: outcome.lineResults.map((r) => {
-            const original = task.lines.find((l) => l.lineNo === r.lineNo)!;
-            return {
-              lineNo: r.lineNo,
-              partModel: original.partModel,
-              quantity: original.quantity,
-              status: r.status === 'success' ? 'success' : 'failed',
-              error: r.error,
-            };
-          }),
-          finalSnapshot: outcome.finalSnapshot,
-          attempt: finalAttempt,
-        });
-        console.log(`[auto] 任务 #${task.taskId} 完成: ${status}`);
-      }
-
-      // 4. 清理确认状态
-      const confirmEntry = this.confirmResolvers.get(task.taskId);
-      if (confirmEntry) {
-        clearTimeout(confirmEntry.timer);
-        this.confirmResolvers.delete(task.taskId);
+      // 2. 按 kind 分派
+      switch (msg.kind) {
+        case 'quotation':
+          await this.runQuotationFlow(msg);
+          break;
+        case 'inventory-download':
+          await this.runInventoryDownloadFlow(taskId);
+          break;
+        case 'inventory-trend':
+          await this.runInventoryTrendFlow(taskId, msg.items, msg.recentMonths);
+          break;
       }
     } finally {
-      // 5. 清除 busy 状态
+      // 3. 清理确认状态
+      const confirmEntry = this.confirmResolvers.get(taskId);
+      if (confirmEntry) {
+        clearTimeout(confirmEntry.timer);
+        this.confirmResolvers.delete(taskId);
+      }
+      // 4. 清除 busy 状态
       this.currentTaskId = null;
       this.currentAbort = null;
 
-      // 6. 若连接可用，发送 ready 等待下一个任务
+      // 5. 若连接可用，发送 ready 等待下一个任务
       if (this.ws && this.ws.readyState === WebSocket.OPEN) {
         this.sendReady();
       }
+    }
+  }
+
+  /** Inventory 回调工厂（download / trend 共用） */
+  private makeInventoryCallbacks(taskId: number): InventoryCallbacks {
+    return {
+      onProgress: async (message: string) => {
+        const progressAttempt = ++this.currentTaskAttempt;
+        this.sendTracked({ type: 'progress', taskId, message, attempt: progressAttempt });
+      },
+      onTrendResult: async (result) => {
+        const resultAttempt = ++this.currentTaskAttempt;
+        this.sendTracked({
+          type: 'inventory-trend-result',
+          taskId,
+          result,
+          attempt: resultAttempt,
+        });
+      },
+    };
+  }
+
+  // ---------- quotation 流程 ----------
+
+  private async runQuotationFlow(
+    msg: Extract<TaskAssignedMessage, { kind: 'quotation' }>,
+  ): Promise<void> {
+    const task: QuotationTask = {
+      taskId: msg.taskId,
+      quotationNumber: msg.quotationNumber,
+      odooUrl: msg.odooUrl,
+      writeMode: msg.writeMode,
+      lines: msg.lines,
+    };
+
+    console.log(
+      `[auto] 开始报价任务 #${task.taskId} (${task.quotationNumber}, ${task.lines.length} 行)`,
+    );
+
+    const outcome = await runQuotationTask(task, {
+      onLineResult: async (lineResult: LineResult) => {
+        const lineAttempt = ++this.currentTaskAttempt;
+        this.sendTracked({
+          type: 'line-result',
+          taskId: task.taskId,
+          lineNo: lineResult.lineNo,
+          status: lineResult.status,
+          error: lineResult.error,
+          attempt: lineAttempt,
+        });
+      },
+      requestConfirmation: async (req: ConfirmationRequest): Promise<ConfirmationResult> => {
+        return new Promise((resolve) => {
+          const confirmAttempt = ++this.currentTaskAttempt;
+          const timer = setTimeout(() => {
+            this.confirmResolvers.delete(task.taskId);
+            resolve('timeout');
+          }, appConfig.confirmTimeoutMs);
+
+          this.confirmResolvers.set(task.taskId, { resolve, timer });
+
+          const confirmMsg: ConfirmRequestMessage = {
+            type: 'confirm-request',
+            taskId: task.taskId,
+            company: req.company,
+            quotationNumber: req.quotationNumber,
+            existingLines: req.existingLines,
+            inputLines: req.inputLines,
+            attempt: confirmAttempt,
+          };
+          this.sendTracked(confirmMsg);
+        });
+      },
+      onProgress: async (message: string) => {
+        const progressAttempt = ++this.currentTaskAttempt;
+        this.sendTracked({
+          type: 'progress',
+          taskId: task.taskId,
+          message,
+          attempt: progressAttempt,
+        });
+      },
+    }, this.currentAbort!.signal);
+
+    const finalAttempt = ++this.currentTaskAttempt;
+    if (outcome.status === 'failed' && outcome.lineResults.length === 0) {
+      this.sendTracked({
+        type: 'task-failed',
+        taskId: task.taskId,
+        error: outcome.error ?? '未知任务级错误',
+        attempt: finalAttempt,
+      });
+      console.error(`[auto] 任务 #${task.taskId} 失败: ${outcome.error}`);
+    } else {
+      const status: 'completed' | 'partial_failed' =
+        outcome.status === 'completed' ? 'completed' : 'partial_failed';
+      this.sendTracked({
+        type: 'task-completed',
+        taskId: task.taskId,
+        kind: 'quotation',
+        status,
+        lines: outcome.lineResults.map((r) => {
+          const original = task.lines.find((l) => l.lineNo === r.lineNo)!;
+          return {
+            lineNo: r.lineNo,
+            partModel: original.partModel,
+            quantity: original.quantity,
+            status: r.status === 'success' ? 'success' : 'failed',
+            error: r.error,
+          };
+        }),
+        finalSnapshot: outcome.finalSnapshot,
+        attempt: finalAttempt,
+      });
+      console.log(`[auto] 任务 #${task.taskId} 完成: ${status}`);
+    }
+  }
+
+  // ---------- inventory-download 流程 ----------
+
+  private async runInventoryDownloadFlow(taskId: number): Promise<void> {
+    console.log(`[auto] 开始 inventory-download 任务 #${taskId}`);
+    const outcome = await runInventoryDownloadTask(
+      this.makeInventoryCallbacks(taskId),
+      this.currentAbort!.signal,
+    );
+
+    const finalAttempt = ++this.currentTaskAttempt;
+    if (outcome.status === 'failed') {
+      this.sendTracked({
+        type: 'task-failed',
+        taskId,
+        error: outcome.error ?? '下载失败',
+        attempt: finalAttempt,
+      });
+      console.error(`[auto] inventory-download #${taskId} 失败: ${outcome.error}`);
+    } else {
+      this.sendTracked({
+        type: 'task-completed',
+        taskId,
+        kind: 'inventory-download',
+        status: 'completed',
+        result: { csv: outcome.csv ?? '' },
+        attempt: finalAttempt,
+      });
+      console.log(`[auto] inventory-download #${taskId} 完成`);
+    }
+  }
+
+  // ---------- inventory-trend 流程 ----------
+
+  private async runInventoryTrendFlow(taskId: number, items: string[], recentMonths: number): Promise<void> {
+    console.log(`[auto] 开始 inventory-trend 任务 #${taskId} (${items.length} 项)`);
+    const outcome = await runInventoryTrendTask(
+      items,
+      recentMonths,
+      this.makeInventoryCallbacks(taskId),
+      this.currentAbort!.signal,
+    );
+
+    const finalAttempt = ++this.currentTaskAttempt;
+    if (outcome.status === 'failed') {
+      this.sendTracked({
+        type: 'task-failed',
+        taskId,
+        error: outcome.error ?? '趋势查验失败',
+        attempt: finalAttempt,
+      });
+      console.error(`[auto] inventory-trend #${taskId} 失败: ${outcome.error}`);
+    } else {
+      this.sendTracked({
+        type: 'task-completed',
+        taskId,
+        kind: 'inventory-trend',
+        status: 'completed',
+        result: { items: outcome.items ?? [] },
+        attempt: finalAttempt,
+      });
+      console.log(`[auto] inventory-trend #${taskId} 完成`);
     }
   }
 

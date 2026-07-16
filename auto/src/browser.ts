@@ -240,7 +240,7 @@ async function navigateAndSearch(page: Page, quotationNumber: string): Promise<v
  * 不依赖 networkidle（Odoo 的长连接/轮询会让它长时间不进入 idle）。
  * 改为等待"登录表单"或"已登录应用外壳"任一可见，再据其存在判断。
  */
-async function checkOdooLogin(page: Page): Promise<{ loggedIn: boolean }> {
+export async function checkOdooLogin(page: Page): Promise<{ loggedIn: boolean }> {
   await page.goto(appConfig.odooBaseUrl, {
     waitUntil: 'domcontentloaded',
     timeout: 60_000,

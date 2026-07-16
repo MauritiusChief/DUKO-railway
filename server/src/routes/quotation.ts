@@ -49,7 +49,7 @@ export const quotationRouter = Router();
 
 // ==================================================================
 //  GET /api/quotation-tasks/active
-//  公开摘要：auto 是否在线 + 当前正在执行的任务（仅摘要，不含行详情）
+//  公开摘要：当前正在执行的任务（仅摘要，不含行详情）
 //  注意：必须放在 /:id 之前注册，否则会被 :id 匹配
 // ==================================================================
 
@@ -59,20 +59,19 @@ quotationRouter.get('/quotation-tasks/active', (_req, res) => {
 
 /** 计算当前活跃任务的公开摘要 */
 function getActiveTaskSummary() {
-  // 通过 ws-state 查询 auto 是否在线 + 当前正在执行的任务 id
-  const { online, activeTaskId } = getAutoOnlineState();
+  // 在线状态由 /api/auto-worker/status 提供；这里仅返回报价活跃任务。
+  const { activeTaskId } = getAutoOnlineState();
 
-  if (!online || activeTaskId == null) {
-    return { autoOnline: online, activeTask: undefined };
+  if (activeTaskId == null) {
+    return { activeTask: undefined };
   }
 
   const task = getTaskByIdRaw(activeTaskId);
   if (!task || task.status !== 'running') {
-    return { autoOnline: online, activeTask: undefined };
+    return { activeTask: undefined };
   }
 
   return {
-    autoOnline: online,
     activeTask: {
       taskId: task.id,
       quotationNumber: task.quotationNumber,
