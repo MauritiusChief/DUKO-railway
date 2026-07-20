@@ -8,7 +8,7 @@
  *
  *   2. 单一零件表 (Parts.csv) — 独立查询表，Product 每一行都有对应行
  *      拆分优先级（从上到下依次匹配，命中即停止）：
- *        0. 含尺寸分数如 "-3/4"" → single = shared = name，直通避免误拆
+ *        0. 后缀含英寸分数（数字/数字，如 -1/2/-1/4/-3/4）→ single = shared = name，直通避免误拆
  *        a. 无 "/" → single = shared = name（直接通过）
  *        b. XX/YY 双门码兼容 → 拆为两个单码行（如 02/04 BLS-Tray）
  *        c. L/R 左右变体 → 拆为 L 和 R 两行（如 30VC30L/R-C）
@@ -221,7 +221,7 @@ export function deriveColorTable(
  * 从清洗后的 CSV 生成单一零件表（独立查询表，Product 每一行都有对应行）。
  *
  * 拆分优先级：
- *   0. 含尺寸分数如 "-3/4"" → single = shared = name，直通避免误拆
+ *   0. 后缀含英寸分数（数字/数字，如 -1/2/-1/4/-3/4）→ single = shared = name，直通避免误拆
  *   1. 不含 "/" → single = shared = name，直接通过
  *   2. XX/YY 兼容模式（name[2]=='/' 且后面两位为数字，如 02/04 BLS-Tray）
  *   3. L/R 或 R/L 变体模式（斜杠左右分别为 L 和 R）
@@ -258,10 +258,12 @@ export function deriveSinglePartTable(
       continue;
     }
 
-    // ── 优先级 0：尺寸分数直通（如 "-3/4""）──
-    // 形如 "-3/4"" 的 "/" 是英寸分数标记而非变体分隔符
+    // ── 优先级 0：尺寸分数直通 ──
+    // 后缀中的"数字/数字"(如 -1/2, -1/4, -3/4)是英寸尺寸标记，非变体分隔符
     // 检测到直接以 whole name 通过，不参与后续任何拆分
-    if (name.includes('-3/4"')) {
+    const lastDash0 = name.lastIndexOf('-');
+    const suffix0 = lastDash0 >= 0 ? name.substring(lastDash0) : '';
+    if (/\d\/\d/.test(suffix0)) {
       entries.push({ singlePartName: name, sharedPartName: name, description: desc });
       continue;
     }
