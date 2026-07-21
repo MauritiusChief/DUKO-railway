@@ -63,7 +63,7 @@ const PART_WHITELIST: Record<string, string> = {
     [`10B${size}F-C`, `10B${size}-C`]
   ])),
   // 全高柜子的柜体 — 欧式
-  ...Object.fromEntries(["09", "12", "15", "18", "21", "24", "27", "30", "33", "36", "42"].flatMap(size => [
+  ...Object.fromEntries(["12", "15", "18", "21", "24", "27", "30", "33", "36", "42"].flatMap(size => [
       [`30B${size}F-C`, `30B${size}-C`]
   ])),
   ...wallUseOvenDoor,
