@@ -103,7 +103,7 @@ const COLOR_REMAP_RULES: Array<{ from: string; to: string; types: Set<string> }>
   },
   {
     from: '32', to: '12',
-    types: new Set(['CM', 'ACM', 'CCM', 'OCM', 'SM', 'TK', 'BM', 'LM', 'BES', 'WES', 'PR', 'BF', 'WF', 'TF', 'VAL', 'CP', 'CBL', 'QR', 'GH']),
+    types: new Set(['CM', 'ACM', 'CCM', 'OCM', 'SM', 'BM', 'LM', 'BES', 'WES', 'PR', 'VAL', 'CP', 'CBL', 'QR', 'GH']),
   },
 ];
 
