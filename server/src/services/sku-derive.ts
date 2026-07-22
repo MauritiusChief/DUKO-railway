@@ -99,11 +99,11 @@ const PART_WHITELIST: Record<string, string> = {
 const COLOR_REMAP_RULES: Array<{ from: string; to: string; types: Set<string> }> = [
   {
     from: '29', to: '02',
-    types: new Set(['CM', 'ACM', 'CCM', 'OCM', 'PNL', 'SK', 'SM', 'TK', 'BM']),
+    types: new Set(['CM', 'ACM', 'CCM', 'OCM', 'PNL', 'SK', 'SM', 'TK', 'BM', 'LM', 'BES', 'WES', 'PR', 'BF', 'WF', 'TF', 'VAL', 'CP', 'CBL', 'QR', 'GH']),
   },
   {
     from: '32', to: '12',
-    types: new Set(['CM', 'ACM', 'CCM', 'OCM', 'SM', 'TK', 'BM']),
+    types: new Set(['CM', 'ACM', 'CCM', 'OCM', 'SM', 'TK', 'BM', 'LM', 'BES', 'WES', 'PR', 'BF', 'WF', 'TF', 'VAL', 'CP', 'CBL', 'QR', 'GH']),
   },
 ];
 
