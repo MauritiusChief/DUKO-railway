@@ -296,7 +296,7 @@ export function deriveSinglePartTable(
   for (const row of rows) {
     const name = String(row['Name'] ?? '').trim();
     const desc = String(row['Sales Description'] ?? '').trim();
-    if (!name || !desc) continue;
+    if (!name) continue;
 
     // 不含 "/"：直接通过
     if (!name.includes('/')) {

@@ -72,10 +72,9 @@ export function cleanCSVFromString(
 
   for (const row of rows) {
     const name = String(row['Name'] ?? row['name'] ?? '').trim();
-    const desc = String(row['Sales Description'] ?? '').trim();
 
-    // 跳过 Name / Descriptipn 为空的行（这些不属于有效产品数据）
-    if (!name || !desc) continue;
+    // 仅跳过 Name 为空的行；描述为空的标准命名件仍保留（如 10W2112-C 柜体）
+    if (!name) continue;
     
     // 跳过 -OL 后缀（已确认这些是无效产品数据）
     if (name.endsWith('-OL')) continue;
