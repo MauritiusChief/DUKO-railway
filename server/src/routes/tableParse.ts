@@ -33,7 +33,7 @@ import { findComboExists, findRecordByItemNameCI, getItemRow, getPartRow, getAll
 import { insertRecord } from '../db/users.js';
 import { insertTraceSession, markSessionCompleted, markSessionError } from '../services/trace.js';
 import type { TraceContext } from '../types/trace.js';
-import { ACCESSORY_SHAPE_TYPE_CODES, SHAPE_TYPES_COLOR_NA, SHAPE_TYPES_SIZE_NA, NONE_EURO_COLOR_MAPPED_SHAPE_TYPE_CODES, EURO_COLOR_MAPPED_SHAPE_TYPE_CODES, ACCESSORY_COLOR_REMAP } from '../constants.js';
+import { ACCESSORY_SHAPE_TYPE_CODES, SHAPE_TYPES_COLOR_NA, SHAPE_TYPES_SIZE_NA } from '../constants.js';
 
 export const tableParseRouter = Router();
 
@@ -148,19 +148,11 @@ tableParseRouter.post('/generate-products', validate(generateProductsSchema), (_
     const typeStr = typeVals[0].toUpperCase();
     const sizeStr = sizeIsNA ? '' : sizeVals[0].toUpperCase();
 
-    // 换色配件：29→02, 32→12
-    let effectiveColorStr = colorStr;
-    if (typeStr && colorStr && ACCESSORY_COLOR_REMAP[colorStr]) {
-      const targetColor = ACCESSORY_COLOR_REMAP[colorStr];
-      if (targetColor === '02' && NONE_EURO_COLOR_MAPPED_SHAPE_TYPE_CODES.has(typeStr)) {
-        effectiveColorStr = targetColor;
-      } else if (targetColor === '12' && EURO_COLOR_MAPPED_SHAPE_TYPE_CODES.has(typeStr)) {
-        effectiveColorStr = targetColor;
-      }
-    }
+    // 颜色重映射（29→02, 32→12 等）已下沉到 Parts 表层，由 sku-derive.ts 的 COLOR_REMAP_RULES 处理。
+    // 此处直接用原始颜色码构建 itemName，源色件会通过 getPartRow 解析到目标色 sharedPartName。
 
     // 特殊处理GD
-    let itemName = typeStr === 'GD' ? 'Glass Doors' : (effectiveColorStr + typeStr + sizeStr);
+    let itemName = typeStr === 'GD' ? 'Glass Doors' : (colorStr + typeStr + sizeStr);
 
     const qty = typeof row.quantity === 'number' && row.quantity > 0 ? Math.round(row.quantity) : 1;
 

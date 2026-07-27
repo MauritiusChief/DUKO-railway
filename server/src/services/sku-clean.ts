@@ -2,8 +2,8 @@
  * SKU 数据清洗模块
  *
  * 清洗规则：
- *   1. 标准清洗：Name 列符合正则 /^\d{2}[A-Z0-9/]+(?:-[A-Z0-9]+)*$/
- *      两位数字 + 大写字母/数字/斜杠 + 零个或多个 "-后缀"（后缀由大写字母/数字组成）
+ *   1. 标准清洗：Name 列符合正则 /^\d{2}[A-Z0-9./]+(?:-[A-Z0-9/"]+)*$/
+ *      两位数字 + 大写字母/数字/小数点/斜杠 + 零个或多个 "-后缀"（后缀由大写字母/数字/斜杠/双引号组成）
  *      示例：30DB33-2-C、38B36/SB36/VSB36/VSD36-D、02B09F
  *   2. 白名单：不满足正则但在白名单中的行也保留
  *
@@ -49,18 +49,15 @@ export function isStandardName(name: string): boolean {
 }
 
 /**
- * 对 CSV 文件执行清洗过滤。
+ * 对 CSV 文本执行清洗过滤（内存版，不读写文件）。
  *
- * @param csvPath      - 源 CSV 文件路径
- * @param outputPath   - 清洗后输出的 CSV 路径；传入 null 则跳过写入
+ * @param csvText  源 CSV 文本
  * @returns 过滤结果（保留的行 + 统计）
  */
-export function cleanCSV(
-  csvPath: string,
-  outputPath: string | null,
+export function cleanCSVFromString(
+  csvText: string,
 ): { records: CleanRecord[]; count: number } {
-  const raw = readFileSync(csvPath, 'utf-8');
-  const parsed = Papa.parse<Record<string, string>>(raw, {
+  const parsed = Papa.parse<Record<string, string>>(csvText, {
     header: true,
     skipEmptyLines: true,
     dynamicTyping: false,
@@ -75,10 +72,12 @@ export function cleanCSV(
 
   for (const row of rows) {
     const name = String(row['Name'] ?? row['name'] ?? '').trim();
-    const desc = String(row['Sales Description'] ?? '').trim();
 
-    // 跳过 Name / Descriptipn 为空的行（这些不属于有效产品数据）
-    if (!name || !desc) continue;
+    // 仅跳过 Name 为空的行；描述为空的标准命名件仍保留（如 10W2112-C 柜体）
+    if (!name) continue;
+    
+    // 跳过 -OL 后缀（已确认这些是无效产品数据）
+    if (name.endsWith('-OL')) continue;
 
     if (isStandardName(name)) {
       kept.push({ name, reason: 'standard', row });
@@ -87,11 +86,28 @@ export function cleanCSV(
     }
   }
 
+  return { records: kept, count: kept.length };
+}
+
+/**
+ * 对 CSV 文件执行清洗过滤（文件版，内部复用 cleanCSVFromString）。
+ *
+ * @param csvPath      - 源 CSV 文件路径
+ * @param outputPath   - 清洗后输出的 CSV 路径；传入 null 则跳过写入
+ * @returns 过滤结果（保留的行 + 统计）
+ */
+export function cleanCSV(
+  csvPath: string,
+  outputPath: string | null,
+): { records: CleanRecord[]; count: number } {
+  const raw = readFileSync(csvPath, 'utf-8');
+  const { records, count } = cleanCSVFromString(raw);
+
   // 写入清洗后的 CSV
   if (outputPath) {
-    const csvContent = Papa.unparse(kept.map((r) => r.row));
+    const csvContent = Papa.unparse(records.map((r) => r.row));
     writeFileSync(outputPath, csvContent, 'utf-8');
   }
 
-  return { records: kept, count: kept.length };
+  return { records, count };
 }

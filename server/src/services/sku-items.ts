@@ -7,7 +7,7 @@
  *
  * 生成规则（优先级从上到下）：
  *   1. 补填名单填充者自身被跳过（不单独成行）
- *   2. -OL 后缀 → 跳过（暂缓处理）
+ *   2. -OL 后缀已在 sku-clean 里清除
  *   3. prefix 20   → 跳过（暂缓处理）
  *
  *   4. 确定 shapeCode 和归属列：
@@ -176,9 +176,9 @@ export function generateItemsTable(
     }
 
     // 特殊处理 RD
-    if (/^\d{2}RD\d{2$/.test(name)) {
+    if (/^\d{2}RD\d{2}$/.test(name)) {
       const prefix = name.substring(0, 2);
-      const rest = name.substring(2);
+      const rest = name.substring(4);
       items.set(name, {
         itemName: name,
         colorCode: prefix,
@@ -194,11 +194,6 @@ export function generateItemsTable(
 
     const prefix = name.substring(0, 2);
     const rest = name.substring(2);
-
-    // ── 跳过 -OL 后缀 ──
-    if (rest.endsWith('-OL')) {
-      continue;
-    }
 
     // ── 跳过未被任何风格覆盖的 prefix ──
     if (!ALL_STYLE_CODES.has(prefix) && prefix !== '10' && prefix !== '30') {

@@ -1,12 +1,13 @@
 /**
- * 全局 SSE 广播 —— Agent 在线状态、任务列表、排队队列
+ * 全局 SSE 广播 —— Worker 在线状态、活跃任务、任务列表、排队队列
  *
  * 与 sse-broadcast.ts（按 taskId 分组的 per-task SSE）互补：
  * 本模块维护"全局订阅者"集合（每条连接关联一个 userId），用于向所有已登录用户
- * 推送 Agent 在线状态变化和跨用户排队队列摘要，并向特定用户推送其私有任务列表更新。
+ * 推送 Worker 在线状态、活跃任务变化和跨用户排队队列摘要，并向特定用户推送其私有任务列表更新。
  *
  * 事件类型：
- *   agent-status   → 全员：{ autoOnline, activeTask? }
+ *   worker-status  → 全员：{ autoOnline }
+ *   agent-status   → 全员：{ activeTask? }
  *   queue-update   → 全员：{ queuedCount, tasks: [{ taskId, quotationNumber, username, createdAt }] }
  *   my-tasks       → 仅该用户（连接建立时的快照）：{ tasks: QuotationTaskSummary[] }
  *   task-update    → 仅任务 owner：{ task: QuotationTaskSummary }
@@ -71,9 +72,13 @@ function broadcastToUser(userId: number, type: string, data: unknown): void {
 //  快照构建
 // ==================================================================
 
-/** 构建 Agent 在线状态 + 当前活跃任务摘要 */
+/** 构建 Worker 在线状态 */
+function buildWorkerStatus(): { autoOnline: boolean } {
+  return { autoOnline: getAutoOnlineState().online };
+}
+
+/** 构建当前活跃任务摘要 */
 function buildAgentStatus(): {
-  autoOnline: boolean;
   activeTask?: {
     taskId: number;
     quotationNumber: string;
@@ -82,16 +87,15 @@ function buildAgentStatus(): {
     status: string;
   };
 } {
-  const { online, activeTaskId } = getAutoOnlineState();
-  if (!online || activeTaskId == null) {
-    return { autoOnline: online };
+  const { activeTaskId } = getAutoOnlineState();
+  if (activeTaskId == null) {
+    return {};
   }
   const task = getTaskByIdRaw(activeTaskId);
   if (!task || task.status !== 'running') {
-    return { autoOnline: online };
+    return {};
   }
   return {
-    autoOnline: online,
     activeTask: {
       taskId: task.id,
       quotationNumber: task.quotationNumber,
@@ -137,7 +141,12 @@ function toSummary(
 //  对外广播 API（供 ws-handler / quotation 路由调用）
 // ==================================================================
 
-/** 广播 Agent 在线状态变化 → 全员 */
+/** 广播 Worker 在线状态变化 → 全员 */
+export function broadcastWorkerStatus(): void {
+  broadcastGlobal('worker-status', buildWorkerStatus());
+}
+
+/** 广播当前活跃任务变化 → 全员 */
 export function broadcastAgentStatus(): void {
   broadcastGlobal('agent-status', buildAgentStatus());
 }
@@ -157,6 +166,7 @@ export function broadcastTaskUpdateToOwner(taskId: number): void {
 /** 连接建立时推送该用户的完整初始快照 */
 export function sendInitialSnapshot(userId: number, conn: SSEConnection): void {
   if (conn.isClosed) return;
+  conn.send('worker-status', buildWorkerStatus());
   conn.send('agent-status', buildAgentStatus());
   conn.send('queue-update', buildQueueSummary());
   const tasks = getTasksByUser(userId);
