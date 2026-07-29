@@ -176,9 +176,9 @@ export function generateItemsTable(
     }
 
     // 特殊处理 RD
-    if (/^\d{2}RD\d{2$/.test(name)) {
+    if (/^\d{2}RD\d{2}$/.test(name)) {
       const prefix = name.substring(0, 2);
-      const rest = name.substring(2);
+      const rest = name.substring(4);
       items.set(name, {
         itemName: name,
         colorCode: prefix,

@@ -2,8 +2,8 @@
  * SKU 数据清洗模块
  *
  * 清洗规则：
- *   1. 标准清洗：Name 列符合正则 /^\d{2}[A-Z0-9/]+(?:-[A-Z0-9]+)*$/
- *      两位数字 + 大写字母/数字/斜杠 + 零个或多个 "-后缀"（后缀由大写字母/数字组成）
+ *   1. 标准清洗：Name 列符合正则 /^\d{2}[A-Z0-9./]+(?:-[A-Z0-9/"]+)*$/
+ *      两位数字 + 大写字母/数字/小数点/斜杠 + 零个或多个 "-后缀"（后缀由大写字母/数字/斜杠/双引号组成）
  *      示例：30DB33-2-C、38B36/SB36/VSB36/VSD36-D、02B09F
  *   2. 白名单：不满足正则但在白名单中的行也保留
  *
@@ -72,10 +72,9 @@ export function cleanCSVFromString(
 
   for (const row of rows) {
     const name = String(row['Name'] ?? row['name'] ?? '').trim();
-    const desc = String(row['Sales Description'] ?? '').trim();
 
-    // 跳过 Name / Descriptipn 为空的行（这些不属于有效产品数据）
-    if (!name || !desc) continue;
+    // 仅跳过 Name 为空的行；描述为空的标准命名件仍保留（如 10W2112-C 柜体）
+    if (!name) continue;
     
     // 跳过 -OL 后缀（已确认这些是无效产品数据）
     if (name.endsWith('-OL')) continue;

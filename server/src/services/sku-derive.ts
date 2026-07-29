@@ -8,7 +8,7 @@
  *
  *   2. 单一零件表 (Parts.csv) — 独立查询表，Product 每一行都有对应行
  *      拆分优先级（从上到下依次匹配，命中即停止）：
- *        0. 含尺寸分数如 "-3/4"" → single = shared = name，直通避免误拆
+ *        0. 后缀含英寸分数（数字/数字，如 -1/2/-1/4/-3/4）→ single = shared = name，直通避免误拆
  *        a. 无 "/" → single = shared = name（直接通过）
  *        b. XX/YY 双门码兼容 → 拆为两个单码行（如 02/04 BLS-Tray）
  *        c. L/R 左右变体 → 拆为 L 和 R 两行（如 30VC30L/R-C）
@@ -63,7 +63,7 @@ const PART_WHITELIST: Record<string, string> = {
     [`10B${size}F-C`, `10B${size}-C`]
   ])),
   // 全高柜子的柜体 — 欧式
-  ...Object.fromEntries(["09", "12", "15", "18", "21", "24", "27", "30", "33", "36", "42"].flatMap(size => [
+  ...Object.fromEntries(["12", "15", "18", "21", "24", "27", "30", "33", "36", "42"].flatMap(size => [
       [`30B${size}F-C`, `30B${size}-C`]
   ])),
   ...wallUseOvenDoor,
@@ -84,6 +84,28 @@ const PART_WHITELIST: Record<string, string> = {
     [`${color}PNL2496Q`, `${color}SK2496`],
   ])),
 };
+
+/**
+ * 颜色重映射规则 —— 源色配件在 Parts 表层面解析到目标色
+ *
+ * 29 (Newport White Double Shaker) 与 02 (Unipack) 实质同色，仅仓库历史遗留标签不同；
+ * 32 (White Creme Timberline) 与 12 同理。列入 types 的 shape type code 才参与重映射。
+ *
+ * 处理时机：deriveSinglePartTable 末尾，PART_WHITELIST 注入之后。
+ *   - Phase 1：扫描已有源色条目（含 PART_WHITELIST 注入的），将源色 shared 改写为目标色
+ *   - Phase 2：为目标色存在但源色缺失的组合，凭空生成源色条目（数据补全）
+ *   若目标色件本身已有非 identity 映射（如 02PNL2496Q→02SK2496），源色件会自动解析到该最终目标。
+ */
+const COLOR_REMAP_RULES: Array<{ from: string; to: string; types: Set<string> }> = [
+  {
+    from: '29', to: '02',
+    types: new Set(['CM', 'ACM', 'CCM', 'OCM', 'PNL', 'SK', 'SM', 'TK', 'BM', 'LM', 'BES', 'WES', 'PR', 'BF', 'WF', 'TF', 'VAL', 'CP', 'CBL', 'QR', 'GH']),
+  },
+  {
+    from: '32', to: '12',
+    types: new Set(['CM', 'ACM', 'CCM', 'OCM', 'SM', 'BM', 'LM', 'BES', 'WES', 'PR', 'VAL', 'CP', 'CBL', 'QR', 'GH']),
+  },
+];
 
 // ---- 类型 ----
 
@@ -154,6 +176,30 @@ function isComplexParts(parts: string[]): boolean {
   return hasLetters && hasPureDigits;
 }
 
+/**
+ * 在去掉颜色前缀的名称片段中匹配映射类型集合里的 shape type code。
+ *
+ * 匹配规则：
+ *   - 按类型长度倒序匹配（CCM 优先于 CM），保证最长前缀优先
+ *   - 类型后必须紧跟数字或结尾（边界检查），避免 BMC 被误识别为 BM
+ *
+ * @param nameRest - 去掉颜色前缀后的部分（如 "CM4"、"PNL3696F"、"BMC27-D"）
+ * @param types    - 允许的 shape type code 集合
+ * @returns 匹配到的 shape type code；未匹配返回 undefined
+ */
+function matchMappedTypeCode(nameRest: string, types: Set<string>): string | undefined {
+  const sorted = [...types].sort((a, b) => b.length - a.length);
+  for (const t of sorted) {
+    if (nameRest.startsWith(t)) {
+      const next = nameRest.charAt(t.length);
+      if (next === '' || /\d/.test(next)) {
+        return t;
+      }
+    }
+  }
+  return undefined;
+}
+
 // ---- 公开 API ----
 
 /**
@@ -221,7 +267,7 @@ export function deriveColorTable(
  * 从清洗后的 CSV 生成单一零件表（独立查询表，Product 每一行都有对应行）。
  *
  * 拆分优先级：
- *   0. 含尺寸分数如 "-3/4"" → single = shared = name，直通避免误拆
+ *   0. 后缀含英寸分数（数字/数字，如 -1/2/-1/4/-3/4）→ single = shared = name，直通避免误拆
  *   1. 不含 "/" → single = shared = name，直接通过
  *   2. XX/YY 兼容模式（name[2]=='/' 且后面两位为数字，如 02/04 BLS-Tray）
  *   3. L/R 或 R/L 变体模式（斜杠左右分别为 L 和 R）
@@ -250,7 +296,7 @@ export function deriveSinglePartTable(
   for (const row of rows) {
     const name = String(row['Name'] ?? '').trim();
     const desc = String(row['Sales Description'] ?? '').trim();
-    if (!name || !desc) continue;
+    if (!name) continue;
 
     // 不含 "/"：直接通过
     if (!name.includes('/')) {
@@ -258,10 +304,12 @@ export function deriveSinglePartTable(
       continue;
     }
 
-    // ── 优先级 0：尺寸分数直通（如 "-3/4""）──
-    // 形如 "-3/4"" 的 "/" 是英寸分数标记而非变体分隔符
+    // ── 优先级 0：尺寸分数直通 ──
+    // 后缀中的"数字/数字"(如 -1/2, -1/4, -3/4)是英寸尺寸标记，非变体分隔符
     // 检测到直接以 whole name 通过，不参与后续任何拆分
-    if (name.includes('-3/4"')) {
+    const lastDash0 = name.lastIndexOf('-');
+    const suffix0 = lastDash0 >= 0 ? name.substring(lastDash0) : '';
+    if (/\d\/\d/.test(suffix0)) {
       entries.push({ singlePartName: name, sharedPartName: name, description: desc });
       continue;
     }
@@ -329,6 +377,62 @@ export function deriveSinglePartTable(
       sharedPartName: sharedName,
       description: sharedDesc,
     });
+  }
+
+  // 颜色重映射注入（29→02, 32→12 等）：
+  //   将源色件解析到目标色件，使 /generate-products 不必在 itemName 层做颜色改写。
+  //   先建立 singlePartName 索引避免 O(n²) 查找。
+  const entryByName = new Map<string, SinglePartEntry>();
+  for (const e of entries) entryByName.set(e.singlePartName, e);
+
+  for (const rule of COLOR_REMAP_RULES) {
+    // Phase 1：覆盖已存在的源色条目
+    //   扫描所有以 rule.from 开头的条目（含 PART_WHITELIST 注入的），
+    //   若其 sharedPartName 也在源色空间，则改写为目标色对应件。
+    const sourceNames = entries
+      .filter((e) => e.singlePartName.startsWith(rule.from))
+      .map((e) => e.singlePartName);
+    for (const srcName of sourceNames) {
+      const srcRest = srcName.substring(rule.from.length);
+      if (!matchMappedTypeCode(srcRest, rule.types)) continue;
+
+      const existing = entryByName.get(srcName)!;
+      const srcSharedName = existing.sharedPartName;
+      // 仅当 shared 也是源色时才重映射（避免误改已是目标色或非颜色前缀的 shared）
+      if (!srcSharedName.startsWith(rule.from)) continue;
+
+      const tgtSharedName = rule.to + srcSharedName.substring(rule.from.length);
+      const tgtDesc = nameToDesc.get(tgtSharedName);
+      if (!tgtDesc) continue; // 目标色件不存在，保持原样（孤儿）
+
+      existing.sharedPartName = tgtSharedName;
+      existing.description = tgtDesc;
+    }
+
+    // Phase 2：为目标色存在但源色缺失的组合注入新条目（数据补全）
+    //   遍历 Product.csv 中所有以 rule.to 开头且类型匹配的件，
+    //   若对应源色件不存在，则按目标色件的最终解析结果生成源色条目。
+    for (const [tgtName, tgtDesc] of nameToDesc) {
+      if (!tgtName.startsWith(rule.to)) continue;
+      const tgtRest = tgtName.substring(rule.to.length);
+      if (!matchMappedTypeCode(tgtRest, rule.types)) continue;
+
+      const srcName = rule.from + tgtRest;
+      if (entryByName.has(srcName)) continue; // Phase 1 已处理或本就存在
+
+      // 解析目标色件的最终 shared（目标可能已被 PART_WHITELIST 重定向，如 PNL2496Q→SK2496）
+      const tgtEntry = entryByName.get(tgtName);
+      const finalShared = tgtEntry?.sharedPartName ?? tgtName;
+      const finalDesc = tgtEntry?.description ?? tgtDesc;
+
+      const newEntry: SinglePartEntry = {
+        singlePartName: srcName,
+        sharedPartName: finalShared,
+        description: finalDesc,
+      };
+      entries.push(newEntry);
+      entryByName.set(srcName, newEntry);
+    }
   }
 
   // 按单零件名排序
