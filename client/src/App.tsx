@@ -10,6 +10,7 @@ import QuotationTasksPage from './pages/QuotationTasksPage';
 import InventoryDashboardPage from './pages/InventoryDashboardPage';
 import AuthGuard from './components/AuthGuard';
 import AdminGuard from './components/AdminGuard';
+import RoleGuard from './components/RoleGuard';
 
 export default function App() {
   return (
@@ -50,9 +51,9 @@ export default function App() {
       <Route
         path="/inventory"
         element={
-          <AuthGuard>
+          <RoleGuard allowedRoles={['admin', 'manager']}>
             <InventoryDashboardPage />
-          </AuthGuard>
+          </RoleGuard>
         }
       />
       <Route

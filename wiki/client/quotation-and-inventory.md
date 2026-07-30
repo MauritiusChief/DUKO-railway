@@ -33,7 +33,9 @@
 
 ## 库存看板
 
-`client/src/pages/InventoryDashboardPage.tsx` 提供两种起点：
+`client/src/pages/InventoryDashboardPage.tsx` 路由由 `client/src/components/RoleGuard.tsx` 保护，仅 `admin` 与 `manager` 可访问（普通 `user` 直接访问会跳回主页）；服务端全部库存端点同样要求 manager/admin。入口按钮只存在于主页（TableParsePage），且仅 manager/admin 可见；报价任务页不再提供库存入口。
+
+看板提供两种起点：
 
 - 自动下载：worker 从 Odoo 产品页导出 CSV。
 - 上传 CSV：浏览器读取文件文本，服务端立即清洗；后续趋势查验仍需要 worker。
@@ -45,20 +47,22 @@
 - 信息：低库存且近期无出库。
 - 无需注意：清洗后未落入低库存集合的数量。
 
-页面可按出库或库存排序，信息区每页 100 条。库存页文本当前为硬编码中文，不跟随全局语言切换。
+页面可按出库或库存排序，信息区每页 100 条。库存页文本当前为硬编码中文，不跟随全局语言切换（角色标签“经理/普通用户”走 i18n）。
+
+自动下载取得 CSV 后，服务端会同时将其以 `Product-raw-YYYY-MM-DD.csv`（UTC 日期）暂存到 `DB_DIR` 并清理旧文件，供管理员择机手动重建 SKU 数据；上传模式不暂存。暂存失败不影响本次识别。
 
 ## 库存状态与通信
 
 创建 job 后，页面只在查询期间订阅该 job 的 SSE，处理阶段、日志、低库存统计、逐项趋势结果和终态。取消会向服务端请求中止 worker 任务，并在本地显示失败/用户取消。
 
-库存 job 和结果在 server 只存在于 `server/src/services/inventory.ts` 的内存 Map；终态超过约一小时会清理，服务重启会丢失。页面把最近一次 classification 与阈值覆盖保存到 `localStorage` 的 `duko_inventory_last`，刷新可显示结果，但不会恢复正在运行的 job、jobId 或 SSE。开始新 job 或清空表格会删除该本地结果。
+库存 job 的运行态只存在于 `server/src/services/inventory.ts` 的内存 Map；终态超过约一小时清理，服务重启丢失。但**成功完成的最终分类会持久化**到 `sku.sqlite` 的 `inventory_results`（全局共享，最近 20 条），不再写浏览器 localStorage。页面挂载时拉取历史列表并默认加载最新一条，头部历史下拉可切换；运行期禁用历史切换以免增量事件覆盖选中结果。完成新任务后会刷新历史并选中新写入结果。“清空表格”只清当前视图，不删除数据库记录。
 
 ## 注意点
 
 - 报价与库存共享单 worker 队列；worker 在线不代表任务会立即执行。
-- 报价状态持久化，库存 job 不持久化，两者恢复能力不同。
+- 报价状态持久化；库存 job 运行态不持久化，但成功完成的最终分类会写入 `sku.sqlite`，两者恢复能力不同。
 - 库存页面只在挂载时 REST 查询一次在线状态，不订阅报价页的全局 worker 状态流，显示可能滞后。
-- 库存快照和 SSE 路由当前只校验“已登录”，没有按 job 创建者复核读取权限；jobId 应按敏感标识处理，这是待修正的访问边界。
+- 库存快照、SSE 和取消当前共用按 job `userId` 的所有权判断，且全部库存端点要求 manager/admin；jobId 仍应按敏感标识处理。
 - 全局报价 SSE 的报价号和用户名是当前跨用户可见元数据；不得在该广播中继续加入客户或报价明细，直至授权边界被重新设计。
 - 自动库存下载和趋势查验都依赖有效 Odoo profile；上传 CSV 只能绕过下载，不能绕过趋势查验。
 - 趋势单项异常在 worker 中会记录为空 moves 并继续，最终可能被归入“信息”，应结合日志判断。

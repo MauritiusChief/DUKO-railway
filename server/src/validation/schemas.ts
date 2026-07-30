@@ -124,6 +124,12 @@ export const adminDeleteUserSchema = z.object({
   adminPassword: z.string().min(1, '请输入管理员密码'),
 });
 
+/** PATCH /api/auth/users/:id/role —— 管理员修改用户角色（仅 user / manager） */
+export const adminUpdateRoleSchema = z.object({
+  role: z.enum(['user', 'manager']),
+  adminPassword: z.string().min(1, '请输入管理员密码'),
+});
+
 /** POST /api/debug/tool */
 export const debugToolSchema = z.object({
   tool: z.string().min(1, '工具名称不能为空'),

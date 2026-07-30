@@ -76,6 +76,17 @@ export function requireAdmin(req: Request, res: Response, next: NextFunction): v
   next();
 }
 
+/** 要求当前用户拥有指定角色之一（如 'admin'、'manager'），否则返回 403 */
+export function requireAnyRole(...roles: UserRole[]): (req: Request, res: Response, next: NextFunction) => void {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    if (!req.user || !roles.includes(req.user.role)) {
+      res.status(403).json({ error: '权限不足' });
+      return;
+    }
+    next();
+  };
+}
+
 // ---- Refresh Token ----
 
 /** 签发 Refresh Token，7 天过期，HS256 算法 */

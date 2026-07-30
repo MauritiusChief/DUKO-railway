@@ -59,6 +59,7 @@ import {
   executeLookupItemComponents,
   executeReadGeneratedProducts,
 } from '../tools/product.js';
+import { getSkuRefreshMetadata } from '../db/sku.js';
 
 import {
   RECORD_NOTE_TOOL,
@@ -367,6 +368,12 @@ ${notesList}
       }
     }
 
+    // 库存数据新鲜度提示：依据 sku_refresh_metadata 动态生成，避免模型用过时表述误导用户
+    const refreshMeta = getSkuRefreshMetadata();
+    const inventoryFreshnessClause = refreshMeta?.lastSuccessfulRefreshAt
+      ? `来自产品数据库的静态快照，上次成功刷新时间为 ${refreshMeta.lastSuccessfulRefreshAt}（UTC），可能与实时 ERP 存在差异。`
+      : `来自产品数据库的静态快照，上次成功刷新时间未知，可能已过时。`;
+
     return `你是一个 DUKO 橱柜产品查询与清单编辑助手。你可以帮助用户查询产品信息、编辑已解析的客户清单、以及查询产品库存。${tableParseAgentSection}
 ## 产品代码规则
 
@@ -402,7 +409,7 @@ ${this.colorTable}
 ## 产品库存查询工具（可随意使用，无次数限制）
 
 - **lookupProductInventory**：输入 Exposed-Items 中的 itemName，查询其对应的 DUKO 实际产品名称及库存数量。
-  **⚠️ 重要提示**：实时 DUKO ERP 数据获取失败，当前该工具返回的 Forecasted Quantity（预测数量）、Free to use Quantity（可用数量）、Quantity On Hand（在手数量）来自产品数据库的静态快照，可能已过时。请如实告知用户此局限性，建议以实际 ERP 系统数据为准。
+  **⚠️ 重要提示**：当前该工具返回的 Forecasted Quantity（预测数量）、Free to use Quantity（可用数量）、Quantity On Hand（在手数量）${inventoryFreshnessClause}请如实告知用户此局限性，建议以实际 ERP 系统数据为准。
 
 ## 产品组件查询工具（可随意使用，无次数限制）
 

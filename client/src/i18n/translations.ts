@@ -608,6 +608,18 @@ export const messages = {
     zh: '普通用户',
     en: 'User',
   },
+  经理: {
+    zh: '经理',
+    en: 'Manager',
+  },
+  修改角色: {
+    zh: '修改角色',
+    en: 'Change Role',
+  },
+  角色: {
+    zh: '角色',
+    en: 'Role',
+  },
   进入系统: {
     zh: '进入系统',
     en: 'Enter System',

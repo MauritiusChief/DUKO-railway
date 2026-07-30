@@ -20,14 +20,15 @@ import {
   storeRefreshToken,
   isRefreshTokenValid,
   revokeRefreshToken,
+  revokeAllUserTokens,
   getRefreshCookie,
   setRefreshCookie,
   clearRefreshCookie,
   type JwtPayload,
 } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
-import { loginSchema, registerSchema, adminUpdateUsernameSchema, adminUpdatePasswordSchema, adminDeleteUserSchema } from '../validation/schemas.js';
-import { findUserByUsername, findUserById, createUser, listUsers, deleteUserById, updateUsername, updateUserPassword } from '../db/users.js';
+import { loginSchema, registerSchema, adminUpdateUsernameSchema, adminUpdatePasswordSchema, adminDeleteUserSchema, adminUpdateRoleSchema } from '../validation/schemas.js';
+import { findUserByUsername, findUserById, createUser, listUsers, deleteUserById, updateUsername, updateUserPassword, updateUserRole } from '../db/users.js';
 import { config } from '../config/env.js';
 import { apiLimiter, authLimiter } from '../middleware/rateLimit.js';
 
@@ -268,6 +269,56 @@ authRouter.patch(
     }
 
     res.json({ message: '密码已修改' });
+  },
+);
+
+/** PATCH /api/auth/users/:id/role —— 管理员修改用户角色（仅 user ↔ manager） */
+authRouter.patch(
+  '/users/:id/role',
+  authenticateToken,
+  requireAdmin,
+  validate(adminUpdateRoleSchema),
+  (req: Request, res: Response) => {
+    const targetUserId = Number(req.params.id);
+    if (Number.isNaN(targetUserId)) {
+      res.status(400).json({ error: '无效的用户 ID' });
+      return;
+    }
+
+    if (isSeedAdmin(targetUserId)) {
+      res.status(403).json({ error: '种子管理员账户不允许修改角色' });
+      return;
+    }
+
+    const target = findUserById(targetUserId);
+    if (!target) {
+      res.status(404).json({ error: '用户不存在' });
+      return;
+    }
+    // 不能修改现有 admin 的角色（也不能授予 admin，schema 已限制仅 user/manager）
+    if (target.role === 'admin') {
+      res.status(403).json({ error: '不能修改管理员账户的角色' });
+      return;
+    }
+
+    const { role, adminPassword } = req.body as { role: 'user' | 'manager'; adminPassword: string };
+
+    if (!verifyAdminPassword(req, adminPassword)) {
+      res.status(403).json({ error: '管理员密码错误' });
+      return;
+    }
+
+    const ok = updateUserRole(targetUserId, role);
+    if (!ok) {
+      res.status(404).json({ error: '用户不存在' });
+      return;
+    }
+
+    // 撤销目标用户已有 refresh token，迫使其在 access token 过期（≤15min）后重新登录以拿到最新角色
+    revokeAllUserTokens(targetUserId);
+
+    const updated = findUserById(targetUserId);
+    res.json({ user: updated });
   },
 );
 

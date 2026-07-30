@@ -10,6 +10,7 @@
  */
 
 import type { QuotationTaskStatus } from '../db/quotation.js';
+import type { UserRole } from '../db/users.js';
 
 // ==================================================================
 //  状态机
@@ -62,7 +63,7 @@ export class QuotationPermissionError extends Error {
 export function canAccessTask(
   taskOwnerUserId: number,
   accessorUserId: number,
-  accessorRole: 'admin' | 'user',
+  accessorRole: UserRole,
 ): boolean {
   return taskOwnerUserId === accessorUserId || accessorRole === 'admin';
 }
