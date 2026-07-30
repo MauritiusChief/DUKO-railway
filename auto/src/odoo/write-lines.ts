@@ -2,22 +2,27 @@
  * 报价单写入流程 —— 追加 / 覆写模式
  *
  * 逐行通过 quotation-table.ts 填入产品与数量，每行结果即时回调。
- * 行级失败不中断后续行；覆写模式先精确删除多余行再追加新增项。
+ * 行级失败不中断后续行；覆写模式保留型号与数量均匹配的行，
+ * 删除不在输入中的行以及数量不一致的行，再按输入重新写入。
  */
 
-import type { Page } from 'playwright'
+import type { Locator, Page } from 'playwright'
 import {
   addNewEditableRow,
   fillProductAndChooseFromMenu,
   fillQuantity,
   deselectCurrentRow,
   removeRow,
-  removeAllRows,
   getDataRows,
   ensureTableReady,
   getDataRowCount,
 } from './quotation-table.js'
-import { DETAIL_PRODUCT_CELL } from './selectors.js'
+import {
+  DETAIL_PRODUCT_CELL,
+  DETAIL_QUANTITY_CELL,
+  QUOTATION_TABLE,
+  QUOTATION_DATA_ROW,
+} from './selectors.js'
 
 export interface WriteLineResult {
   lineNo: number
@@ -92,45 +97,63 @@ async function appendLines(
   }
 }
 
-/** 覆写模式：精确删除多余行后追加新增项 */
+/** 覆写模式：保留型号与数量均匹配的行，删除其余行后按输入重新写入 */
 async function overwriteLines(
   page: Page,
   input: WriteInput,
 ): Promise<void> {
-  // 1. 读取已有行的产品型号集合
-  const existingProducts = await readExistingProductNames(page)
-  const newProductSet = new Set(input.lines.map((l) => l.partModel))
+  // 1. 目标型号 -> 期望数量
+  const targetQty = new Map<string, number>()
+  for (const line of input.lines) targetQty.set(line.partModel, line.quantity)
 
-  // 2. 删除不在新集合中的行
-  const rows = await getDataRows(page)
-  for (const row of rows) {
-    const productName = await readProductFromRow(row)
-    if (productName && !newProductSet.has(productName)) {
-      const beforeCount = await getDataRowCount(page)
-      await removeRow(row)
-      // 等待行数减少
-      try {
-        await page.waitForFunction(
-          ({ sel, expected }: { sel: string; expected: number }) =>
-            document.querySelectorAll(sel).length <= expected - 1,
-          { sel: `${await getTableSel(page)} ${'tbody tr.o_data_row'}`, expected: beforeCount },
-          { timeout: 10_000 },
-        )
-      } catch { /* ignore */ }
+  // 2. 循环删除：型号不在目标集合，或数量与目标不一致的行。
+  //    每轮重查当前行、删最靠前的待删行后从头再扫，
+  //    避免删除导致后续行索引上移而漏删。
+  const dataRowSel = `${QUOTATION_TABLE} ${QUOTATION_DATA_ROW}`
+  let guard = 0
+  while (guard++ < 200) {
+    const rows = await getDataRows(page)
+    let target: Locator | null = null
+    for (const row of rows) {
+      const { name, quantity } = await readProductAndQuantityFromRow(row)
+      if (!name) continue
+      const want = targetQty.get(name)
+      if (want === undefined || !sameQuantity(quantity, want)) {
+        target = row
+        break
+      }
     }
+    if (!target) break
+
+    const beforeCount = await getDataRowCount(page)
+    await removeRow(target)
+    // 等待行数减少
+    try {
+      await page.waitForFunction(
+        ({ sel, expected }: { sel: string; expected: number }) =>
+          document.querySelectorAll(sel).length <= expected - 1,
+        { sel: dataRowSel, expected: beforeCount },
+        { timeout: 10_000 },
+      )
+    } catch { /* 行数未在超时内减少，下一轮重查 */ }
   }
 
-  // 3. 找出需要新增的项（新输入中有、已有列表中无）
-  const existingSet = new Set(existingProducts)
-  const linesToAdd = input.lines.filter((l) => !existingSet.has(l.partModel))
+  // 3. 重读存活行得到保留集合；不在集合中的输入行按 append 模式重写
+  //    （数量不一致的行已在第 2 步删除，此处会以新数量重新写入）
+  const keptProducts = new Set<string>()
+  for (const row of await getDataRows(page)) {
+    const { name } = await readProductAndQuantityFromRow(row)
+    if (name) keptProducts.add(name)
+  }
 
+  const linesToAdd = input.lines.filter((l) => !keptProducts.has(l.partModel))
   if (linesToAdd.length > 0) {
     await appendLines(page, { ...input, lines: linesToAdd })
   }
 
-  // 4. 对已存在的行（未删除的），标记为成功
+  // 4. 保留行（型号与数量均匹配）按输入序报成功
   for (const line of input.lines) {
-    if (existingSet.has(line.partModel)) {
+    if (keptProducts.has(line.partModel)) {
       await input.onLineResult({
         lineNo: line.lineNo,
         status: 'success',
@@ -139,26 +162,24 @@ async function overwriteLines(
   }
 }
 
-/** 从已保存行读取 product 名称 */
-async function readProductFromRow(row: import('playwright').Locator): Promise<string> {
-  const cell = row.locator(DETAIL_PRODUCT_CELL)
-  const cnt = await cell.count()
-  if (cnt === 0) return ''
-  return ((await cell.textContent()) ?? '').trim()
+/** 从已保存行读取 {产品型号, 数量文本} */
+async function readProductAndQuantityFromRow(
+  row: Locator,
+): Promise<{ name: string; quantity: string }> {
+  const productCell = row.locator(DETAIL_PRODUCT_CELL)
+  if ((await productCell.count()) === 0) return { name: '', quantity: '' }
+  const name = ((await productCell.textContent()) ?? '').trim()
+
+  const qtyCell = row.locator(DETAIL_QUANTITY_CELL)
+  const quantity = (await qtyCell.count()) > 0
+    ? ((await qtyCell.textContent()) ?? '').trim()
+    : ''
+
+  return { name, quantity }
 }
 
-/** 读取当前表格中所有已有行的产品型号 */
-async function readExistingProductNames(page: Page): Promise<string[]> {
-  const rows = await getDataRows(page)
-  const names: string[] = []
-  for (const row of rows) {
-    const name = await readProductFromRow(row)
-    if (name) names.push(name)
-  }
-  return names
-}
-
-async function getTableSel(page: Page): Promise<string> {
-  // 使用 QUOTATION_TABLE 选择器
-  return 'div.o_field_widget.o_field_section_and_note_one2many table.o_section_and_note_list_view'
+/** 比较已保存行数量文本与期望数值是否一致（"1.00" 与 1 视为相等） */
+function sameQuantity(domText: string, want: number): boolean {
+  const parsed = Number.parseFloat(domText)
+  return Number.isFinite(parsed) && parsed === want
 }

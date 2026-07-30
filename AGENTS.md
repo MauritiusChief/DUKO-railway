@@ -55,18 +55,18 @@
 | `railway.json`、根构建脚本、部署配置 | Wiki 部署/运维页；根 `README.md` |
 | `.agent/**`、`AGENTS.md` | `.agent/context/README.md`、`.agent/skills/README.md`；必要时根 `README.md` |
 
-Wiki 页面尚不存在时创建主题明确的页面，不用 `domain.md` 兜底。
+Wiki 页面尚不存在时创建主题明确的页面。
 
 ## 计划规范
 
-- 只有需要跨组件协调、分阶段实施或记录重要取舍的工作才写计划。
+- 只有需要多人协调或分阶段实施+审阅的工作才写计划，可单人/单会话完成的工作或无需分阶段审阅的工作无需计划。
 - 路径固定为 `wiki/plans/YYYY-MM-DD/<topic>.md`；日期用创建日，`topic` 使用小写 kebab-case。
 - 计划包含目标、非目标、已核验现状、方案、风险、验证、发布/回滚和关联 Issue。
 - 计划不是事实来源或待办队列；实现后更新状态和偏差，稳定结论回写主题 Wiki 或 `.agent/context/`。
 
 ## Issue 规范
 
-- GitHub Issues 是唯一 backlog；不要新建 `TODO.md`、backlog 页面或计划内待办池。
+- GitHub Issues 是唯一 backlog。
 - 一个 Issue 描述一个可验收结果，包含背景、范围/非范围、验收标准、风险或依赖。
 - 缺陷附最小复现、期望/实际结果和脱敏证据；数据或安全问题不得粘贴敏感原文。
 - PR、计划和代码注释用 Issue 链接关联；已完成项关闭 Issue，不复制到文档清单。
