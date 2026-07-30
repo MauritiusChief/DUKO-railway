@@ -24,7 +24,7 @@ worker 主动连接 `/api/auto/connect`，以协议版本和 `AUTO_WORKER_TOKEN`
 
 - 搜索报价单并核验编号及目标信息。
 - 读取已有报价行，向用户发出覆盖/追加前的确认请求。
-- 按选择的 write mode 写入产品型号与数量，并逐行上报成功或失败。
+- 按选择的 write mode 写入产品型号与数量并逐行上报；overwrite 保留型号与数量均匹配的行，其余删除后按输入重写。
 - 完成后读取最终快照，由 server 持久化并复核最终状态。
 
 用户确认通过 HTTP 提交，server 再经 WebSocket 返回 worker。待确认内容写入 SQLite，因此页面刷新可以重现确认卡片；确认等待仍受 worker 超时限制。
