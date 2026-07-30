@@ -83,7 +83,7 @@ npm run railway:build
 - [代理协作规则](AGENTS.md)：事实优先级、工作流和文档影响检查。
 - [代理上下文](.agent/context/README.md)：领域语义、外部系统和数据安全。
 
-领域知识不再写入 `wiki/domain.md`，统一维护在 `.agent/context/domain.md`。仓库不维护 backlog；待办、缺陷和需求统一使用 [GitHub Issues](https://github.com/MauritiusChief/DUKO-railway/issues)。
+领域知识统一维护在 `.agent/context/domain.md`。仓库不维护 backlog；待办、缺陷和需求统一使用 [GitHub Issues](https://github.com/MauritiusChief/DUKO-railway/issues)。
 
 ## 数据安全
 
