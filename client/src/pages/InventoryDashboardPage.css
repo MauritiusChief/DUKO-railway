@@ -53,6 +53,23 @@
   gap: 12px;
 }
 
+/* ---------- 历史结果下拉 ---------- */
+.iv-history-select {
+  padding: 8px 12px;
+  font-size: 14px;
+  border: 1px solid #888;
+  border-radius: 4px;
+  background: #fff;
+  color: #333;
+  cursor: pointer;
+  max-width: 360px;
+}
+.iv-history-select:disabled {
+  background: #f0f0f0;
+  color: #999;
+  cursor: not-allowed;
+}
+
 /* ---------- 按钮（对齐 .tp-submit-btn） ---------- */
 .iv-btn {
   padding: 8px 24px;

@@ -26,7 +26,7 @@ import fs from 'fs';
 import { config } from './config/env.js';
 import { runAllSteps } from './process-cli.js';
 import { initDB } from './db/lance.js';
-import { initSkuDB, getRecordCount, getColorRecordCount, getTypeRecordCount, getItemRecordCount, getPartRecordCount, getProductRecordCount } from './db/sku.js';
+import { initSkuDB, getRecordCount, getColorRecordCount, getTypeRecordCount, getItemRecordCount, getPartRecordCount, getProductRecordCount, setSkuRefreshSuccess } from './db/sku.js';
 import { ingestFromFile, loadAllReferenceData } from './services/sku-ingest.js';
 import { initBm25Index } from './services/bm25.js';
 
@@ -41,11 +41,27 @@ if (!fs.existsSync(dataDir)) {
   process.exit(1);
 }
 
-const rawCsvPath = path.join(dataDir, 'Product-raw.csv');
-if (!fs.existsSync(rawCsvPath)) {
-  console.error(`未找到 Product-raw.csv: ${rawCsvPath}`);
-  console.error('请先将 Product-raw.csv 放入该目录后再运行此命令');
-  process.exit(1);
+// 优先使用库存看板自动下载暂存的 Product-raw-YYYY-MM-DD.csv（最终只保留一个）；
+// 兼容回退到历史固定名 Product-raw.csv。
+const datedRawCandidates = fs.readdirSync(dataDir)
+  .filter((f) => /^Product-raw-\d{4}-\d{2}-\d{2}\.csv$/.test(f))
+  .sort();
+
+let rawCsvPath: string;
+if (datedRawCandidates.length > 0) {
+  rawCsvPath = path.join(dataDir, datedRawCandidates[datedRawCandidates.length - 1]);
+  if (datedRawCandidates.length > 1) {
+    console.warn(`发现多个 Product-raw-*.csv，将使用最新一份: ${rawCsvPath}（建议保留唯一最新文件）`);
+  }
+} else {
+  const legacy = path.join(dataDir, 'Product-raw.csv');
+  if (fs.existsSync(legacy)) {
+    rawCsvPath = legacy;
+  } else {
+    console.error(`未在 ${dataDir} 找到 Product-raw-YYYY-MM-DD.csv 或 Product-raw.csv`);
+    console.error('请先在库存看板执行一次自动下载查询以暂存最新 CSV，再运行此命令');
+    process.exit(1);
+  }
 }
 
 console.log(`数据目录: ${dataDir}`);
@@ -116,7 +132,15 @@ initBm25Index();
 console.log('BM25 描述文本索引已就绪（当前进程内）. 注意: Web Service 重启后将重新从 SQLite 读取数据并重建 BM25.');
 
 // ==================================================================
-// 步骤 8：输出汇总
+// 步骤 8：记录刷新元数据（仅完整成功后写入，供 Chat Agent 提示数据新鲜度）
+// ==================================================================
+const refreshedAt = new Date().toISOString();
+setSkuRefreshSuccess(refreshedAt, 'manual-cli');
+console.log(`\n--- 步骤 8: 记录刷新元数据 ---`);
+console.log(`最后成功刷新时间: ${refreshedAt} (UTC)`);
+
+// ==================================================================
+// 步骤 9：输出汇总
 // ==================================================================
 console.log('\n========== 数据刷新完成 ==========');
 console.log(`数据目录:         ${dataDir}`);

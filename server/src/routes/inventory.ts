@@ -13,16 +13,21 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { validate } from '../middleware/validate.js';
+import { requireAnyRole } from '../middleware/auth.js';
 import { SSEConnection } from '../middleware/sse.js';
 import { subscribeInventory } from '../services/inventory-sse.js';
 import {
   createDownloadJob,
   createUploadJob,
-  getJobSnapshot,
+  getOwnedJobSnapshot,
   cancelJob,
 } from '../services/inventory.js';
+import { listInventoryResults, getInventoryResult } from '../db/sku.js';
 
 export const inventoryRouter = Router();
+
+// 全部库存端点仅 manager / admin 可访问（普通 user 即使已登录也得到 403）
+inventoryRouter.use(requireAnyRole('admin', 'manager'));
 
 // ==================================================================
 //  校验 schema
@@ -77,9 +82,9 @@ inventoryRouter.post('/inventory/upload', validate(uploadJobSchema), (req, res) 
 // ==================================================================
 
 inventoryRouter.get('/inventory/jobs/:jobId', (req, res) => {
-  const snapshot = getJobSnapshot(req.params.jobId);
+  const snapshot = getOwnedJobSnapshot(req.params.jobId, req.user!.userId);
   if (!snapshot) {
-    res.status(404).json({ error: '查询不存在或已过期' });
+    res.status(404).json({ error: '查询不存在、无权访问或已过期' });
     return;
   }
   res.json(snapshot);
@@ -90,9 +95,9 @@ inventoryRouter.get('/inventory/jobs/:jobId', (req, res) => {
 // ==================================================================
 
 inventoryRouter.get('/inventory/jobs/:jobId/events', (req, res) => {
-  const snapshot = getJobSnapshot(req.params.jobId);
+  const snapshot = getOwnedJobSnapshot(req.params.jobId, req.user!.userId);
   if (!snapshot) {
-    res.status(404).json({ error: '查询不存在或已过期' });
+    res.status(404).json({ error: '查询不存在、无权访问或已过期' });
     return;
   }
 
@@ -124,4 +129,28 @@ inventoryRouter.post('/inventory/jobs/:jobId/cancel', (req, res) => {
     return;
   }
   res.json({ message: '已取消' });
+});
+
+// ==================================================================
+//  GET /api/inventory/results      —— 最近 20 条识别结果摘要
+//  GET /api/inventory/results/:id  —— 单条结果完整分类
+// ==================================================================
+
+inventoryRouter.get('/inventory/results', (_req, res) => {
+  const results = listInventoryResults();
+  res.json({ results });
+});
+
+inventoryRouter.get('/inventory/results/:id', (req, res) => {
+  const id = Number(req.params.id);
+  if (Number.isNaN(id)) {
+    res.status(400).json({ error: '无效的结果 ID' });
+    return;
+  }
+  const detail = getInventoryResult(id);
+  if (!detail) {
+    res.status(404).json({ error: '结果不存在' });
+    return;
+  }
+  res.json({ result: detail });
 });

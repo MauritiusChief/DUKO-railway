@@ -31,30 +31,46 @@ interface Classification {
   noAttentionCount: number;
 }
 
-const LS_KEY = 'duko_inventory_last';
-
-function loadLastResult(): {
-  classification: Classification;
-  totalCleaned: number;
+/** 库存识别历史摘要（来自 /api/inventory/results） */
+interface HistorySummary {
+  id: number;
+  jobId: string;
+  source: string;
+  completedAt: string;
+  triggeredByName: string;
   threshold: number;
   trendThreshold: number;
   recentMonths: number;
-} | null {
+  totalCleaned: number;
+  lowStockCount: number;
+  warningCount: number;
+  reminderCount: number;
+  infoCount: number;
+  noAttentionCount: number;
+}
+
+/** 旧版本 localStorage key，挂载时清理遗留的完整结果缓存（历史结果已改为服务端持久化） */
+const LEGACY_LS_KEY = 'duko_inventory_last';
+
+/** 拉取全局最近 20 条识别结果摘要 */
+async function loadHistoryList(): Promise<HistorySummary[]> {
   try {
-    const raw = localStorage.getItem(LS_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw);
+    const res = await fetchWithAuth('/api/inventory/results');
+    if (!res.ok) return [];
+    const data = (await res.json()) as { results?: HistorySummary[] };
+    return data.results ?? [];
   } catch {
-    return null;
+    return [];
   }
 }
 
-function clearLastResult(): void {
-  try {
-    localStorage.removeItem(LS_KEY);
-  } catch {
-    /* 忽略存储访问错误 */
-  }
+/** 历史下拉选项文本：本地时间为主，附来源与执行人 */
+function formatHistoryLabel(h: HistorySummary): string {
+  // completed_at 来自 SQLite datetime('now')，为 'YYYY-MM-DD HH:MM:SS'（UTC），补 T/Z 以便按 UTC 解析后转本地时区
+  const iso = h.completedAt.trim().replace(' ', 'T') + 'Z';
+  const local = new Date(iso).toLocaleString();
+  const source = h.source === 'auto' ? '下载' : '上传';
+  return `${local} · ${source} · ${h.triggeredByName}`;
 }
 
 type ClassificationBucket = 'warning' | 'reminder' | 'info';
@@ -96,43 +112,42 @@ export default function InventoryDashboardPage() {
   const [lowStockCount, setLowStockCount] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // 库存识别历史（服务端持久化，全局最近 20 条）
+  const [history, setHistory] = useState<HistorySummary[]>([]);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+
   const sseRef = useRef<ReconnectingSSE | null>(null);
   const terminalRef = useRef(false);
   const logEndRef = useRef<HTMLDivElement>(null);
 
   const busy = status === 'running';
 
-  // 恢复上次结果
+  // 挂载时清理旧版本遗留的完整结果缓存，并加载服务端历史（默认选择最新一条）
   useEffect(() => {
-    const last = loadLastResult();
-    if (last) {
-      setClassification(last.classification);
-      setTotalCleaned(last.totalCleaned ?? null);
-      setThreshold(last.threshold ?? 5);
-      setTrendThreshold(last.trendThreshold ?? 10);
-      setRecentMonths(last.recentMonths ?? 3);
-    }
-  }, []);
-
-  // 每次表格或统计数据更新时同步覆盖本地结果。
-  useEffect(() => {
-    if (!classification) return;
     try {
-      localStorage.setItem(
-        LS_KEY,
-        JSON.stringify({
-          ts: Date.now(),
-          threshold,
-          trendThreshold,
-          recentMonths,
-          totalCleaned: totalCleaned ?? 0,
-          classification,
-        }),
-      );
+      localStorage.removeItem(LEGACY_LS_KEY);
     } catch {
-      /* 忽略配额错误 */
+      /* 忽略 */
     }
-  }, [classification, threshold, trendThreshold, recentMonths, totalCleaned]);
+    let cancelled = false;
+    (async () => {
+      const list = await loadHistoryList();
+      if (cancelled) return;
+      setHistory(list);
+      if (list.length > 0) {
+        const latest = list[0];
+        setSelectedId(latest.id);
+        await loadResultDetail(latest.id);
+        // 与旧 localStorage 行为一致：恢复最新一次的查询参数
+        setThreshold(latest.threshold);
+        setTrendThreshold(latest.trendThreshold);
+        setRecentMonths(latest.recentMonths);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const totalPages = Math.max(1, Math.ceil((classification?.info.length ?? 0) / INFO_PAGE_SIZE));
@@ -172,6 +187,36 @@ export default function InventoryDashboardPage() {
       const next = [...prev, message];
       return next.length > 300 ? next.slice(next.length - 300) : next;
     });
+  }
+
+  /** 加载指定历史结果的完整分类并展示 */
+  async function loadResultDetail(id: number) {
+    try {
+      const res = await fetchWithAuth(`/api/inventory/results/${id}`);
+      if (!res.ok) return;
+      const data = (await res.json()) as { result?: { classification: Classification; totalCleaned: number; lowStockCount: number } };
+      if (!data.result) return;
+      setClassification(data.result.classification);
+      setTotalCleaned(data.result.totalCleaned);
+      setLowStockCount(data.result.lowStockCount);
+    } catch {
+      /* 静默失败 */
+    }
+  }
+
+  /** 任务完成后刷新历史列表并选中新写入的最新结果 */
+  async function refreshHistoryAfterComplete() {
+    const list = await loadHistoryList();
+    setHistory(list);
+    if (list.length > 0) {
+      setSelectedId(list[0].id);
+    }
+  }
+
+  /** 手动选择某条历史 */
+  async function handleSelectHistory(id: number) {
+    setSelectedId(id);
+    await loadResultDetail(id);
   }
 
   function openSSE(id: string) {
@@ -235,6 +280,8 @@ export default function InventoryDashboardPage() {
             }
             setStatus('completed');
             finishSSE();
+            // 刷新历史列表并选中新写入的最新结果
+            refreshHistoryAfterComplete();
             break;
           case 'error':
             setError(String(d.error ?? '未知错误'));
@@ -255,7 +302,6 @@ export default function InventoryDashboardPage() {
   }
 
   function resetForNewJob() {
-    clearLastResult();
     setLog([]);
     setError(null);
     setClassification(null);
@@ -266,7 +312,6 @@ export default function InventoryDashboardPage() {
   }
 
   function handleClearTables() {
-    clearLastResult();
     setClassification(null);
     setTotalCleaned(null);
     setLowStockCount(null);
@@ -412,6 +457,20 @@ export default function InventoryDashboardPage() {
           )}
         </div>
         <div className="iv-header-right">
+          <select
+            className="iv-history-select"
+            value={selectedId ?? ''}
+            onChange={(e) => handleSelectHistory(Number(e.target.value))}
+            disabled={busy || history.length === 0}
+            title={busy ? '查询进行中，暂停历史切换' : '选择历史识别结果'}
+          >
+            {history.length === 0 && <option value="">暂无历史</option>}
+            {history.map((h) => (
+              <option key={h.id} value={h.id}>
+                {formatHistoryLabel(h)}
+              </option>
+            ))}
+          </select>
           <button className="iv-btn" onClick={handleClearTables} disabled={busy}>清空表格</button>
         </div>
       </div>

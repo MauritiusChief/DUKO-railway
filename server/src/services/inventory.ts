@@ -13,6 +13,7 @@
  */
 
 import { randomUUID } from 'crypto';
+import path from 'path';
 import { cleanCSVFromString } from './sku-clean.js';
 import {
   enqueueInventoryTask,
@@ -20,6 +21,9 @@ import {
   isWorkerConnected,
 } from './ws-handler.js';
 import { broadcastInventory } from './inventory-sse.js';
+import { insertInventoryResult } from '../db/sku.js';
+import { stageProductRawCsv } from './product-raw-stage.js';
+import { config } from '../config/env.js';
 
 // ==================================================================
 //  类型
@@ -304,6 +308,31 @@ function classifyAndComplete(job: InventoryJob): void {
   }
 
   job.classification = classification;
+
+  // 持久化到全局库存历史（最近 20 条）。写入失败则整个 job 视为失败，
+  // 因为"成功完成"要求包含正式结果落库。
+  try {
+    insertInventoryResult({
+      jobId: job.jobId,
+      triggeredById: job.userId,
+      triggeredByName: job.username,
+      source: job.mode,
+      threshold: job.threshold,
+      trendThreshold: job.trendThreshold,
+      recentMonths: job.recentMonths,
+      totalCleaned: job.totalCleaned ?? 0,
+      lowStockCount: (job.lowStockItems ?? []).length,
+      warningCount: classification.warning.length,
+      reminderCount: classification.reminder.length,
+      infoCount: classification.info.length,
+      noAttentionCount: classification.noAttentionCount,
+      classificationJson: JSON.stringify(classification),
+    });
+  } catch (err) {
+    failJob(job, `库存历史写入失败：${err instanceof Error ? err.message : String(err)}`);
+    return;
+  }
+
   job.status = 'completed';
   job.phase = 'completed';
 
@@ -355,6 +384,14 @@ export function createDownloadJob(
           return;
         }
         job.rawCsv = csv;
+        // best-effort 暂存为最新 Product-raw-YYYY-MM-DD.csv，供管理员择机手动 refresh。
+        // 暂存失败仅记日志，不阻断本次库存识别。
+        try {
+          const staged = stageProductRawCsv(csv, config.dbDir);
+          progress(job, `已暂存最新 Product-raw 供后续手动刷新：${path.basename(staged)}`);
+        } catch (stageErr) {
+          console.error(`[inventory] job ${job.jobId} 暂存 Product-raw 失败: ${stageErr instanceof Error ? stageErr.message : String(stageErr)}`);
+        }
         cleanAndFilter(job, csv);
         // 自动衔接趋势查验
         startTrend(job);
@@ -425,6 +462,16 @@ export function getJobSnapshot(jobId: string): JobSnapshot | null {
     error: job.error,
     lastProgress: job.lastProgress,
   };
+}
+
+/**
+ * 取 job 快照，仅限创建者本人。
+ * 快照、SSE、取消三个入口共用此所有权判断，避免他人凭 jobId 猜测读取。
+ */
+export function getOwnedJobSnapshot(jobId: string, userId: number): JobSnapshot | null {
+  const job = jobs.get(jobId);
+  if (!job || job.userId !== userId) return null;
+  return getJobSnapshot(jobId);
 }
 
 /** 取消 job（中止在途 worker 任务） */
