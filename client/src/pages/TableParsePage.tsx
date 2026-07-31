@@ -217,6 +217,7 @@ export default function TableParsePage() {
     copySuccess,
     saveArchive,
     loadArchiveData,
+    addEmptyItem,
     // 图片模式操作
     setInputMode,
     addImage,
@@ -667,7 +668,6 @@ export default function TableParsePage() {
       <div className="tp-bottom-area">
         <div className="tp-left-panel">
           {/* ---- 结果表格（五列可折叠区） ---- */}
-          {items.length > 0 && (
             <div className={`tp-result-section${resultCollapsed ? ' tp-collapsed' : ''}`}>
               <div
                 className="tp-result-header"
@@ -686,162 +686,183 @@ export default function TableParsePage() {
               </div>
               {!resultCollapsed && (
                 <>
-                  <div className="tp-table-wrapper">
-                    <table className="tp-table">
-                    <thead>
-                      <tr>
-                        <th className="tp-th-name">{t('原始名称')}</th>
-                        <th className="tp-th-field">{t('颜色')}</th>
-                        <th className="tp-th-field">{t('形状型号')}</th>
-                        <th className="tp-th-field">{t('形状尺寸')}</th>
-                        <th className="tp-th-req">{t('定制要求')}</th>
-                        <th className="tp-th-qty">{t('数量')}</th>
-                        <th className="tp-th-action">{t('操作')}</th>
-                      </tr>
-                    </thead>
-                     <tbody>
-                      {items.map((item, rowIndex) => {
-                        /** 直接读取 item 内置的 status */
-                        const rowStatus = item.status || 'missing';
+                  {items.length === 0 ? (
+                    <div className="tp-empty-state">
+                      <span className="tp-empty-state-text">{t('暂无结果')}</span>
+                      <button
+                        className="tp-submit-btn"
+                        onClick={addEmptyItem}
+                        disabled={loading}
+                      >
+                        {t('添加空行')}
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="tp-table-wrapper">
+                        <table className="tp-table">
+                        <thead>
+                          <tr>
+                            <th className="tp-th-name">{t('原始名称')}</th>
+                            <th className="tp-th-field">{t('颜色')}</th>
+                            <th className="tp-th-field">{t('形状型号')}</th>
+                            <th className="tp-th-field">{t('形状尺寸')}</th>
+                            <th className="tp-th-req">{t('定制要求')}</th>
+                            <th className="tp-th-qty">{t('数量')}</th>
+                            <th className="tp-th-action">{t('操作')}</th>
+                          </tr>
+                        </thead>
+                         <tbody>
+                          {items.map((item, rowIndex) => {
+                            /** 直接读取 item 内置的 status */
+                            const rowStatus = item.status || 'missing';
 
-                        /** 忽略标记：动态派生自当前 shapeType.values[0]，
-                         *  随用户编辑 shapeType 自动跟随变化。 */
-                        const shapeTypeCode = item.shapeType.values.length > 0
-                          ? item.shapeType.values[0].toUpperCase()
-                          : '';
-                        const dynColorIgnored = shapeTypeCode.length > 0 && SHAPE_TYPES_COLOR_NA.has(shapeTypeCode);
-                        const dynSizeIgnored = shapeTypeCode.length > 0 && SHAPE_TYPES_SIZE_NA.has(shapeTypeCode);
+                            /** 忽略标记：动态派生自当前 shapeType.values[0]，
+                             *  随用户编辑 shapeType 自动跟随变化。 */
+                            const shapeTypeCode = item.shapeType.values.length > 0
+                              ? item.shapeType.values[0].toUpperCase()
+                              : '';
+                            const dynColorIgnored = shapeTypeCode.length > 0 && SHAPE_TYPES_COLOR_NA.has(shapeTypeCode);
+                            const dynSizeIgnored = shapeTypeCode.length > 0 && SHAPE_TYPES_SIZE_NA.has(shapeTypeCode);
 
-                        /** 计算单格 CSS 类名：
-                         *   - 字段被忽略 → 无特殊样式（该型号天然不需要此字段）
-                         *   - 空字段 + 非忽略 → cell-unknown（红色，需要关注）
-                         *   - 多候选 → cell-candidates（橙色）
-                         *   - 确认 ∧ 行状态 missing → cell-exposed-missing（黄色） */
-                        const getCellClass = (field: 'color' | 'shapeType' | 'shapeSize', item: ParsedItem): string => {
-                          const valuesLen = item[field].values.length;
+                            /** 计算单格 CSS 类名：
+                             *   - 字段被忽略 → 无特殊样式（该型号天然不需要此字段）
+                             *   - 空字段 + 非忽略 → cell-unknown（红色，需要关注）
+                             *   - 多候选 → cell-candidates（橙色）
+                             *   - 确认 ∧ 行状态 missing → cell-exposed-missing（黄色） */
+                            const getCellClass = (field: 'color' | 'shapeType' | 'shapeSize', item: ParsedItem): string => {
+                              const valuesLen = item[field].values.length;
 
-                          if (valuesLen === 0) {
-                            // 被忽略的字段：不渲染任何警告样式（无需用户关注）
-                            if (field === 'color' && dynColorIgnored) {
-                              return '';
-                            }
-                            if (field === 'shapeSize' && dynSizeIgnored) {
-                              return '';
-                            }
-                            return 'cell-unknown';
-                          }
-                          if (valuesLen > 1) return 'cell-candidates';
-                          // valuesLen === 1（确认）
-                          if (rowStatus === 'missing') {
-                            return 'cell-exposed-missing';
-                          }
-                          return '';
-                        };
-
-                        return (
-                        <tr key={rowIndex}>
-                          {/* 原始名称 —— 只读 */}
-                          <td className="tp-td-name">{item.originalName}</td>
-
-                          {/* 颜色 */}
-                          <td className={`tp-td-field ${getCellClass('color', item)}`}>
-                            <ConfidenceCell
-                              values={item.color.values}
-                              radioGroupName={`color-${rowIndex}`}
-                              onChange={(val) => updateItemField(rowIndex, 'color', val)}
-                              disabled={loading}
-                              onFieldBlur={checkExposedItems}
-                            />
-                          </td>
-
-                          {/* 形状型号 */}
-                          <td className={`tp-td-field ${getCellClass('shapeType', item)}`}>
-                            <ConfidenceCell
-                              values={item.shapeType.values}
-                              radioGroupName={`shapeType-${rowIndex}`}
-                              onChange={(val) => updateItemField(rowIndex, 'shapeType', val)}
-                              disabled={loading}
-                              onFieldBlur={checkExposedItems}
-                            />
-                          </td>
-
-                          {/* 形状尺寸 */}
-                          <td className={`tp-td-field ${getCellClass('shapeSize', item)}`}>
-                            <ConfidenceCell
-                              values={item.shapeSize.values}
-                              radioGroupName={`shapeSize-${rowIndex}`}
-                              onChange={(val) => updateItemField(rowIndex, 'shapeSize', val)}
-                              disabled={loading}
-                              onFieldBlur={checkExposedItems}
-                            />
-                          </td>
-
-                          {/* 定制要求 —— 下拉选择 */}
-                          <td className="tp-td-req">
-                            <select
-                              className="tp-select-req"
-                              value={item.customRequirement ?? ''}
-                              onChange={(e) => updateItemField(rowIndex, 'customRequirement', e.target.value)}
-                              disabled={loading}
-                            >
-                              <option value="">-</option>
-                              <option value="door">{t('door')}</option>
-                              <option value="box">{t('box')}</option>
-                            </select>
-                          </td>
-
-                          {/* 数量 —— 数字编辑框 */}
-                          <td className="tp-td-qty">
-                            <input
-                              type="number"
-                              className="cell-input cell-input-qty"
-                              min={1}
-                              value={item.quantity}
-                              onChange={(e) =>
-                                updateItemField(rowIndex, 'quantity', parseInt(e.target.value, 10) || 1)
+                              if (valuesLen === 0) {
+                                // 被忽略的字段：不渲染任何警告样式（无需用户关注）
+                                if (field === 'color' && dynColorIgnored) {
+                                  return '';
+                                }
+                                if (field === 'shapeSize' && dynSizeIgnored) {
+                                  return '';
+                                }
+                                return 'cell-unknown';
                               }
-                              disabled={loading}
-                            />
-                          </td>
+                              if (valuesLen > 1) return 'cell-candidates';
+                              // valuesLen === 1（确认）
+                              if (rowStatus === 'missing') {
+                                return 'cell-exposed-missing';
+                              }
+                              return '';
+                            };
 
-                          {/* 删除按钮 */}
-                          <td className="tp-td-action">
-                            <button
-                              className="tp-delete-btn"
-                              onClick={() => removeItem(rowIndex)}
-                              disabled={loading}
-                              title={t('删除此行')}
-                            >
-                              ×
-                            </button>
-                          </td>
-                        </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-                  {/* 生成产品清单 + 保存存档按钮行 */}
-                  <div className="tp-button-row">
-                    <button
-                      className="tp-submit-btn tp-generate-btn"
-                      onClick={generateProducts}
-                      disabled={productsLoading || items.length === 0}
-                    >
-                      {productsLoading ? t('生成中') : t('生成产品清单')}
-                    </button>
-                    <button
-                      className="tp-submit-btn tp-generate-btn"
-                      onClick={saveArchive}
-                      disabled={items.length === 0}
-                    >
-                      {t('保存存档')}
-                    </button>
-                  </div>
+                            return (
+                            <tr key={rowIndex}>
+                              {/* 原始名称 —— 只读 */}
+                              <td className="tp-td-name">{item.originalName}</td>
+
+                              {/* 颜色 */}
+                              <td className={`tp-td-field ${getCellClass('color', item)}`}>
+                                <ConfidenceCell
+                                  values={item.color.values}
+                                  radioGroupName={`color-${rowIndex}`}
+                                  onChange={(val) => updateItemField(rowIndex, 'color', val)}
+                                  disabled={loading}
+                                  onFieldBlur={checkExposedItems}
+                                />
+                              </td>
+
+                              {/* 形状型号 */}
+                              <td className={`tp-td-field ${getCellClass('shapeType', item)}`}>
+                                <ConfidenceCell
+                                  values={item.shapeType.values}
+                                  radioGroupName={`shapeType-${rowIndex}`}
+                                  onChange={(val) => updateItemField(rowIndex, 'shapeType', val)}
+                                  disabled={loading}
+                                  onFieldBlur={checkExposedItems}
+                                />
+                              </td>
+
+                              {/* 形状尺寸 */}
+                              <td className={`tp-td-field ${getCellClass('shapeSize', item)}`}>
+                                <ConfidenceCell
+                                  values={item.shapeSize.values}
+                                  radioGroupName={`shapeSize-${rowIndex}`}
+                                  onChange={(val) => updateItemField(rowIndex, 'shapeSize', val)}
+                                  disabled={loading}
+                                  onFieldBlur={checkExposedItems}
+                                />
+                              </td>
+
+                              {/* 定制要求 —— 下拉选择 */}
+                              <td className="tp-td-req">
+                                <select
+                                  className="tp-select-req"
+                                  value={item.customRequirement ?? ''}
+                                  onChange={(e) => updateItemField(rowIndex, 'customRequirement', e.target.value)}
+                                  disabled={loading}
+                                >
+                                  <option value="">-</option>
+                                  <option value="door">{t('door')}</option>
+                                  <option value="box">{t('box')}</option>
+                                </select>
+                              </td>
+
+                              {/* 数量 —— 数字编辑框 */}
+                              <td className="tp-td-qty">
+                                <input
+                                  type="number"
+                                  className="cell-input cell-input-qty"
+                                  min={1}
+                                  value={item.quantity}
+                                  onChange={(e) =>
+                                    updateItemField(rowIndex, 'quantity', parseInt(e.target.value, 10) || 1)
+                                  }
+                                  disabled={loading}
+                                />
+                              </td>
+
+                              {/* 删除按钮 */}
+                              <td className="tp-td-action">
+                                <button
+                                  className="tp-delete-btn"
+                                  onClick={() => removeItem(rowIndex)}
+                                  disabled={loading}
+                                  title={t('删除此行')}
+                                >
+                                  ×
+                                </button>
+                              </td>
+                            </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                      {/* 生成产品清单 + 保存存档 + 添加空行按钮行 */}
+                      <div className="tp-button-row">
+                        <button
+                          className="tp-submit-btn tp-generate-btn"
+                          onClick={generateProducts}
+                          disabled={productsLoading || items.length === 0}
+                        >
+                          {productsLoading ? t('生成中') : t('生成产品清单')}
+                        </button>
+                        <button
+                          className="tp-submit-btn tp-generate-btn"
+                          onClick={saveArchive}
+                          disabled={items.length === 0}
+                        >
+                          {t('保存存档')}
+                        </button>
+                        <button
+                          className="tp-submit-btn"
+                          onClick={addEmptyItem}
+                          disabled={loading}
+                        >
+                          {t('添加空行')}
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </>
               )}
             </div>
-          )}
 
           {/* ---- 产品清单（三列可折叠区） ---- */}
           {products.length > 0 && (

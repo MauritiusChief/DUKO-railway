@@ -260,6 +260,24 @@
   overflow-x: auto;
 }
 
+/* ====== 空状态 ====== */
+
+.tp-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 24px 8px;
+  border: 1px solid #e0e0e0;
+  border-top: none;
+  border-radius: 0 0 4px 4px;
+}
+
+.tp-empty-state-text {
+  font-size: 13px;
+  color: #999;
+}
+
 /* ====== 表格 ====== */
 
 .tp-table {
@@ -836,6 +854,10 @@
 
   .tp-table-wrapper {
     width: 100%;
+  }
+
+  .tp-empty-state {
+    padding: 20px 8px;
   }
 
   /* 表格最小宽度，保留横向滚动；width:auto 避免 table-layout:fixed 列宽分配异常 */

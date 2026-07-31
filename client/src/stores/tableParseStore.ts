@@ -133,6 +133,8 @@ interface TableParseState {
   ) => void;
   /** 删除某一行 */
   removeItem: (index: number) => void;
+  /** 手动添加一个空行（所有字段为空，数量为 1，status 为 missing） */
+  addEmptyItem: () => void;
   /** 重新检查所有行的 Exposed-Items 匹配状态（blur 后调用） */
   checkExposedItems: () => Promise<void>;
   /** 生成产品清单 */
@@ -495,6 +497,24 @@ export const useTableParseStore = create<TableParseState>((set, get) => {
 
     // 删除后重新检查 Exposed-Items 匹配状态
     get().checkExposedItems();
+  },
+
+  /** 手动添加一个空行：所有字段为空，数量为 1，status 为 missing。
+   *  不触发 Exposed-Items 检查（空行无有效字段），等待用户自行填写。
+   *  与删除行一致：清空已生成的产品和未解析统计。 */
+  addEmptyItem: () => {
+    const { items } = get();
+    const emptyItem: ParsedItem = {
+      originalName: '',
+      color: { values: [] },
+      shapeType: { values: [] },
+      shapeSize: { values: [] },
+      quantity: 1,
+      status: 'missing',
+    };
+    const newItems = [...items, emptyItem];
+    set({ items: newItems, products: [], unresolvedCount: 0, unresolvedIndices: [], resultCollapsed: false });
+    syncToStorage(newItems);
   },
 
   /** 根据当前编辑后的表格生成 DUKO 产品清单。
