@@ -97,6 +97,14 @@ export const messages = {
     zh: '删除此行',
     en: 'Delete this row',
   },
+  添加空行: {
+    zh: '添加空行',
+    en: 'Add Empty Row',
+  },
+  暂无结果: {
+    zh: '暂无解析结果，可点击下方按钮手动添加行',
+    en: 'No parsed results yet. Add rows manually below.',
+  },
   生成中: {
     zh: '生成中...',
     en: 'Generating...',
