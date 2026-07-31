@@ -840,6 +840,7 @@
   .tp-chat-column {
     flex: none;
     width: 100% !important;
+    height: 400px;
     min-height: 400px;
     border-left: none;
     border-top: 1px solid #ddd;
