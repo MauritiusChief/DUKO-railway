@@ -319,6 +319,10 @@ tableParseLlmRouter.post('/', validate(tableParseSchema), async (req: Request, r
         sse.send('round_start', { round: event.round });
       }
     },
+    /** 清单被 LLM 工具修改后，立即推送新快照给前端 */
+    onItemsUpdated: (items) => {
+      sse.send('result', { items });
+    },
   });
 
   if (traceContext) {
