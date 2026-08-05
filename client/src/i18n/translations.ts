@@ -972,4 +972,10 @@ export const messages = {
     zh: '返回',
     en: 'Back',
   },
+
+  /* ---- 自动恢复提示 ---- */
+  从历史恢复提示: {
+    zh: '连接中断，已从历史记录自动恢复解析结果',
+    en: 'Connection lost; results auto-recovered from history',
+  },
 } as const;

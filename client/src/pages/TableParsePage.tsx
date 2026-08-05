@@ -215,6 +215,7 @@ export default function TableParsePage() {
     toggleProductsCollapsed,
     copyProductsCsv,
     copySuccess,
+    fromHistoryRestored,
     saveArchive,
     loadArchiveData,
     addEmptyItem,
@@ -635,6 +636,10 @@ export default function TableParsePage() {
 
           {/* 错误信息 */}
           {error && <div className="tp-error">{error}</div>}
+          {/* 历史自动恢复提示 */}
+          {fromHistoryRestored && !error && (
+            <div className="tp-recovery-hint">{t('从历史恢复提示')}</div>
+          )}
         </div>
         <div
           className="tp-resize-handle"

@@ -206,6 +206,12 @@
   font-size: 13px;
 }
 
+.tp-recovery-hint {
+  margin-top: 8px;
+  color: #b8860b;
+  font-size: 13px;
+}
+
 /* ====== 结果区（可滚动） ====== */
 
 .tp-result-section {
