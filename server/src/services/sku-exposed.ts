@@ -195,7 +195,7 @@ const europeanStyleBackPanel = EUROPEAN_STYLE_CODES.map(color => {
   return { colorCode: color, shapeTypeCode: 'BPNL', shapeSizeCode: '3496', subItems: `${color}PNL3496,${color}OCM8` }
 })
 // 美式和一体式高柜规则生成
-const americanStyleUtilityCab = NONE_EURO_STYLE_CODES.flatMap(color => {
+const noneEuroStyleUtilityCab = NONE_EURO_STYLE_CODES.flatMap(color => {
   return Object.keys(NON_EURO_UTIL_CAB).flatMap( totalH => {
     const [upperCab, lowerCab] = NON_EURO_UTIL_CAB[totalH]
     return AMERICAN_UTIL_WIDTH.map(w => {
@@ -233,7 +233,7 @@ const eruroDishwasherPanelCombo = EUROPEAN_STYLE_CODES.map(color => {
 const COMPOSITE_ITEMS_RULES: CompositeItemRule[] = [
   ...americanStyleBackPanel,
   ...europeanStyleBackPanel,
-  ...americanStyleUtilityCab,
+  ...noneEuroStyleUtilityCab,
   ...europeanStyleUtilityCab,
   ...noneEuroStyleOvenCab,
   ...baseCabWithTrashBin,
