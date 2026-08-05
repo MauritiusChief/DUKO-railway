@@ -136,6 +136,7 @@ const MAIN_ALIAS_RULES: InjectRule[] = [
   { condition: (c, t) => EUROPEAN_STYLE_CODES.includes(c) && t === 'BEP', value: 'Base End Skin,Dish Washer Panel' },
   { condition: (_, t) => t === 'WEP', value: 'Wall End Skin' },
   { condition: (_, t) => t === 'CP', value: 'Leg,Pillar' },
+  { condition: (_, t) => t === 'QR', value: 'Shoe Molding' },
   { condition: (c, t) => NONE_EURO_STYLE_CODES.includes(c) && t === 'RRP', value: 'Fridge End Panel,Fridge Side Panel' },
 ];
 
