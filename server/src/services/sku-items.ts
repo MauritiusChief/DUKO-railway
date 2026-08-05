@@ -205,6 +205,16 @@ export function generateItemsTable(
       continue;
     }
 
+    // —— 跳过组合规则的高柜"整体"——
+    if (rest.match(/^UT\d{2}(81|84|87|90|93|96)24$/)) {
+      continue;
+    }
+
+    // —— 跳过04DWP3——
+    if (name === "04DWP3") {
+      continue;
+    }
+
     // ── 确定 shapeCode 和归属列 ──
     let shapeCode: string;
     let column: 'doorPart' | 'cabinetPart' | 'extraPart';

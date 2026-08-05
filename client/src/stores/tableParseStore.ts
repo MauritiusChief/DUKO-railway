@@ -88,6 +88,8 @@ interface TableParseState {
   loading: boolean;
   /** 请求错误信息 */
   error: string;
+  /** 是否通过历史记录自动恢复了本次解析结果（显示恢复提示用） */
+  fromHistoryRestored: boolean;
   /** 生成的产品列表 */
   products: ProductEntry[];
   /** 是否正在生成产品 */
@@ -197,6 +199,7 @@ export const useTableParseStore = create<TableParseState>((set, get) => {
   items: cached,
   loading: false,
   error: '',
+  fromHistoryRestored: false,
   products: [],
   productsLoading: false,
   unresolvedCount: 0,
@@ -255,7 +258,7 @@ export const useTableParseStore = create<TableParseState>((set, get) => {
     if (!input.trim() || get().loading) return;
 
     const lineCount = input.split('\n').filter((l) => l.trim()).length;
-    set({ items: [], loading: true, error: '', parseInputLineCount: lineCount });
+    set({ items: [], loading: true, error: '', fromHistoryRestored: false, parseInputLineCount: lineCount });
 
     // 通知 ChatPanel：解析开始（附带行数和已勾选颜色代码，供 rich parse_start 消息使用）
     parseEventCallback?.({ type: 'parse_start', data: {
@@ -342,9 +345,37 @@ export const useTableParseStore = create<TableParseState>((set, get) => {
       parseEventCallback?.({ type: 'done', data: {} });
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : `请求失败，请检查网络连接。${tOutside('联系支持')}`;
-      parseEventCallback?.({ type: 'error', data: { message: errMsg } });
-      set({ error: errMsg, loading: false });
-      parseEventCallback?.({ type: 'done', data: {} });
+
+      // 自动从最新历史记录恢复（仅当 input 完全匹配时）
+      let recovered = false;
+      try {
+        const historyRes = await fetchWithAuth('/api/htory');
+        if (historyRes.ok) {
+          const records: { id: number }[] = await historyRes.json();
+          if (records.length > 0) {
+            const detailRes = await fetchWithAuth(`/api/htory/${records[0].id}`);
+            if (detailRes.ok) {
+              const detail: { input: string; items: ParsedItem[]; colorHints: string[]; conversation: ConversationEntry[] } = await detailRes.json();
+              if (detail.input && detail.input.trim() === input.trim()) {
+                get().replaceItems(detail.items);
+                get().setColorHints(detail.colorHints);
+                get().setFillConversation(detail.conversation);
+                set({ error: '', loading: false, fromHistoryRestored: true });
+                parseEventCallback?.({ type: 'done', data: {} });
+                recovered = true;
+              }
+            }
+          }
+        }
+      } catch {
+        // 恢复失败，静默
+      }
+
+      if (!recovered) {
+        parseEventCallback?.({ type: 'error', data: { message: errMsg } });
+        set({ error: errMsg, loading: false });
+        parseEventCallback?.({ type: 'done', data: {} });
+      }
     }
   },
 
