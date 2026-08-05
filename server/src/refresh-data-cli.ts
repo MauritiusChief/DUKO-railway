@@ -25,6 +25,7 @@ import path from 'path';
 import fs from 'fs';
 import { config } from './config/env.js';
 import { runAllSteps } from './process-cli.js';
+import { discoverRawCsvPath } from './services/product-raw-stage.js';
 import { initDB } from './db/lance.js';
 import { initSkuDB, getRecordCount, getColorRecordCount, getTypeRecordCount, getItemRecordCount, getPartRecordCount, getProductRecordCount, setSkuRefreshSuccess } from './db/sku.js';
 import { ingestFromFile, loadAllReferenceData } from './services/sku-ingest.js';
@@ -41,27 +42,12 @@ if (!fs.existsSync(dataDir)) {
   process.exit(1);
 }
 
-// 优先使用库存看板自动下载暂存的 Product-raw-YYYY-MM-DD.csv（最终只保留一个）；
-// 兼容回退到历史固定名 Product-raw.csv。
-const datedRawCandidates = fs.readdirSync(dataDir)
-  .filter((f) => /^Product-raw-\d{4}-\d{2}-\d{2}\.csv$/.test(f))
-  .sort();
-
 let rawCsvPath: string;
-if (datedRawCandidates.length > 0) {
-  rawCsvPath = path.join(dataDir, datedRawCandidates[datedRawCandidates.length - 1]);
-  if (datedRawCandidates.length > 1) {
-    console.warn(`发现多个 Product-raw-*.csv，将使用最新一份: ${rawCsvPath}（建议保留唯一最新文件）`);
-  }
-} else {
-  const legacy = path.join(dataDir, 'Product-raw.csv');
-  if (fs.existsSync(legacy)) {
-    rawCsvPath = legacy;
-  } else {
-    console.error(`未在 ${dataDir} 找到 Product-raw-YYYY-MM-DD.csv 或 Product-raw.csv`);
-    console.error('请先在库存看板执行一次自动下载查询以暂存最新 CSV，再运行此命令');
-    process.exit(1);
-  }
+try {
+  rawCsvPath = discoverRawCsvPath(dataDir);
+} catch (err) {
+  console.error(err instanceof Error ? err.message : String(err));
+  process.exit(1);
 }
 
 console.log(`数据目录: ${dataDir}`);

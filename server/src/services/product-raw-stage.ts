@@ -14,6 +14,36 @@ import path from 'path';
 
 const RAW_PREFIX = 'Product-raw';
 const RAW_SUFFIX = '.csv';
+const DATED_RAW_RE = /^Product-raw-\d{4}-\d{2}-\d{2}\.csv$/;
+
+/**
+ * 在 dataDir 中发现最新一份 Product-raw CSV 的路径。
+ *
+ * 优先选取日期归档的 Product-raw-YYYY-MM-DD.csv，
+ * 回退到历史固定名 Product-raw.csv。
+ *
+ * 都不存在时抛出明确错误。
+ */
+export function discoverRawCsvPath(dataDir: string): string {
+  try {
+    const candidates = fs.readdirSync(dataDir)
+      .filter((f) => DATED_RAW_RE.test(f))
+      .sort();
+    if (candidates.length > 0) {
+      return path.join(dataDir, candidates[candidates.length - 1]);
+    }
+  } catch {
+    // 目录可能不存在，继续尝试 legacy
+  }
+  const legacy = path.join(dataDir, 'Product-raw.csv');
+  if (fs.existsSync(legacy)) {
+    return legacy;
+  }
+  throw new Error(
+    `未在 ${dataDir} 找到 Product-raw-YYYY-MM-DD.csv 或 Product-raw.csv。`
+    + '请先在库存看板执行一次自动下载查询以暂存最新 CSV，再重试。',
+  );
+}
 
 /**
  * 暂存最新 Product CSV 到数据目录。
