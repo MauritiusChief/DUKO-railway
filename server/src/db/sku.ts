@@ -88,6 +88,36 @@ export function initSkuDB(dbDir: string): void {
       freeToUseQty  REAL NOT NULL DEFAULT 0,
       qtyOnHand     REAL NOT NULL DEFAULT 0
     );
+
+    -- 库存识别历史（最近 20 次成功识别的全局共享记录）
+    CREATE TABLE IF NOT EXISTS inventory_results (
+      id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+      job_id              TEXT NOT NULL UNIQUE,
+      triggered_by_id     INTEGER NOT NULL,
+      triggered_by_name   TEXT NOT NULL,
+      source              TEXT NOT NULL CHECK(source IN ('auto','upload')),
+      threshold           REAL NOT NULL,
+      trend_threshold     REAL NOT NULL,
+      recent_months       INTEGER NOT NULL,
+      total_cleaned       INTEGER NOT NULL,
+      low_stock_count     INTEGER NOT NULL,
+      warning_count       INTEGER NOT NULL DEFAULT 0,
+      reminder_count      INTEGER NOT NULL DEFAULT 0,
+      info_count          INTEGER NOT NULL DEFAULT 0,
+      no_attention_count  INTEGER NOT NULL DEFAULT 0,
+      classification_json TEXT NOT NULL,
+      completed_at        TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_inventory_results_completed
+      ON inventory_results(completed_at DESC, id DESC);
+
+    -- SKU 数据刷新元数据（单例，id 恒为 1）
+    CREATE TABLE IF NOT EXISTS sku_refresh_metadata (
+      id                         INTEGER PRIMARY KEY CHECK(id = 1),
+      active_generation          TEXT,
+      last_successful_refresh_at TEXT,
+      source                     TEXT
+    );
   `);
 }
 
@@ -520,4 +550,166 @@ export function replaceAllProducts(rows: ProductRow[]): void {
       insert.run(r.name, r.forecastedQty, r.freeToUseQty, r.qtyOnHand);
     }
   })();
+}
+
+// ==================================================================
+// #region 库存识别历史 (inventory_results)
+// ==================================================================
+
+/** 全局保留的最近识别结果条数 */
+export const MAX_INVENTORY_RESULTS = 20;
+
+/** 库存识别结果列表摘要 */
+export interface InventoryResultSummary {
+  id: number;
+  jobId: string;
+  source: string;
+  completedAt: string;
+  triggeredByName: string;
+  triggeredById: number;
+  threshold: number;
+  trendThreshold: number;
+  recentMonths: number;
+  totalCleaned: number;
+  lowStockCount: number;
+  warningCount: number;
+  reminderCount: number;
+  infoCount: number;
+  noAttentionCount: number;
+}
+
+/** 库存识别结果详情（含完整分类） */
+export interface InventoryResultDetail extends InventoryResultSummary {
+  classification: unknown;
+}
+
+/** 写入一条库存识别结果并裁剪到最近 MAX_INVENTORY_RESULTS 条（同事务） */
+export function insertInventoryResult(input: {
+  jobId: string;
+  triggeredById: number;
+  triggeredByName: string;
+  source: 'auto' | 'upload';
+  threshold: number;
+  trendThreshold: number;
+  recentMonths: number;
+  totalCleaned: number;
+  lowStockCount: number;
+  warningCount: number;
+  reminderCount: number;
+  infoCount: number;
+  noAttentionCount: number;
+  classificationJson: string;
+}): void {
+  const insert = db.prepare(`
+    INSERT INTO inventory_results
+      (job_id, triggered_by_id, triggered_by_name, source, threshold,
+       trend_threshold, recent_months, total_cleaned, low_stock_count,
+       warning_count, reminder_count, info_count, no_attention_count,
+       classification_json)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const trim = db.prepare(`
+    DELETE FROM inventory_results
+    WHERE id NOT IN (
+      SELECT id FROM inventory_results
+      ORDER BY completed_at DESC, id DESC
+      LIMIT ?
+    )
+  `);
+
+  db.transaction(() => {
+    insert.run(
+      input.jobId,
+      input.triggeredById,
+      input.triggeredByName,
+      input.source,
+      input.threshold,
+      input.trendThreshold,
+      input.recentMonths,
+      input.totalCleaned,
+      input.lowStockCount,
+      input.warningCount,
+      input.reminderCount,
+      input.infoCount,
+      input.noAttentionCount,
+      input.classificationJson,
+    );
+    trim.run(MAX_INVENTORY_RESULTS);
+  })();
+}
+
+/** 返回最近 MAX_INVENTORY_RESULTS 条识别结果摘要（不含完整分类 JSON） */
+export function listInventoryResults(): InventoryResultSummary[] {
+  return db.prepare(`
+    SELECT id, job_id AS jobId, source, completed_at AS completedAt,
+           triggered_by_name AS triggeredByName, triggered_by_id AS triggeredById,
+           threshold, trend_threshold AS trendThreshold, recent_months AS recentMonths,
+           total_cleaned AS totalCleaned, low_stock_count AS lowStockCount,
+           warning_count AS warningCount, reminder_count AS reminderCount,
+           info_count AS infoCount, no_attention_count AS noAttentionCount
+    FROM inventory_results
+    ORDER BY completed_at DESC, id DESC
+    LIMIT ?
+  `).all(MAX_INVENTORY_RESULTS) as InventoryResultSummary[];
+}
+
+/** 按 ID 返回单条识别结果详情（含完整分类） */
+export function getInventoryResult(id: number): InventoryResultDetail | undefined {
+  const row = db.prepare(`
+    SELECT id, job_id AS jobId, source, completed_at AS completedAt,
+           triggered_by_name AS triggeredByName, triggered_by_id AS triggeredById,
+           threshold, trend_threshold AS trendThreshold, recent_months AS recentMonths,
+           total_cleaned AS totalCleaned, low_stock_count AS lowStockCount,
+           warning_count AS warningCount, reminder_count AS reminderCount,
+           info_count AS infoCount, no_attention_count AS noAttentionCount,
+           classification_json AS classificationJson
+    FROM inventory_results
+    WHERE id = ?
+  `).get(id) as (InventoryResultSummary & { classificationJson: string }) | undefined;
+
+  if (!row) return undefined;
+  const { classificationJson, ...summary } = row;
+  let classification: unknown = null;
+  try {
+    classification = JSON.parse(classificationJson);
+  } catch {
+    classification = null;
+  }
+  return { ...summary, classification };
+}
+
+// ==================================================================
+// #region SKU 刷新元数据 (sku_refresh_metadata)
+// ==================================================================
+
+/** SKU 数据刷新元数据（单例） */
+export interface SkuRefreshMetadata {
+  activeGeneration: string | null;
+  lastSuccessfulRefreshAt: string | null;
+  source: string | null;
+}
+
+/** 读取刷新元数据；尚未刷新过时返回 undefined（lastSuccessfulRefreshAt 为空） */
+export function getSkuRefreshMetadata(): SkuRefreshMetadata | undefined {
+  return db.prepare(`
+    SELECT active_generation AS activeGeneration,
+           last_successful_refresh_at AS lastSuccessfulRefreshAt,
+           source
+    FROM sku_refresh_metadata
+    WHERE id = 1
+  `).get() as SkuRefreshMetadata | undefined;
+}
+
+/**
+ * 记录一次成功刷新。
+ * 仅在完整 refresh 发布后调用；失败刷新不更新，保留上一次成功值。
+ */
+export function setSkuRefreshSuccess(lastSuccessfulRefreshAt: string, source: string): void {
+  db.prepare(`
+    INSERT INTO sku_refresh_metadata (id, active_generation, last_successful_refresh_at, source)
+    VALUES (1, NULL, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      last_successful_refresh_at = excluded.last_successful_refresh_at,
+      source = excluded.source
+  `).run(lastSuccessfulRefreshAt, source);
 }

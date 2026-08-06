@@ -25,8 +25,9 @@ import path from 'path';
 import fs from 'fs';
 import { config } from './config/env.js';
 import { runAllSteps } from './process-cli.js';
+import { discoverRawCsvPath } from './services/product-raw-stage.js';
 import { initDB } from './db/lance.js';
-import { initSkuDB, getRecordCount, getColorRecordCount, getTypeRecordCount, getItemRecordCount, getPartRecordCount, getProductRecordCount } from './db/sku.js';
+import { initSkuDB, getRecordCount, getColorRecordCount, getTypeRecordCount, getItemRecordCount, getPartRecordCount, getProductRecordCount, setSkuRefreshSuccess } from './db/sku.js';
 import { ingestFromFile, loadAllReferenceData } from './services/sku-ingest.js';
 import { initBm25Index } from './services/bm25.js';
 
@@ -41,10 +42,11 @@ if (!fs.existsSync(dataDir)) {
   process.exit(1);
 }
 
-const rawCsvPath = path.join(dataDir, 'Product-raw.csv');
-if (!fs.existsSync(rawCsvPath)) {
-  console.error(`未找到 Product-raw.csv: ${rawCsvPath}`);
-  console.error('请先将 Product-raw.csv 放入该目录后再运行此命令');
+let rawCsvPath: string;
+try {
+  rawCsvPath = discoverRawCsvPath(dataDir);
+} catch (err) {
+  console.error(err instanceof Error ? err.message : String(err));
   process.exit(1);
 }
 
@@ -116,7 +118,15 @@ initBm25Index();
 console.log('BM25 描述文本索引已就绪（当前进程内）. 注意: Web Service 重启后将重新从 SQLite 读取数据并重建 BM25.');
 
 // ==================================================================
-// 步骤 8：输出汇总
+// 步骤 8：记录刷新元数据（仅完整成功后写入，供 Chat Agent 提示数据新鲜度）
+// ==================================================================
+const refreshedAt = new Date().toISOString();
+setSkuRefreshSuccess(refreshedAt, 'manual-cli');
+console.log(`\n--- 步骤 8: 记录刷新元数据 ---`);
+console.log(`最后成功刷新时间: ${refreshedAt} (UTC)`);
+
+// ==================================================================
+// 步骤 9：输出汇总
 // ==================================================================
 console.log('\n========== 数据刷新完成 ==========');
 console.log(`数据目录:         ${dataDir}`);
