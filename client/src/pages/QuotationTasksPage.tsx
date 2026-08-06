@@ -34,18 +34,25 @@ function formatLogTime(ts: number): string {
   return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
 }
 
-function parseCSV(csv: string): { partModel: string; quantity: number }[] {
+function parseCSV(csv: string): { partModel: string; quantity: number; discount?: number }[] {
   const lines = csv.trim().split('\n').filter(Boolean)
   if (lines.length === 0) return []
   const hasHeader = lines[0] && /partModel|SKU|型号/i.test(lines[0])
   const start = hasHeader ? 1 : 0
-  const result: { partModel: string; quantity: number }[] = []
+  const result: { partModel: string; quantity: number; discount?: number }[] = []
   for (let i = start; i < lines.length; i++) {
     const cols = lines[i].split(',')
     const model = (cols[0] ?? '').trim()
     const qty = parseInt((cols[1] ?? '').trim(), 10)
     if (model && !isNaN(qty) && qty > 0) {
-      result.push({ partModel: model, quantity: qty })
+      const discountRaw = (cols[2] ?? '').trim()
+      const discount = discountRaw === '' ? undefined : Number(discountRaw)
+      // 空值保留为 undefined（不触碰 Odoo 折扣）；无效值整行丢弃
+      if (discount === undefined || (isFinite(discount) && discount >= 0 && discount <= 100)) {
+        const line: { partModel: string; quantity: number; discount?: number } = { partModel: model, quantity: qty }
+        if (discount !== undefined) line.discount = discount
+        result.push(line)
+      }
     }
   }
   return result
@@ -175,7 +182,7 @@ export default function QuotationTasksPage() {
   const failedLinesCsv = store.selectedTaskDetail
     ? store.selectedTaskDetail.lines
         .filter((l) => l.status === 'failed')
-        .map((l) => `${l.partModel},${l.quantity}`)
+        .map((l) => `${l.partModel},${l.quantity}${l.discount !== undefined ? `,${l.discount}` : ''}`)
         .join('\n')
     : ''
 
@@ -358,16 +365,18 @@ export default function QuotationTasksPage() {
                       <tr>
                         <th className="qt-th-sku">{t('型号')}</th>
                         <th className="qt-th-qty">{t('数量')}</th>
+                        <th className="qt-th-discount">{t('折扣%')}</th>
                       </tr>
                     </thead>
                     <tbody>
                       {previewLines.length === 0 && (
-                        <tr><td colSpan={2} className="qt-td-empty">&mdash;</td></tr>
+                        <tr><td colSpan={3} className="qt-td-empty">&mdash;</td></tr>
                       )}
                       {previewLines.map((l, i) => (
                         <tr key={i}>
                           <td className="qt-td-sku">{l.partModel}</td>
                           <td className="qt-td-qty">{l.quantity}</td>
+                          <td className="qt-td-discount">{l.discount ?? ''}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -386,19 +395,20 @@ export default function QuotationTasksPage() {
               <div className="qt-mid-grid">
                 <div className="qt-mid-col">
                   <div className="qt-sub-label">{t('Odoo已有行')}</div>
-                  <div className="qt-table-wrap qt-table-sm">
+                    <div className="qt-table-wrap qt-table-sm">
                     <table className="qt-table">
                       <thead>
-                        <tr><th>{t('型号')}</th><th>{t('数量')}</th></tr>
+                        <tr><th>{t('型号')}</th><th>{t('数量')}</th><th>{t('折扣%')}</th></tr>
                       </thead>
                       <tbody>
                         {(!confirmInfo?.existingLines || confirmInfo.existingLines.length === 0) && (
-                          <tr><td colSpan={2} className="qt-td-empty">{t('无已有行')}</td></tr>
+                          <tr><td colSpan={3} className="qt-td-empty">{t('无已有行')}</td></tr>
                         )}
                         {confirmInfo?.existingLines?.map((l, i) => (
                           <tr key={i}>
                             <td>{l.productModel}</td>
                             <td>{l.quantity}</td>
+                            <td>{l.discount ?? ''}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -407,16 +417,17 @@ export default function QuotationTasksPage() {
                 </div>
                 <div className="qt-mid-col">
                   <div className="qt-sub-label">{t('即将写入行')}</div>
-                  <div className="qt-table-wrap qt-table-sm">
+                    <div className="qt-table-wrap qt-table-sm">
                     <table className="qt-table">
                       <thead>
-                        <tr><th>{t('型号')}</th><th>{t('数量')}</th></tr>
+                        <tr><th>{t('型号')}</th><th>{t('数量')}</th><th>{t('折扣%')}</th></tr>
                       </thead>
                       <tbody>
                         {confirmInfo?.inputLines?.map((l, i) => (
                           <tr key={i}>
                             <td>{l.partModel}</td>
                             <td>{l.quantity}</td>
+                            <td>{l.discount ?? ''}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -457,13 +468,14 @@ export default function QuotationTasksPage() {
                   <div className="qt-table-wrap">
                     <table className="qt-table">
                       <thead>
-                        <tr><th>{t('型号')}</th><th>{t('数量')}</th></tr>
+                        <tr><th>{t('型号')}</th><th>{t('数量')}</th><th>{t('折扣%')}</th></tr>
                       </thead>
                       <tbody>
                         {store.finalSnapshot.map((l: QuotationSnapshotLine, i: number) => (
                           <tr key={i}>
                             <td>{l.productModel}</td>
                             <td>{l.quantity}</td>
+                            <td>{l.discount ?? ''}</td>
                           </tr>
                         ))}
                       </tbody>

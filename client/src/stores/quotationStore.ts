@@ -100,7 +100,7 @@ interface QuotationStore {
     company: string
     quotationNumber: string
     existingLines: QuotationSnapshotLine[]
-    inputLines: { partModel: string; quantity: number }[]
+    inputLines: { partModel: string; quantity: number; discount?: number }[]
   } | null
 
   /** 最终快照 */
@@ -115,7 +115,7 @@ interface QuotationStore {
   fetchWorkerStatus: () => Promise<void>
   selectTask: (taskId: number) => Promise<void>
   refreshSelectedDetail: () => Promise<QuotationTaskDetail | null>
-  createTask: (quotationNumber: string, odooUrl: string, writeMode: 'overwrite' | 'append', lines: { partModel: string; quantity: number }[]) => Promise<number | null>
+  createTask: (quotationNumber: string, odooUrl: string, writeMode: 'overwrite' | 'append', lines: { partModel: string; quantity: number; discount?: number }[]) => Promise<number | null>
   cancelTask: (taskId: number) => Promise<boolean>
   confirmTask: (taskId: number, decision: 'confirmed' | 'rejected') => Promise<boolean>
 

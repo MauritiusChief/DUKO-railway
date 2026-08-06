@@ -31,7 +31,7 @@ export interface ConfirmationRequest {
   company: string
   quotationNumber: string
   existingLines: QuotationSnapshotLine[]
-  inputLines: { partModel: string; quantity: number }[]
+  inputLines: { partModel: string; quantity: number; discount?: number }[]
 }
 
 /** 确认结果 */
@@ -142,6 +142,7 @@ export async function runQuotationTask(
     const inputLines = task.lines.map((l) => ({
       partModel: l.partModel,
       quantity: l.quantity,
+      ...(l.discount !== undefined ? { discount: l.discount } : {}),
     }));
 
     const confirmResult = await callbacks.requestConfirmation({

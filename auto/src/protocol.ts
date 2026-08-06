@@ -14,7 +14,7 @@ import { z } from 'zod';
 // ==================================================================
 
 /** 当前协议版本（必须与 server 一致） */
-export const PROTOCOL_VERSION = '2';
+export const PROTOCOL_VERSION = '3';
 
 /** 应用层心跳间隔（毫秒） */
 export const HEARTBEAT_INTERVAL_MS = 30_000;
@@ -32,6 +32,8 @@ export type TaskKind = 'quotation' | 'inventory-download' | 'inventory-trend';
 export interface QuotationSnapshotLine {
   productModel: string
   quantity: string
+  /** 折扣百分比（%）—— 未指定时不返回 */
+  discount?: number
 }
 
 export type QuotationWriteMode = 'overwrite' | 'append';
@@ -40,6 +42,8 @@ export interface TaskLine {
   lineNo: number;
   partModel: string;
   quantity: number;
+  /** 折扣百分比（%）—— 未指定时不返回 */
+  discount?: number;
 }
 
 export interface QuotationTask {
@@ -89,6 +93,7 @@ export const taskAssignedSchema = z.object({
         lineNo: z.number().int().positive(),
         partModel: z.string(),
         quantity: z.number().int().positive(),
+        discount: z.number().optional(),
       }),
     )
     .optional(),
@@ -143,7 +148,7 @@ export interface QuotationTaskAssignedMessage {
   quotationNumber: string;
   odooUrl: string;
   writeMode: 'overwrite' | 'append';
-  lines: { lineNo: number; partModel: string; quantity: number }[];
+  lines: TaskLine[];
 }
 export interface InventoryDownloadTaskAssignedMessage {
   type: 'task-assigned';
@@ -246,7 +251,7 @@ export interface ConfirmRequestMessage {
   company: string;
   quotationNumber: string;
   existingLines: QuotationSnapshotLine[];
-  inputLines: { partModel: string; quantity: number }[];
+  inputLines: { partModel: string; quantity: number; discount?: number }[];
   attempt: number;
 }
 

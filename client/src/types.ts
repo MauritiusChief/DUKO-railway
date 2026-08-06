@@ -66,6 +66,8 @@ export interface ProductEntry {
   description: string;
   /** 合并后的数量 */
   quantity: number;
+  /** 折扣百分比（%）—— 按最终产品型号颜色前缀推导；不打折时省略 */
+  discount?: number;
 }
 
 /** POST /api/generate-products 的完整响应 */
@@ -315,6 +317,8 @@ export interface QuotationTaskLine {
   lineNo: number
   partModel: string
   quantity: number
+  /** 折扣百分比（%）—— 空值表示不指定，不触碰 Odoo 折扣 */
+  discount?: number
   status: 'pending' | 'success' | 'failed'
   error: string | null
 }
@@ -346,6 +350,8 @@ export interface QuotationTaskDetail extends QuotationTaskSummary {
 export interface QuotationSnapshotLine {
   productModel: string
   quantity: string
+  /** 折扣百分比（%）—— 空值表示 Odoo 中无折扣或未指定 */
+  discount?: number
 }
 
 export interface ActiveTaskSummaryResponse {

@@ -14,6 +14,7 @@ import {
   PRODUCT_AUTOCOMPLETE_MENU,
   PRODUCT_AUTOCOMPLETE_ITEM,
   EDITABLE_QUANTITY_INPUT,
+  EDITABLE_DISCOUNT_INPUT,
   ADD_PRODUCT_LINK,
   REMOVE_ROW_BUTTON,
   SELECT_CANCELLING,
@@ -101,6 +102,13 @@ export async function fillProductAndChooseFromMenu(
 
   await matchedItem.click()
   return true
+}
+
+/** 在当前编辑行中填入折扣百分比（不回车，由随后的数量填写负责提交） */
+export async function fillDiscount(rowLocator: Locator, discount: number): Promise<void> {
+  const editableInput = rowLocator.locator(EDITABLE_DISCOUNT_INPUT).first()
+  await editableInput.waitFor({ state: 'visible', timeout: TIMEOUT })
+  await editableInput.fill(String(discount))
 }
 
 /** 在当前编辑行中填入数量 */

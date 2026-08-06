@@ -60,6 +60,12 @@ export const DETAIL_PRODUCT_CELL = 'td[name="product_template_id"]'
 /** 已保存行中的数量单元格（读取用） */
 export const DETAIL_QUANTITY_CELL = 'td[name="product_uom_qty"]'
 
+/** 已保存行中的折扣单元格（读取用） */
+export const DETAIL_DISCOUNT_CELL = 'td[name="discount"]'
+
+/** 编辑态折扣输入框（编辑行内，o_field_float） */
+export const EDITABLE_DISCOUNT_INPUT = 'td[name="discount"] input.o_input'
+
 // ==================================================================
 //  报价表格编辑态选择器（由 quotation-table.ts 消费）
 // ==================================================================

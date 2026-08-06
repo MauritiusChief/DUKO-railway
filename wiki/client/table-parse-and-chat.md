@@ -38,7 +38,7 @@
 - `door` 仅取门件，`box` 仅取柜体，未指定时取门件、柜体和额外件。
 - 非配件排在前，配件排在后，各组按产品名排序。
 
-产品可复制为 `productName,quantity` CSV，也可写入报价草稿并跳转报价页。后者使用 `duko_quotation_draft`，不会直接创建任务。
+产品可复制为 `productName,quantity,discount` 三列 CSV（折扣为百分数，按最终产品型号颜色前缀推导；无折扣产品第三列留空），也可写入报价草稿并跳转报价页。后者使用 `duko_quotation_draft`，不会直接创建任务。
 
 主页的“下载脚本”获取构建后的 Odoo 用户脚本。该脚本和报价任务 worker 是两套不同操作路径。
 

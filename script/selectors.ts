@@ -38,3 +38,9 @@ export const SELECT_CANCELLING = 'h1 > div.o_field_widget.o_readonly_modifier.o_
 
 /** 产品型号单元格（用于读取已有行的产品名） */
 export const PRODUCT_CELL_SELECTOR = 'td.o_sol_product_many2one_cell';
+
+/** 已保存行中的折扣单元格（读取用） */
+export const DETAIL_DISCOUNT_CELL_SELECTOR = 'td[name="discount"]';
+
+/** 编辑态折扣输入框（编辑行内，o_field_float） */
+export const EDITABLE_DISCOUNT_INPUT_SELECTOR = 'td[name="discount"] input.o_input';

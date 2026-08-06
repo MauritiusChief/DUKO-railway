@@ -432,6 +432,7 @@ class AutoClient {
             lineNo: r.lineNo,
             partModel: original.partModel,
             quantity: original.quantity,
+            ...(original.discount !== undefined ? { discount: original.discount } : {}),
             status: r.status === 'success' ? 'success' : 'failed',
             error: r.error,
           };

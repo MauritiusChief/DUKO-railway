@@ -540,6 +540,12 @@
   width: 15%;
 }
 
+.tp-th-discount,
+.tp-td-discount {
+  width: 10%;
+  text-align: right;
+}
+
 /* ====== ScriptCat 操作按钮 ====== */
 
 .tp-scriptcat-actions {

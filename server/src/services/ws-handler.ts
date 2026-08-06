@@ -229,6 +229,7 @@ function tryDispatch(): void {
         lineNo: l.lineNo,
         partModel: l.partModel,
         quantity: l.quantity,
+        ...(l.discount !== undefined ? { discount: l.discount } : {}),
       })),
     };
     sendMessage(worker.ws, assigned);
