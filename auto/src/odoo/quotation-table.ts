@@ -19,7 +19,6 @@ import {
   REMOVE_ROW_BUTTON,
   SELECT_CANCELLING,
 } from './selectors.js'
-import { pauseAfterDebugLog, pauseForInspection } from './debug.js'
 
 const TIMEOUT = 15_000
 
@@ -57,18 +56,12 @@ export async function getSelectedEditableRow(page: Page): Promise<Locator> {
 export async function addNewEditableRow(page: Page): Promise<Locator> {
   const rows = page.locator(`${QUOTATION_TABLE} ${QUOTATION_DATA_ROW}`)
   const beforeCount = await rows.count()
-  console.log(`[quotation-debug] 新增产品：操作前 data-row 数量=${beforeCount}`)
-  await pauseAfterDebugLog()
 
   const addLink = page.locator(`${QUOTATION_TABLE} ${ADD_PRODUCT_LINK}`).first()
   await addLink.click()
-  console.log('[quotation-debug] 新增产品：已点击链接')
-  await pauseAfterDebugLog()
 
   // 等待新行出现（o_data_row 数量增长）
   await rows.nth(beforeCount).waitFor({ state: 'attached', timeout: TIMEOUT })
-  console.log(`[quotation-debug] 新增产品：新行已挂载，data-row 数量=${await rows.count()}`)
-  await pauseForInspection('新的编辑行已可见')
 
   return getSelectedEditableRow(page)
 }
@@ -80,12 +73,8 @@ export async function fillProductAndChooseFromMenu(
 ): Promise<boolean> {
   const editableInput = rowLocator.locator(PRODUCT_AUTOCOMPLETE_INPUT).first()
   await editableInput.waitFor({ state: 'visible', timeout: TIMEOUT })
-  console.log(`[quotation-debug] 产品：输入框可见，型号=${targetPartModel}`)
-  await pauseAfterDebugLog()
 
   await editableInput.fill(targetPartModel)
-  console.log(`[quotation-debug] 产品：输入框当前值=${await editableInput.inputValue()}`)
-  await pauseAfterDebugLog()
 
   const dropdownMenu = rowLocator.locator(PRODUCT_AUTOCOMPLETE_MENU).first()
   try {
@@ -96,8 +85,6 @@ export async function fillProductAndChooseFromMenu(
     }
     throw e
   }
-  console.log('[quotation-debug] 产品：自动补全菜单可见')
-  await pauseForInspection('产品自动补全菜单，选择前')
 
   const matchedItem = rowLocator
     .locator(PRODUCT_AUTOCOMPLETE_ITEM)
@@ -113,60 +100,38 @@ export async function fillProductAndChooseFromMenu(
     throw e
   }
 
-  console.log(`[quotation-debug] 产品：正在点击自动补全选项，文本=${(await matchedItem.textContent())?.trim() ?? ''}`)
-  await pauseAfterDebugLog()
   await matchedItem.click()
-  console.log('[quotation-debug] 产品：已点击自动补全选项')
-  await pauseForInspection('产品已选择；观察 Odoo onchange')
-  // Selecting a product triggers Odoo onchange and may rebuild the editing row.
-  // Wait for that work to settle before callers locate its other field inputs.
-  // await dropdownMenu.waitFor({ state: 'hidden', timeout: TIMEOUT })
   return true
 }
 
-/** 在当前编辑行中填入折扣百分比，并通过 Tab 失焦提交整行。须在数量之后填写 */
+/** 在当前编辑行中填入折扣百分比（只填值，不提交；由 submitEditableRow 统一提交）。须在数量之后填写 */
 export async function fillDiscount(rowLocator: Locator, discount: number): Promise<void> {
   const editableInput = rowLocator.locator(EDITABLE_DISCOUNT_INPUT).first()
   await editableInput.waitFor({ state: 'visible', timeout: TIMEOUT })
-  console.log(`[quotation-debug] 折扣：输入框可见，当前值=${await editableInput.inputValue()}，目标值=${discount}`)
-  await pauseAfterDebugLog()
   await editableInput.click()
   await editableInput.fill(String(discount))
-  console.log(`[quotation-debug] 折扣：填入后当前值=${await editableInput.inputValue()}`)
-  await pauseForInspection('折扣值已填入，Tab 失焦前')
-  await editableInput.press('Tab')
-  console.log('[quotation-debug] 折扣：已按 Tab')
-  await pauseForInspection('折扣字段已失焦；观察行提交状态')
 }
 
-/** 在当前编辑行中填入数量（仅填值，不提交）。
+/** 在当前编辑行中填入数量（只填值，不提交；由 submitEditableRow 统一提交）。
  *  Odoo 每次修改 qty 都会清空已填折扣，因此折扣必须晚于数量填写。 */
 export async function fillQuantity(rowLocator: Locator, quantity: number): Promise<void> {
   const editableInput = rowLocator.locator(EDITABLE_QUANTITY_INPUT).first()
   await editableInput.waitFor({ state: 'visible', timeout: TIMEOUT })
-  console.log(`[quotation-debug] 数量：输入框可见，当前值=${await editableInput.inputValue()}，目标值=${quantity}`)
-  await pauseAfterDebugLog()
   await editableInput.fill(String(quantity))
-  console.log(`[quotation-debug] 数量：填入后当前值=${await editableInput.inputValue()}`)
-  await pauseForInspection('数量值已填入（未提交，之后填写折扣）')
 }
 
-/** 在当前编辑行中按 Enter 提交整行（无折扣行使用） */
+/** 统一提交步骤：在数量输入框按 Enter 提交整行（Tab 与 Enter 效果一致，只保留 Enter）。
+ *  注意：提交后 Odoo 会附带自动新增一行（等效于自动点击 "Add a product"），
+ *  因此调用方仍需用 deselectCurrentRow 取消选中。 */
 export async function submitEditableRow(rowLocator: Locator): Promise<void> {
   const editableInput = rowLocator.locator(EDITABLE_QUANTITY_INPUT).first()
   await editableInput.press('Enter')
-  console.log('[quotation-debug] 行提交：已在数量输入框按 Enter')
-  await pauseForInspection('行已提交；观察行保存状态')
 }
 
 /** 点击标题区域取消当前行的选中状态 */
 export async function deselectCurrentRow(page: Page): Promise<void> {
   const canceller = page.locator(SELECT_CANCELLING).first()
-  console.log(`[quotation-debug] 取消选中：点击前 selected-row 数量=${await page.locator(`${QUOTATION_TABLE} ${QUOTATION_SELECTED_ROW}`).count()}`)
-  await pauseAfterDebugLog()
   await canceller.click()
-  console.log('[quotation-debug] 取消选中：已点击标题区域')
-  await pauseAfterDebugLog()
   // 等待 selected row 消失
   try {
     await page.waitForFunction(
@@ -177,8 +142,6 @@ export async function deselectCurrentRow(page: Page): Promise<void> {
   } catch {
     // 即使未完全消失也无大碍，下一轮 fillProduct 会等待新 selected row
   }
-  console.log(`[quotation-debug] 取消选中：等待后 selected-row 数量=${await page.locator(`${QUOTATION_TABLE} ${QUOTATION_SELECTED_ROW}`).count()}`)
-  await pauseForInspection('行已取消选中；校验前查看保存值')
 }
 
 /** 删除指定行（用于 autocomplete 失败后清理） */

@@ -26,7 +26,6 @@ import {
   QUOTATION_TABLE,
   QUOTATION_DATA_ROW,
 } from './selectors.js'
-import { pauseAfterDebugLog, pauseForInspection } from './debug.js'
 
 export interface WriteLineResult {
   lineNo: number
@@ -72,8 +71,6 @@ async function appendLines(
 ): Promise<void> {
   for (const line of input.lines) {
     try {
-      console.log(`[quotation-debug] 第 #${line.lineNo} 行：开始写入，型号=${line.partModel}，数量=${line.quantity}，折扣=${line.discount ?? '(未指定)'}`)
-      await pauseAfterDebugLog()
       const newRow = await addNewEditableRow(page)
 
       const productFilled = await fillProductAndChooseFromMenu(newRow, line.partModel)
@@ -88,22 +85,19 @@ async function appendLines(
         continue
       }
 
-      // 顺序：先填数量、后填折扣。Odoo 每次修改 qty 都会清空已填折扣，
-      // 因此折扣必须在 qty 之后设置；折扣通过 Tab 失焦提交整行，
-      // 无折扣行通过数量输入框按 Enter 提交。
+      // 填写步骤只负责填值：先数量、后折扣（Odoo 每次修改 qty 都会清空已填折扣）。
+      // 提交统一由 submitEditableRow 按 Enter 完成；提交会附带自动新增一行，
+      // 因此随后用 deselectCurrentRow 取消选中。
       await fillQuantity(newRow, line.quantity)
       if (line.discount !== undefined) {
         await fillDiscount(newRow, line.discount)
-      } else {
-        await submitEditableRow(newRow)
       }
+      await submitEditableRow(newRow)
       await deselectCurrentRow(page)
 
       // 指定折扣时，确认保存后的折扣单元格已生效再报成功
       if (line.discount !== undefined) {
         const saved = await findSavedDiscount(page, line.partModel)
-        console.log(`[quotation-debug] 第 #${line.lineNo} 行：已保存折扣=${saved ?? '(缺失)'}，期望值=${line.discount}`)
-        await pauseAfterDebugLog()
         if (saved === undefined || !sameDiscount(saved, line.discount)) {
           await input.onLineResult({
             lineNo: line.lineNo,
@@ -118,8 +112,6 @@ async function appendLines(
         lineNo: line.lineNo,
         status: 'success',
       })
-      console.log(`[quotation-debug] 第 #${line.lineNo} 行：已上报成功`)
-      await pauseAfterDebugLog()
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       await input.onLineResult({
@@ -233,12 +225,8 @@ async function readDiscountFromRow(row: Locator): Promise<number | undefined> {
 async function findSavedDiscount(page: Page, partModel: string): Promise<number | undefined> {
   // Odoo 可能在提交后异步刷新，重试读取若干次
   for (let attempt = 0; attempt < 8; attempt++) {
-    console.log(`[quotation-debug] 折扣校验：第 ${attempt + 1} 次尝试，型号=${partModel}`)
-    await pauseAfterDebugLog()
     for (const row of await getDataRows(page)) {
       const { name, discount } = await readRowState(row)
-      console.log(`[quotation-debug] 折扣校验：行型号=${name || '(空)'}，折扣=${discount ?? '(缺失)'}`)
-      await pauseAfterDebugLog()
       if (name === partModel) {
         if (discount !== undefined) return discount
       }
