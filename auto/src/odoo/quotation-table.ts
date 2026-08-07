@@ -101,14 +101,22 @@ export async function fillProductAndChooseFromMenu(
   }
 
   await matchedItem.click()
+  // Selecting a product triggers Odoo onchange and may rebuild the editing row.
+  // Wait for that work to settle before callers locate its other field inputs.
+  // await dropdownMenu.waitFor({ state: 'hidden', timeout: TIMEOUT })
   return true
 }
 
-/** 在当前编辑行中填入折扣百分比（不回车，由随后的数量填写负责提交） */
+/** 在当前编辑行中填入折扣百分比 */
 export async function fillDiscount(rowLocator: Locator, discount: number): Promise<void> {
   const editableInput = rowLocator.locator(EDITABLE_DISCOUNT_INPUT).first()
   await editableInput.waitFor({ state: 'visible', timeout: TIMEOUT })
+  await editableInput.click()
+  // await editableInput.press('ControlOrMeta+A')
+  // await editableInput.pressSequentially(String(discount))
+  // // Odoo's float field records the change on blur; quantity Enter then commits the row.
   await editableInput.fill(String(discount))
+  await editableInput.press('Tab')
 }
 
 /** 在当前编辑行中填入数量 */

@@ -84,7 +84,7 @@ export const PRODUCT_AUTOCOMPLETE_ITEM =
 
 /** 可编辑的数量输入框（排除只读态） */
 export const EDITABLE_QUANTITY_INPUT =
-  'td.o_data_cell.o_field_cell.o_list_number.o_required_modifier:not(.o_readonly_modifier) input.o_input'
+  'td[name="product_uom_qty"] input.o_input'
 
 /** "Add a product" 链接（在 tbody 下方的操作行中） */
 export const ADD_PRODUCT_LINK = 'tbody a:has-text("Add a product")'

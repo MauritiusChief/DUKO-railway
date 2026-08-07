@@ -14,6 +14,7 @@ import {
   fillQuantity,
   deselectCurrentRow,
   removeRow,
+  getSelectedEditableRow,
   getDataRows,
   ensureTableReady,
   getDataRowCount,
@@ -84,6 +85,14 @@ async function appendLines(
         continue
       }
 
+      // // 产品 autocomplete 会触发 Odoo onchange 并可能重建编辑行。
+      // // 重新定位后再填折扣；折扣 Tab 失焦提交，再次定位后填数量并回车提交整行。
+      // let editableRow = await getSelectedEditableRow(page)
+      // if (line.discount !== undefined) {
+      //   await fillDiscount(editableRow, line.discount)
+      // }
+      // editableRow = await getSelectedEditableRow(page)
+      // await fillQuantity(editableRow, line.quantity)
       // 先填折扣、再填数量；数量回车统一提交行，避免提前结束编辑态
       if (line.discount !== undefined) {
         await fillDiscount(newRow, line.discount)

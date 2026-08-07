@@ -25,7 +25,7 @@ export const PRODUCT_AUTOCOMPLETE_ITEM_SELECTOR =
 
 /** 可编辑的数量输入框（排除只读态） */
 export const EDITABLE_QUANTITY_INPUT_SELECTOR =
-  'td.o_data_cell.o_field_cell.o_list_number.o_required_modifier:not(.o_readonly_modifier) input.o_input';
+  'td[name="product_uom_qty"] input.o_input';
 
 /** "Add a product" 添加行链接 —— 在 tbody 非直属的 td 内，由 a 标签直接触发 */
 export const ADD_PRODUCT_LINK_SELECTOR = 'td.o_field_x2many_list_row_add > a';
