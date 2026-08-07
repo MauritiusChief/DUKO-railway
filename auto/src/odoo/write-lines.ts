@@ -26,6 +26,7 @@ import {
   QUOTATION_TABLE,
   QUOTATION_DATA_ROW,
 } from './selectors.js'
+import { pauseForInspection } from './debug.js'
 
 export interface WriteLineResult {
   lineNo: number
@@ -71,6 +72,7 @@ async function appendLines(
 ): Promise<void> {
   for (const line of input.lines) {
     try {
+      console.log(`[quotation-debug] line #${line.lineNo}: start model=${line.partModel}, quantity=${line.quantity}, discount=${line.discount ?? '(none)'}`)
       const newRow = await addNewEditableRow(page)
 
       const productFilled = await fillProductAndChooseFromMenu(newRow, line.partModel)
@@ -103,6 +105,7 @@ async function appendLines(
       // 指定折扣时，确认保存后的折扣单元格已生效再报成功
       if (line.discount !== undefined) {
         const saved = await findSavedDiscount(page, line.partModel)
+        console.log(`[quotation-debug] line #${line.lineNo}: saved discount=${saved ?? '(missing)'}, expected=${line.discount}`)
         if (saved === undefined || !sameDiscount(saved, line.discount)) {
           await input.onLineResult({
             lineNo: line.lineNo,
@@ -117,6 +120,7 @@ async function appendLines(
         lineNo: line.lineNo,
         status: 'success',
       })
+      console.log(`[quotation-debug] line #${line.lineNo}: reported success`)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       await input.onLineResult({
@@ -230,10 +234,11 @@ async function readDiscountFromRow(row: Locator): Promise<number | undefined> {
 async function findSavedDiscount(page: Page, partModel: string): Promise<number | undefined> {
   // Odoo 可能在提交后异步刷新，重试读取若干次
   for (let attempt = 0; attempt < 8; attempt++) {
+    console.log(`[quotation-debug] discount verification: attempt=${attempt + 1}, model=${partModel}`)
     for (const row of await getDataRows(page)) {
-      const { name } = await readRowState(row)
+      const { name, discount } = await readRowState(row)
+      console.log(`[quotation-debug] discount verification: row model=${name || '(empty)'}, discount=${discount ?? '(missing)'}`)
       if (name === partModel) {
-        const discount = await readDiscountFromRow(row)
         if (discount !== undefined) return discount
       }
     }

@@ -19,6 +19,7 @@ import {
   REMOVE_ROW_BUTTON,
   SELECT_CANCELLING,
 } from './selectors.js'
+import { pauseForInspection } from './debug.js'
 
 const TIMEOUT = 15_000
 
@@ -56,12 +57,16 @@ export async function getSelectedEditableRow(page: Page): Promise<Locator> {
 export async function addNewEditableRow(page: Page): Promise<Locator> {
   const rows = page.locator(`${QUOTATION_TABLE} ${QUOTATION_DATA_ROW}`)
   const beforeCount = await rows.count()
+  console.log(`[quotation-debug] add product: before data-row count=${beforeCount}`)
 
   const addLink = page.locator(`${QUOTATION_TABLE} ${ADD_PRODUCT_LINK}`).first()
   await addLink.click()
+  console.log('[quotation-debug] add product: link clicked')
 
   // 等待新行出现（o_data_row 数量增长）
   await rows.nth(beforeCount).waitFor({ state: 'attached', timeout: TIMEOUT })
+  console.log(`[quotation-debug] add product: new row attached, data-row count=${await rows.count()}`)
+  await pauseForInspection('new editable row is visible')
 
   return getSelectedEditableRow(page)
 }
@@ -73,8 +78,10 @@ export async function fillProductAndChooseFromMenu(
 ): Promise<boolean> {
   const editableInput = rowLocator.locator(PRODUCT_AUTOCOMPLETE_INPUT).first()
   await editableInput.waitFor({ state: 'visible', timeout: TIMEOUT })
+  console.log(`[quotation-debug] product: input visible, model=${targetPartModel}`)
 
   await editableInput.fill(targetPartModel)
+  console.log(`[quotation-debug] product: input value=${await editableInput.inputValue()}`)
 
   const dropdownMenu = rowLocator.locator(PRODUCT_AUTOCOMPLETE_MENU).first()
   try {
@@ -85,6 +92,8 @@ export async function fillProductAndChooseFromMenu(
     }
     throw e
   }
+  console.log('[quotation-debug] product: autocomplete menu visible')
+  await pauseForInspection('product autocomplete menu before selection')
 
   const matchedItem = rowLocator
     .locator(PRODUCT_AUTOCOMPLETE_ITEM)
@@ -100,7 +109,10 @@ export async function fillProductAndChooseFromMenu(
     throw e
   }
 
+  console.log(`[quotation-debug] product: clicking autocomplete item text=${(await matchedItem.textContent())?.trim() ?? ''}`)
   await matchedItem.click()
+  console.log('[quotation-debug] product: autocomplete item clicked')
+  await pauseForInspection('product selected; observe Odoo onchange')
   // Selecting a product triggers Odoo onchange and may rebuild the editing row.
   // Wait for that work to settle before callers locate its other field inputs.
   // await dropdownMenu.waitFor({ state: 'hidden', timeout: TIMEOUT })
@@ -111,26 +123,38 @@ export async function fillProductAndChooseFromMenu(
 export async function fillDiscount(rowLocator: Locator, discount: number): Promise<void> {
   const editableInput = rowLocator.locator(EDITABLE_DISCOUNT_INPUT).first()
   await editableInput.waitFor({ state: 'visible', timeout: TIMEOUT })
+  console.log(`[quotation-debug] discount: input visible, current=${await editableInput.inputValue()}, target=${discount}`)
   await editableInput.click()
   // await editableInput.press('ControlOrMeta+A')
   // await editableInput.pressSequentially(String(discount))
   // // Odoo's float field records the change on blur; quantity Enter then commits the row.
   await editableInput.fill(String(discount))
+  console.log(`[quotation-debug] discount: after fill value=${await editableInput.inputValue()}`)
+  await pauseForInspection('discount value filled, before Tab blur')
   await editableInput.press('Tab')
+  console.log('[quotation-debug] discount: Tab pressed')
+  await pauseForInspection('discount field blurred; observe Odoo onchange')
 }
 
 /** 在当前编辑行中填入数量 */
 export async function fillQuantity(rowLocator: Locator, quantity: number): Promise<void> {
   const editableInput = rowLocator.locator(EDITABLE_QUANTITY_INPUT).first()
   await editableInput.waitFor({ state: 'visible', timeout: TIMEOUT })
+  console.log(`[quotation-debug] quantity: input visible, current=${await editableInput.inputValue()}, target=${quantity}`)
   await editableInput.fill(String(quantity))
+  console.log(`[quotation-debug] quantity: after fill value=${await editableInput.inputValue()}`)
+  await pauseForInspection('quantity value filled, before Enter submit')
   await editableInput.press('Enter')
+  console.log('[quotation-debug] quantity: Enter pressed')
+  await pauseForInspection('quantity submitted; observe row commit')
 }
 
 /** 点击标题区域取消当前行的选中状态 */
 export async function deselectCurrentRow(page: Page): Promise<void> {
   const canceller = page.locator(SELECT_CANCELLING).first()
+  console.log(`[quotation-debug] deselect: selected-row count before click=${await page.locator(`${QUOTATION_TABLE} ${QUOTATION_SELECTED_ROW}`).count()}`)
   await canceller.click()
+  console.log('[quotation-debug] deselect: heading clicked')
   // 等待 selected row 消失
   try {
     await page.waitForFunction(
@@ -141,6 +165,8 @@ export async function deselectCurrentRow(page: Page): Promise<void> {
   } catch {
     // 即使未完全消失也无大碍，下一轮 fillProduct 会等待新 selected row
   }
+  console.log(`[quotation-debug] deselect: selected-row count after wait=${await page.locator(`${QUOTATION_TABLE} ${QUOTATION_SELECTED_ROW}`).count()}`)
+  await pauseForInspection('row deselected; inspect saved values before verification')
 }
 
 /** 删除指定行（用于 autocomplete 失败后清理） */

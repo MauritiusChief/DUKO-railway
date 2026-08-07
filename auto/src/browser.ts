@@ -89,6 +89,7 @@ export async function runQuotationTask(
     context = await chromium.launchPersistentContext(appConfig.profileDir, {
       headless: appConfig.headless,
       viewport: null,
+      slowMo: 1_000,
     });
 
     const page = await context.newPage();
