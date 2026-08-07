@@ -124,25 +124,23 @@ export async function fillProductAndChooseFromMenu(
   return true
 }
 
-/** 在当前编辑行中填入折扣百分比 */
+/** 在当前编辑行中填入折扣百分比，并通过 Tab 失焦提交整行。须在数量之后填写 */
 export async function fillDiscount(rowLocator: Locator, discount: number): Promise<void> {
   const editableInput = rowLocator.locator(EDITABLE_DISCOUNT_INPUT).first()
   await editableInput.waitFor({ state: 'visible', timeout: TIMEOUT })
   console.log(`[quotation-debug] 折扣：输入框可见，当前值=${await editableInput.inputValue()}，目标值=${discount}`)
   await pauseAfterDebugLog()
   await editableInput.click()
-  // await editableInput.press('ControlOrMeta+A')
-  // await editableInput.pressSequentially(String(discount))
-  // // Odoo's float field records the change on blur; quantity Enter then commits the row.
   await editableInput.fill(String(discount))
   console.log(`[quotation-debug] 折扣：填入后当前值=${await editableInput.inputValue()}`)
-  await pauseForInspection('折扣值已填入')
-  // await editableInput.press('Tab')
-  // console.log('[quotation-debug] 折扣：已按 Tab')
-  // await pauseForInspection('折扣字段已失焦；观察 Odoo onchange')
+  await pauseForInspection('折扣值已填入，Tab 失焦前')
+  await editableInput.press('Tab')
+  console.log('[quotation-debug] 折扣：已按 Tab')
+  await pauseForInspection('折扣字段已失焦；观察行提交状态')
 }
 
-/** 在当前编辑行中填入数量 */
+/** 在当前编辑行中填入数量（仅填值，不提交）。
+ *  Odoo 每次修改 qty 都会清空已填折扣，因此折扣必须晚于数量填写。 */
 export async function fillQuantity(rowLocator: Locator, quantity: number): Promise<void> {
   const editableInput = rowLocator.locator(EDITABLE_QUANTITY_INPUT).first()
   await editableInput.waitFor({ state: 'visible', timeout: TIMEOUT })
@@ -150,10 +148,15 @@ export async function fillQuantity(rowLocator: Locator, quantity: number): Promi
   await pauseAfterDebugLog()
   await editableInput.fill(String(quantity))
   console.log(`[quotation-debug] 数量：填入后当前值=${await editableInput.inputValue()}`)
-  await pauseForInspection('数量值已填入，Enter 提交前')
+  await pauseForInspection('数量值已填入（未提交，之后填写折扣）')
+}
+
+/** 在当前编辑行中按 Enter 提交整行（无折扣行使用） */
+export async function submitEditableRow(rowLocator: Locator): Promise<void> {
+  const editableInput = rowLocator.locator(EDITABLE_QUANTITY_INPUT).first()
   await editableInput.press('Enter')
-  console.log('[quotation-debug] 数量：已按 Enter')
-  await pauseForInspection('数量已提交；观察行提交状态')
+  console.log('[quotation-debug] 行提交：已在数量输入框按 Enter')
+  await pauseForInspection('行已提交；观察行保存状态')
 }
 
 /** 点击标题区域取消当前行的选中状态 */

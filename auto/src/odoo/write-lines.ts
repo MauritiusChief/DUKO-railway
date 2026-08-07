@@ -12,9 +12,9 @@ import {
   fillProductAndChooseFromMenu,
   fillDiscount,
   fillQuantity,
+  submitEditableRow,
   deselectCurrentRow,
   removeRow,
-  getSelectedEditableRow,
   getDataRows,
   ensureTableReady,
   getDataRowCount,
@@ -88,19 +88,15 @@ async function appendLines(
         continue
       }
 
-      // // 产品 autocomplete 会触发 Odoo onchange 并可能重建编辑行。
-      // // 重新定位后再填折扣；折扣 Tab 失焦提交，再次定位后填数量并回车提交整行。
-      // let editableRow = await getSelectedEditableRow(page)
-      // if (line.discount !== undefined) {
-      //   await fillDiscount(editableRow, line.discount)
-      // }
-      // editableRow = await getSelectedEditableRow(page)
-      // await fillQuantity(editableRow, line.quantity)
-      // 先填折扣、再填数量；数量回车统一提交行，避免提前结束编辑态
+      // 顺序：先填数量、后填折扣。Odoo 每次修改 qty 都会清空已填折扣，
+      // 因此折扣必须在 qty 之后设置；折扣通过 Tab 失焦提交整行，
+      // 无折扣行通过数量输入框按 Enter 提交。
+      await fillQuantity(newRow, line.quantity)
       if (line.discount !== undefined) {
         await fillDiscount(newRow, line.discount)
+      } else {
+        await submitEditableRow(newRow)
       }
-      await fillQuantity(newRow, line.quantity)
       await deselectCurrentRow(page)
 
       // 指定折扣时，确认保存后的折扣单元格已生效再报成功
