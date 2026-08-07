@@ -95,19 +95,7 @@ async function appendLines(
       await submitEditableRow(newRow)
       await deselectCurrentRow(page)
 
-      // 指定折扣时，确认保存后的折扣单元格已生效再报成功
-      if (line.discount !== undefined) {
-        const saved = await findSavedDiscount(page, line.partModel)
-        if (saved === undefined || !sameDiscount(saved, line.discount)) {
-          await input.onLineResult({
-            lineNo: line.lineNo,
-            status: 'failed',
-            error: `折扣校验失败（期望 ${line.discount}，实际 ${saved ?? '无'}）`,
-          })
-          continue
-        }
-      }
-
+      // 不再逐行校验折扣：写入结果由最终整表校验统一判定（见 browser.ts）
       await input.onLineResult({
         lineNo: line.lineNo,
         status: 'success',
@@ -219,21 +207,6 @@ async function readDiscountFromRow(row: Locator): Promise<number | undefined> {
   const text = ((await cell.textContent()) ?? '').trim()
   const parsed = Number.parseFloat(text)
   return Number.isFinite(parsed) ? parsed : undefined
-}
-
-/** 在已保存行中查找指定产品的折扣（数量校验用），找不到返回 undefined */
-async function findSavedDiscount(page: Page, partModel: string): Promise<number | undefined> {
-  // Odoo 可能在提交后异步刷新，重试读取若干次
-  for (let attempt = 0; attempt < 8; attempt++) {
-    for (const row of await getDataRows(page)) {
-      const { name, discount } = await readRowState(row)
-      if (name === partModel) {
-        if (discount !== undefined) return discount
-      }
-    }
-    await new Promise((resolve) => setTimeout(resolve, 300))
-  }
-  return undefined
 }
 
 /** 比较已保存行数量文本与期望数值是否一致（"1.00" 与 1 视为相等） */
