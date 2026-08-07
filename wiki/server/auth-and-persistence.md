@@ -33,7 +33,10 @@
 
 删除用户时，外键级联删除其历史、笔记、trace 和报价任务。数据库启用 WAL 与外键。
 
-`users.sqlite` 有轻量版本化迁移机制：`schema_migrations` 表记录已应用迁移名，启动时执行。当前包含 `0001_users_manager_role`——由于 SQLite 无法 ALTER 修改 CHECK 约束，该迁移在关闭外键的事务中重建 users 表以放宽角色 CHECK 到 `admin|manager|user`，原样复制全部用户行后恢复外键并做一致性校验，对已有库幂等。
+`users.sqlite` 有轻量版本化迁移机制：`schema_migrations` 表记录已应用迁移名，启动时执行。当前包含：
+
+- `0001_users_manager_role`——由于 SQLite 无法 ALTER 修改 CHECK 约束，该迁移在关闭外键的事务中重建 users 表以放宽角色 CHECK 到 `admin|manager|user`，原样复制全部用户行后恢复外键并做一致性校验，对已有库幂等。
+- `0002_quotation_task_lines_discount`——为已存在的 `quotation_task_lines` 表补充 nullable `discount REAL` 列（报价折扣百分比）。全新库由 `CREATE TABLE` 直接包含该列，此迁移仅处理升级场景：通过 `PRAGMA table_info` 判断列是否已存在，不存在才 `ADD COLUMN`，幂等。旧行 `discount` 为 NULL，协议层视为「未指定」，写入 Odoo 时跳过折扣。
 
 ## 报价持久队列
 
