@@ -136,10 +136,10 @@ export async function fillDiscount(rowLocator: Locator, discount: number): Promi
   // // Odoo's float field records the change on blur; quantity Enter then commits the row.
   await editableInput.fill(String(discount))
   console.log(`[quotation-debug] 折扣：填入后当前值=${await editableInput.inputValue()}`)
-  await pauseForInspection('折扣值已填入，Tab 失焦前')
-  await editableInput.press('Tab')
-  console.log('[quotation-debug] 折扣：已按 Tab')
-  await pauseForInspection('折扣字段已失焦；观察 Odoo onchange')
+  await pauseForInspection('折扣值已填入')
+  // await editableInput.press('Tab')
+  // console.log('[quotation-debug] 折扣：已按 Tab')
+  // await pauseForInspection('折扣字段已失焦；观察 Odoo onchange')
 }
 
 /** 在当前编辑行中填入数量 */
