@@ -364,7 +364,7 @@ export function getItemRow(itemName: string): ItemRow | undefined {
     SELECT itemName, colorCode, shapeTypeCode, shapeSizeCode,
            doorPart, cabinetPart, extraPart
     FROM items
-    WHERE itemName = ?
+    WHERE itemName = ? COLLATE NOCASE
   `).get(itemName) as ItemRow | undefined;
 
   return row || undefined;
