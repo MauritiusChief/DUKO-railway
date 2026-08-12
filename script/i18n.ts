@@ -19,6 +19,7 @@ export interface ScriptCatTexts {
   statusErrMsg: Record<ScriptCatLang, string>;
   colModel: Record<ScriptCatLang, string>;
   colQty: Record<ScriptCatLang, string>;
+  colDiscount: Record<ScriptCatLang, string>;
   interceptAlert: Record<ScriptCatLang, string>;
   langLabel: Record<ScriptCatLang, string>;
   previewLabel: Record<ScriptCatLang, string>;
@@ -40,8 +41,8 @@ export const texts: ScriptCatTexts = {
     en: 'Close',
   },
   csvLabel: {
-    zh: '粘贴 CSV（productName,quantity）：',
-    en: 'Paste CSV (productName,quantity):',
+    zh: '粘贴 CSV（productName,quantity[,discount]）：',
+    en: 'Paste CSV (productName,quantity[,discount]):',
   },
   writeBtn: {
     zh: '一键写入 Odoo',
@@ -78,6 +79,10 @@ export const texts: ScriptCatTexts = {
   colQty: {
     zh: '数量',
     en: 'Qty',
+  },
+  colDiscount: {
+    zh: '折扣%',
+    en: 'Disc%',
   },
   interceptAlert: {
     zh: '以下写入操作被 odoo 拦截！',

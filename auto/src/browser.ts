@@ -24,6 +24,7 @@ import type {
 import { navigateToSales, removeMyQuotationsFacet, searchQuotation, countExactMatches, openExactMatch } from './odoo/sales-search.js';
 import { verifyQuotation, readExistingLines, type QuotationVerification } from './odoo/quotation-verify.js';
 import { writeLines, type WriteLineResult } from './odoo/write-lines.js';
+import { verifyFinalLines } from './odoo/verify-lines.js';
 import { FORM_SAVE_BUTTON, DETAIL_QUOTATION_NUMBER } from './odoo/selectors.js';
 
 /** 确认请求载荷 */
@@ -31,7 +32,7 @@ export interface ConfirmationRequest {
   company: string
   quotationNumber: string
   existingLines: QuotationSnapshotLine[]
-  inputLines: { partModel: string; quantity: number }[]
+  inputLines: { partModel: string; quantity: number; discount?: number }[]
 }
 
 /** 确认结果 */
@@ -89,6 +90,7 @@ export async function runQuotationTask(
     context = await chromium.launchPersistentContext(appConfig.profileDir, {
       headless: appConfig.headless,
       viewport: null,
+      slowMo: 1_000,
     });
 
     const page = await context.newPage();
@@ -142,6 +144,7 @@ export async function runQuotationTask(
     const inputLines = task.lines.map((l) => ({
       partModel: l.partModel,
       quantity: l.quantity,
+      ...(l.discount !== undefined ? { discount: l.discount } : {}),
     }));
 
     const confirmResult = await callbacks.requestConfirmation({
@@ -188,6 +191,16 @@ export async function runQuotationTask(
       finalSnapshot = await readExistingLines(page);
     } catch {
       // 即使快照读取失败，也不影响已写入的结果上报
+    }
+
+    // ---- 6.5 整表校验：逐条在日志反应多了/少了/不一致（不改行状态） ----
+    try {
+      const issues = verifyFinalLines(task.lines, finalSnapshot, verification.existingLines, task.writeMode);
+      for (const issue of issues) {
+        await callbacks.onProgress(issue.message);
+      }
+    } catch {
+      // 校验失败不影响已写入的结果上报
     }
 
     // ---- 7. 计算最终状态 ----

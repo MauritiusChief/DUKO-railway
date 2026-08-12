@@ -19,6 +19,7 @@ import {
   QUOTATION_DATA_ROW,
   DETAIL_PRODUCT_CELL,
   DETAIL_QUANTITY_CELL,
+  DETAIL_DISCOUNT_CELL,
 } from './selectors.js'
 
 const TIMEOUT = 20_000
@@ -26,6 +27,8 @@ const TIMEOUT = 20_000
 export interface QuotationSnapshotLine {
   productModel: string
   quantity: string
+  /** 折扣百分比（%）—— 未指定或不存在的行省略 */
+  discount?: number
 }
 
 export interface QuotationVerification {
@@ -78,7 +81,14 @@ export async function readExistingLines(page: Page): Promise<QuotationSnapshotLi
       ? ((await quantityEl.textContent()) ?? '').trim()
       : '0'
 
-    lines.push({ productModel, quantity })
+    const discountEl = row.locator(DETAIL_DISCOUNT_CELL)
+    let discount: number | undefined
+    if ((await discountEl.count()) > 0) {
+      const parsed = Number.parseFloat(((await discountEl.textContent()) ?? '').trim())
+      if (Number.isFinite(parsed)) discount = parsed
+    }
+
+    lines.push(discount !== undefined ? { productModel, quantity, discount } : { productModel, quantity })
   }
 
   return lines

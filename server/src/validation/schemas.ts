@@ -171,6 +171,7 @@ export const createQuotationTaskSchema = z.object({
       z.object({
         partModel: z.string().min(1, '产品型号不能为空'),
         quantity: z.number().int().min(1, '数量至少为 1'),
+        discount: z.number().min(0, '折扣不能为负').max(100, '折扣不能超过 100').optional(),
       }),
     )
     .min(1, '至少需要一行产品'),

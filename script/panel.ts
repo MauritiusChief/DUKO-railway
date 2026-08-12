@@ -1,7 +1,7 @@
 // 浮动面板 UI —— 注入到 Odoo 页面的操作面板
 // 功能：粘贴 CSV → 解析预览 → 一键填入 Odoo quotation
 
-import type { CsvRow, PanelStatus, WriteResult } from './types';
+import type { CsvRow, PanelStatus, WrittenPart, WriteResult } from './types';
 import { writePartsToQuotation, overwriteQuotation } from './quotation';
 import { texts, type ScriptCatLang } from './i18n';
 
@@ -152,7 +152,7 @@ GM_addStyle(`
 // ---- CSV 解析 ----
 
 /** 将 CSV 文本解析为 CsvRow 数组。
- *  支持 header 行 productName,quantity（可选，自动跳过）
+ *  支持 header 行 productName,quantity[,discount]（可选，自动跳过）
  *  支持 "," 或 tab 分隔 */
 function parseCsv(text: string): CsvRow[] {
   const lines = text
@@ -178,7 +178,16 @@ function parseCsv(text: string): CsvRow[] {
     if (!productName) continue;
 
     const quantity = parseInt(parts[1]?.trim() ?? '1', 10) || 1;
-    rows.push({ productName, quantity });
+
+    // 第三列折扣：空值保留为 undefined（不触碰 Odoo 折扣），无效值忽略
+    const discountRaw = (parts[2] ?? '').trim();
+    let discount: number | undefined;
+    if (discountRaw !== '') {
+      const parsed = Number(discountRaw);
+      if (isFinite(parsed) && parsed >= 0 && parsed <= 100) discount = parsed;
+    }
+
+    rows.push({ productName, quantity, ...(discount !== undefined ? { discount } : {}) });
   }
 
   return rows;
@@ -302,7 +311,11 @@ export function initPanel(): void {
     setStatus(statusEl, 'writing', t('statusWriting'));
 
     try {
-      const parts = currentRows.map((r) => ({ partModel: r.productName, quantity: r.quantity }));
+      const parts = currentRows.map((r) => ({
+        partModel: r.productName,
+        quantity: r.quantity,
+        ...(r.discount !== undefined ? { discount: r.discount } : {}),
+      }));
       const isOverwrite = overwriteCb.checked;
 
       const result: WriteResult = isOverwrite
@@ -352,11 +365,11 @@ function updatePreview(
 
   table.style.display = '';
   table.innerHTML = `
-    <thead><tr><th>#</th><th>${t('colModel')}</th><th>${t('colQty')}</th></tr></thead>
+    <thead><tr><th>#</th><th>${t('colModel')}</th><th>${t('colQty')}</th><th>${t('colDiscount')}</th></tr></thead>
     <tbody>
       ${rows
         .map(
-          (r, i) => `<tr><td>${i + 1}</td><td>${escapeHtml(r.productName)}</td><td>${r.quantity}</td></tr>`,
+          (r, i) => `<tr><td>${i + 1}</td><td>${escapeHtml(r.productName)}</td><td>${r.quantity}</td><td>${r.discount ?? ''}</td></tr>`,
         )
         .join('')}
     </tbody>`;
@@ -375,7 +388,7 @@ function setStatus(el: HTMLElement, _status: PanelStatus, text: string): void {
 }
 
 /** 将状态区域变成可复制的文本框，显示写入失败的型号列表 */
-function setFailedStatus(el: HTMLElement, unfilledParts: { partModel: string; quantity: number }[], successCount: number, total: number): void {
+function setFailedStatus(el: HTMLElement, unfilledParts: WrittenPart[], successCount: number, total: number): void {
   el.className = 'duko-status';
   el.textContent = '';
   const label = document.createElement('div');
@@ -385,7 +398,9 @@ function setFailedStatus(el: HTMLElement, unfilledParts: { partModel: string; qu
   const textarea = document.createElement('textarea');
   textarea.className = 'duko-status-textarea';
   textarea.readOnly = true;
-  textarea.value = unfilledParts.map(p => `${p.partModel},${p.quantity}`).join('\n');
+  textarea.value = unfilledParts
+    .map(p => `${p.partModel},${p.quantity}${p.discount !== undefined ? `,${p.discount}` : ''}`)
+    .join('\n');
   el.appendChild(textarea);
 }
 

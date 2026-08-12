@@ -51,6 +51,7 @@ export interface QuotationTaskLineRow {
   line_no: number;
   part_model: string;
   quantity: number;
+  discount: number | null;
   status: QuotationLineStatus;
   error: string | null;
 }
@@ -60,6 +61,8 @@ export interface QuotationTaskLine {
   lineNo: number;
   partModel: string;
   quantity: number;
+  /** 折扣百分比（%）—— 未指定时不返回 */
+  discount?: number;
   status: QuotationLineStatus;
   error: string | null;
 }
@@ -68,6 +71,8 @@ export interface QuotationTaskLine {
 export interface NewQuotationLine {
   partModel: string;
   quantity: number;
+  /** 折扣百分比（%）—— 未指定时不返回 */
+  discount?: number;
 }
 
 /** API 返回的任务摘要 */
@@ -155,6 +160,7 @@ function rowToLine(r: QuotationTaskLineRow): QuotationTaskLine {
     lineNo: r.line_no,
     partModel: r.part_model,
     quantity: r.quantity,
+    ...(r.discount != null ? { discount: r.discount } : {}),
     status: r.status,
     error: r.error,
   };
@@ -185,8 +191,8 @@ export function createTask(
     VALUES (?, ?, ?, ?, ?)
   `);
   const insertLine = d.prepare(`
-    INSERT INTO quotation_task_lines (task_id, line_no, part_model, quantity)
-    VALUES (?, ?, ?, ?)
+    INSERT INTO quotation_task_lines (task_id, line_no, part_model, quantity, discount)
+    VALUES (?, ?, ?, ?, ?)
   `);
   const countStmt = d.prepare(
     'SELECT COUNT(*) AS cnt FROM quotation_tasks WHERE user_id = ?',
@@ -205,7 +211,7 @@ export function createTask(
     const result = insertTask.run(userId, username, quotationNumber, odooUrl, writeMode);
     const taskId = Number(result.lastInsertRowid);
     lines.forEach((line, idx) => {
-      insertLine.run(taskId, idx + 1, line.partModel, line.quantity);
+      insertLine.run(taskId, idx + 1, line.partModel, line.quantity, line.discount ?? null);
     });
 
     // 超限时删除最旧任务（外键级联删除其 lines）
@@ -258,7 +264,7 @@ export function getTaskByIdRaw(taskId: number): QuotationTaskDetail | undefined 
   if (!task) return undefined;
 
   const lines = d.prepare(`
-    SELECT id, task_id, line_no, part_model, quantity, status, error
+    SELECT id, task_id, line_no, part_model, quantity, discount, status, error
     FROM quotation_task_lines
     WHERE task_id = ?
     ORDER BY line_no ASC

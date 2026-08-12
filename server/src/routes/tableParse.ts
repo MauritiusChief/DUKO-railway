@@ -33,7 +33,7 @@ import { findComboExists, findRecordByItemNameCI, getItemRow, getPartRow, getAll
 import { insertRecord } from '../db/users.js';
 import { insertTraceSession, markSessionCompleted, markSessionError } from '../services/trace.js';
 import type { TraceContext } from '../types/trace.js';
-import { ACCESSORY_SHAPE_TYPE_CODES, SHAPE_TYPES_COLOR_NA, SHAPE_TYPES_SIZE_NA } from '../constants.js';
+import { ACCESSORY_SHAPE_TYPE_CODES, SHAPE_TYPES_COLOR_NA, SHAPE_TYPES_SIZE_NA, getDiscountPercent } from '../constants.js';
 
 export const tableParseRouter = Router();
 
@@ -104,6 +104,8 @@ interface ProductEntry {
   productName: string;
   description: string;
   quantity: number;
+  /** 折扣百分比（%）—— 按最终产品型号颜色前缀推导；不打折时省略 */
+  discount?: number;
 }
 
 tableParseRouter.post('/generate-products', validate(generateProductsSchema), (_req: Request, res: Response) => {
@@ -198,10 +200,12 @@ tableParseRouter.post('/generate-products', validate(generateProductsSchema), (_
         if (existing) {
           existing.quantity += qty;
         } else {
+          const discount = getDiscountPercent(sharedPartName);
           productQtyMap.set(sharedPartName, {
             productName: sharedPartName,
             description: partRow?.description || '',
             quantity: qty,
+            ...(discount !== undefined ? { discount } : {}),
           });
         }
       }

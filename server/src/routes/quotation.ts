@@ -105,7 +105,7 @@ quotationRouter.post(
       quotationNumber: string;
       odooUrl: string;
       writeMode: 'overwrite' | 'append';
-      lines: { partModel: string; quantity: number }[];
+      lines: { partModel: string; quantity: number; discount?: number }[];
     };
 
     const taskId = createTask(userId, username, quotationNumber, odooUrl, writeMode, lines);
