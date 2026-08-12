@@ -290,8 +290,13 @@ const EXPOSED_COLOR_BLACKLIST: Record<string, string[]> = {
 const EXPOSED_COLOR_ALIAS_LIST: Record<string, string[]> = {
   '15': ['Black Shaker'],
   '17': ['White Oak Shaker'],
+  '27': ['Grey Escada'],
+  '28': ['Black Escada'],
+  '29': ['White Escada'],
   '32': ['White Creme Slim'],
+  '34': ['Avocado Slim'],
   '37': ['White Oak Slim'],
+  '38': ['Brown Slim'],
 };
 
 
