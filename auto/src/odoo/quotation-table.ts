@@ -14,6 +14,7 @@ import {
   PRODUCT_AUTOCOMPLETE_MENU,
   PRODUCT_AUTOCOMPLETE_ITEM,
   EDITABLE_QUANTITY_INPUT,
+  EDITABLE_DISCOUNT_INPUT,
   ADD_PRODUCT_LINK,
   REMOVE_ROW_BUTTON,
   SELECT_CANCELLING,
@@ -103,11 +104,27 @@ export async function fillProductAndChooseFromMenu(
   return true
 }
 
-/** 在当前编辑行中填入数量 */
+/** 在当前编辑行中填入折扣百分比（只填值，不提交；由 submitEditableRow 统一提交）。须在数量之后填写 */
+export async function fillDiscount(rowLocator: Locator, discount: number): Promise<void> {
+  const editableInput = rowLocator.locator(EDITABLE_DISCOUNT_INPUT).first()
+  await editableInput.waitFor({ state: 'visible', timeout: TIMEOUT })
+  await editableInput.click()
+  await editableInput.fill(String(discount))
+}
+
+/** 在当前编辑行中填入数量（只填值，不提交；由 submitEditableRow 统一提交）。
+ *  Odoo 每次修改 qty 都会清空已填折扣，因此折扣必须晚于数量填写。 */
 export async function fillQuantity(rowLocator: Locator, quantity: number): Promise<void> {
   const editableInput = rowLocator.locator(EDITABLE_QUANTITY_INPUT).first()
   await editableInput.waitFor({ state: 'visible', timeout: TIMEOUT })
   await editableInput.fill(String(quantity))
+}
+
+/** 统一提交步骤：在数量输入框按 Enter 提交整行（Tab 与 Enter 效果一致，只保留 Enter）。
+ *  注意：提交后 Odoo 会附带自动新增一行（等效于自动点击 "Add a product"），
+ *  因此调用方仍需用 deselectCurrentRow 取消选中。 */
+export async function submitEditableRow(rowLocator: Locator): Promise<void> {
+  const editableInput = rowLocator.locator(EDITABLE_QUANTITY_INPUT).first()
   await editableInput.press('Enter')
 }
 

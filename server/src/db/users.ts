@@ -158,6 +158,7 @@ export function initUserDB(dbDir: string): void {
       line_no    INTEGER NOT NULL,
       part_model TEXT    NOT NULL,
       quantity   INTEGER NOT NULL,
+      discount   REAL,
       status     TEXT    NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','success','failed')),
       error      TEXT
     );
@@ -165,6 +166,7 @@ export function initUserDB(dbDir: string): void {
   `);
 
   migrateUsersManagerRole(db);
+  migrateQuotationLineDiscount(db);
 }
 
 /**
@@ -208,6 +210,26 @@ function migrateUsersManagerRole(database: Database.Database): void {
   database.prepare(
     'INSERT OR IGNORE INTO schema_migrations (name) VALUES (?)',
   ).run('0001_users_manager_role');
+}
+
+/**
+ * 版本化迁移：为已存在的 quotation_task_lines 表补充 discount 列（nullable REAL）。
+ * 全新库已由 CREATE TABLE 包含该列，此迁移仅处理升级场景，通过 PRAGMA
+ * table_info 判断幂等；列不存在时执行 ADD COLUMN。
+ */
+function migrateQuotationLineDiscount(database: Database.Database): void {
+  const columns = database.pragma('table_info(quotation_task_lines)', { simple: false }) as {
+    name: string;
+  }[];
+  const hasDiscount = columns.some((c) => c.name === 'discount');
+
+  if (!hasDiscount) {
+    database.exec('ALTER TABLE quotation_task_lines ADD COLUMN discount REAL');
+  }
+
+  database.prepare(
+    'INSERT OR IGNORE INTO schema_migrations (name) VALUES (?)',
+  ).run('0002_quotation_task_lines_discount');
 }
 
 /** 获取底层 SQLite 数据库连接（供 trace 等服务模块使用） */

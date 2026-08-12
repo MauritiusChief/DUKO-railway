@@ -18,6 +18,8 @@
 - server 与 worker 使用相同 `AUTO_WORKER_TOKEN` 鉴权。worker 主动连接、单任务执行、心跳并在断线后重连；未确认出站消息会重放。
 - worker 使用 Playwright persistent Chromium profile 保存 Odoo 登录态。profile、cookie 和下载数据属于敏感本地状态。
 - 报价写入支持 overwrite/append，并存在用户确认握手；不得在测试或调试中绕过确认后连接真实 Odoo。
+- 报价行可携带可选折扣（百分数）。折扣按最终产品型号颜色前缀由 server 在生成产品清单时推导（`server/src/constants.ts` 的 `getDiscountPercent`），并随 CSV/协议/快照贯穿；CSV 折扣为空表示不指定，worker 不读取、不清零 Odoo 现有折扣。
+- 报价写入不做逐行折扣回读；写入完成后 worker 读取整表与输入 CSV 整体对比，逐条在日志（`FINAL CHECK: ...`）反应多了/少了/不一致，不改行状态与任务状态。
 - 库存也可由用户上传 CSV，不一定经过 worker；上传内容仍按敏感业务数据处理。
 
 ## ScriptCat

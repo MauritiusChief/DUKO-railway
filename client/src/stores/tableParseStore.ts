@@ -606,10 +606,12 @@ export const useTableParseStore = create<TableParseState>((set, get) => {
     }
   },
 
-  /** 将当前产品清单转为 CSV 字符串（productName,quantity） */
+  /** 将当前产品清单转为 CSV 字符串（productName,quantity,discount；无折扣时第三列留空） */
   getProductsCsv: () => {
     const { products } = get();
-    return 'productName,quantity\n' + products.map((p) => `${p.productName},${p.quantity}`).join('\n');
+    return 'productName,quantity,discount\n' + products
+      .map((p) => `${p.productName},${p.quantity},${p.discount ?? ''}`)
+      .join('\n');
   },
 
   /** 复制产品 CSV 到剪贴板，并设置 copySuccess 标志（2 秒后自动重置） */

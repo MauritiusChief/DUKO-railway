@@ -14,7 +14,7 @@ import { z } from 'zod';
 // ==================================================================
 
 /** 当前协议版本 */
-export const PROTOCOL_VERSION = '2';
+export const PROTOCOL_VERSION = '3';
 
 /** 心跳超时阈值（毫秒）：超过此时间未收到 heartbeat 视为断线 */
 export const HEARTBEAT_TIMEOUT_MS = 90_000;
@@ -67,6 +67,7 @@ export const taskCompletedMessageSchema = z.object({
         lineNo: z.number().int().positive(),
         partModel: z.string(),
         quantity: z.number().int().positive(),
+        discount: z.number().optional(),
         status: z.enum(['pending', 'success', 'failed']),
         error: z.string().optional(),
       }),
@@ -77,6 +78,7 @@ export const taskCompletedMessageSchema = z.object({
       z.object({
         productModel: z.string(),
         quantity: z.string(),
+        discount: z.number().optional(),
       }),
     )
     .optional(),
@@ -104,12 +106,14 @@ export const confirmRequestMessageSchema = z.object({
     z.object({
       productModel: z.string(),
       quantity: z.string(),
+      discount: z.number().optional(),
     }),
   ),
   inputLines: z.array(
     z.object({
       partModel: z.string(),
       quantity: z.number().int().positive(),
+      discount: z.number().optional(),
     }),
   ),
   attempt: z.number().int().positive(),
@@ -180,6 +184,8 @@ export interface TaskAssignedLine {
   lineNo: number;
   partModel: string;
   quantity: number;
+  /** 折扣百分比（%）—— 未指定时不返回 */
+  discount?: number;
 }
 
 export interface QuotationTaskAssignedMessage {

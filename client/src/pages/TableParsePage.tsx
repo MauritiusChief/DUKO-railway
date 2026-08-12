@@ -904,6 +904,7 @@ export default function TableParsePage() {
                           <th className="tp-th-sku">{t('SKU')}</th>
                           <th className="tp-th-desc">{t('描述')}</th>
                           <th className="tp-th-qty">{t('数量')}</th>
+                          <th className="tp-th-discount">{t('折扣%')}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -912,6 +913,7 @@ export default function TableParsePage() {
                             <td className="tp-td-sku">{p.productName}</td>
                             <td className="tp-td-desc">{p.description}</td>
                             <td className="tp-td-qty">{p.quantity}</td>
+                            <td className="tp-td-discount">{p.discount ?? ''}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -930,7 +932,9 @@ export default function TableParsePage() {
                       className="tp-submit-btn tp-generate-btn"
                       onClick={() => {
                         const products = useTableParseStore.getState().products
-                        const csv = products.map((p) => `${p.productName},${p.quantity}`).join('\n')
+                        const csv = 'productName,quantity,discount\n' + products
+                          .map((p) => `${p.productName},${p.quantity},${p.discount ?? ''}`)
+                          .join('\n')
                         const draft = {
                           quotationNumber: '',
                           writeMode: 'append' as const,

@@ -137,6 +137,10 @@ export const messages = {
     zh: '描述',
     en: 'Description',
   },
+  '折扣%': {
+    zh: '折扣%',
+    en: 'Discount%',
+  },
   复制CSV: {
     zh: '复制 CSV',
     en: 'Copy CSV',
