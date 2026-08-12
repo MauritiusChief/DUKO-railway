@@ -322,6 +322,8 @@ export function deriveSinglePartTable(
       const code1 = name.substring(0, 2);
       const code2 = name.substring(3, 5);
       const rest = name.substring(5);
+      usingSharedPart.add(code1 + rest);
+      usingSharedPart.add(code2 + rest);
       entries.push({ singlePartName: code1 + rest, sharedPartName: name, description: desc });
       entries.push({ singlePartName: code2 + rest, sharedPartName: name, description: desc });
       continue;
@@ -338,6 +340,8 @@ export function deriveSinglePartTable(
       if ((leftChar === 'L' && rightChar === 'R') || (leftChar === 'R' && rightChar === 'L')) {
         const before = name.substring(0, slashPos - 1);
         const after = name.substring(slashPos + 2);
+        usingSharedPart.add(before + leftChar + after);
+        usingSharedPart.add(before + rightChar + after);
         entries.push({ singlePartName: before + leftChar + after, sharedPartName: name, description: desc });
         entries.push({ singlePartName: before + rightChar + after, sharedPartName: name, description: desc });
         continue;
