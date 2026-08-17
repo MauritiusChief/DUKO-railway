@@ -19,7 +19,7 @@
 
 import { readFileSync, writeFileSync } from 'fs';
 import Papa from 'papaparse';
-import { AMERICAN_STYLE_CODES, EUROPEAN_STYLE_CODES, NONE_EURO_STYLE_CODES } from '../constants.js';
+import { AMERICAN_STYLE_CODES, EUROPEAN_STYLE_CODES, NONE_EURO_STYLE_CODES, UNIPACK_STYLE_CODES } from '../constants.js';
 
 // 颜色文本黑名单 —— 包含任一子串则排除该颜色候选
 const COLOR_BLACKLIST = new Set<string>([
@@ -31,14 +31,15 @@ const COLOR_BLACKLIST = new Set<string>([
 // 共享零件需存在于 Product.csv 中，描述从该行获取
 
 /**
- * W 用 OV 的门，但不确定柜体如何处理
+ * W33xx24 用 OV33xx24 充当
  */
-const wallUseOvenDoor = Object.fromEntries(AMERICAN_STYLE_CODES.flatMap(color => [
-  [`${color}W3315-D`, `${color}OV331524-D`],
-  [`${color}W3318-D`, `${color}OV331824-D`],
-  [`${color}W3321-D`, `${color}OV332124-D`],
-  [`${color}W3324-D`, `${color}OV332424-D`],
-  [`${color}W3327-D`, `${color}OV332724-D`],
+const americanOvenUsedAsWall: Record<string, string> = Object.fromEntries(AMERICAN_STYLE_CODES.flatMap(color => [
+  ["15", "18", "21", "24", "27"].flatMap(hh => {
+    return [`${color}W33${hh}24-D`, `${color}OV33${hh}24-D`]
+  }),
+  ["15", "18", "21", "24", "27"].flatMap(hh => {
+    return [`10W33${hh}24-C`, `10OV33${hh}24-C`]
+  })
 ]))
 /**
  * 美式柜的全高门白名单
@@ -66,7 +67,12 @@ const PART_WHITELIST: Record<string, string> = {
   ...Object.fromEntries(["12", "15", "18", "21", "24", "27", "30", "33", "36", "42"].flatMap(size => [
       [`30B${size}F-C`, `30B${size}-C`]
   ])),
-  ...wallUseOvenDoor,
+  ...americanOvenUsedAsWall,
+  ...Object.fromEntries(UNIPACK_STYLE_CODES.flatMap(color => [
+    ["15", "18", "21", "24", "27"].flatMap(hh => {
+      return [`${color}W33${hh}24`, `${color}OV33${hh}24`]
+    }),
+  ])),
   // 欧式: BF3→WF330, BF6→WF630
   ...Object.fromEntries(EUROPEAN_STYLE_CODES.flatMap(color => [
     [`${color}BF3`, `${color}WF330`],
