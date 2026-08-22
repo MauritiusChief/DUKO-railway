@@ -387,6 +387,36 @@ export default function InventoryDashboardPage() {
     return quantity.toFixed(1);
   }
 
+  /** 将分类项转为与表格一致的 CSV 文本（型号,可用库存,近期出库,近期入库） */
+  function buildCsv(items: ClassifiedItem[]): string {
+    const header = '型号,可用库存,近期出库,近期入库';
+    const rows = items.map((it) => [
+      it.name,
+      it.freeToUse.toFixed(0),
+      fmtQuantity(it.outbound),
+      fmtQuantity(it.inbound),
+    ].join(','));
+    return [header, ...rows].join('\n');
+  }
+
+  /** 将指定表下载为 CSV（前置 BOM 保证 Excel 中文不乱码） */
+  function downloadCsv(filenameBase: string, items: ClassifiedItem[]) {
+    if (items.length === 0) return;
+    const csv = '\uFEFF' + buildCsv(items);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const ts = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
+    a.download = `${filenameBase}-${ts}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
   const phaseLabel: Record<string, string> = {
     '': '',
     download: '下载中',
@@ -555,6 +585,13 @@ export default function InventoryDashboardPage() {
                   <option value="outbound">出库量从多到少</option>
                   <option value="stock">可用库存从少到多</option>
                 </select>
+                <button
+                  className="iv-export-btn"
+                  onClick={() => downloadCsv('duko-inventory-warning', warn)}
+                  disabled={warn.length === 0}
+                >
+                  导出 CSV
+                </button>
                 <span>{warn.length}</span>
               </div>
             </div>
@@ -572,6 +609,13 @@ export default function InventoryDashboardPage() {
                   <option value="outbound">出库量从多到少</option>
                   <option value="stock">可用库存从少到多</option>
                 </select>
+                <button
+                  className="iv-export-btn"
+                  onClick={() => downloadCsv('duko-inventory-reminder', remind)}
+                  disabled={remind.length === 0}
+                >
+                  导出 CSV
+                </button>
                 <span>{remind.length}</span>
               </div>
             </div>

@@ -231,6 +231,22 @@
   color: inherit;
   font-size: 12px;
 }
+.iv-export-btn {
+  border: 1px solid #bbb;
+  border-radius: 4px;
+  padding: 3px 8px;
+  background: #fff;
+  color: #555;
+  cursor: pointer;
+  font-size: 12px;
+}
+.iv-export-btn:hover {
+  background: #f0f0f0;
+}
+.iv-export-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
 
 /* 红：警告 */
 .iv-col-red {
