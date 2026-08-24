@@ -931,10 +931,7 @@ export default function TableParsePage() {
                     <button
                       className="tp-submit-btn tp-generate-btn"
                       onClick={() => {
-                        const products = useTableParseStore.getState().products
-                        const csv = 'productName,quantity,discount\n' + products
-                          .map((p) => `${p.productName},${p.quantity},${p.discount ?? ''}`)
-                          .join('\n')
+                        const csv = useTableParseStore.getState().getProductsCsv()
                         const draft = {
                           quotationNumber: '',
                           writeMode: 'append' as const,

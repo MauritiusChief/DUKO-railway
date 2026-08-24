@@ -34,9 +34,11 @@
 “生成产品清单”是普通 REST 请求，不调用 LLM。服务端在 `server/src/routes/tableParse.ts` 中：
 
 - 跳过未收敛的必填字段，并返回未解析行索引。
-- 根据 items/parts 引用表拆解复合物品，按 shared part 聚合数量。
+- 根据 items/parts 引用表拆解复合物品，输出**未聚合**的产品列表：每个 item 每个零件一条，顺序与解析结果表格一致（同一 item 的零件连续）。
 - `door` 仅取门件，`box` 仅取柜体，未指定时取门件、柜体和额外件。
-- 非配件排在前，配件排在后，各组按产品名排序。
+- 同时返回全目录配件 `sharedPartName` 集合（`accessoryProductNames`），不用于展示。
+
+展示列表不聚合数量、不排序。复制 CSV 或“创建报价任务”时，前端用 `accessoryProductNames` 在本地聚合（按 productName 合并数量）并排序：非配件在前、配件在后，各组按产品名排序。
 
 产品可复制为 `productName,quantity,discount` 三列 CSV（折扣为百分数，按最终产品型号颜色前缀推导；无折扣产品第三列留空），也可写入报价草稿并跳转报价页。后者使用 `duko_quotation_draft`，不会直接创建任务。
 

@@ -116,8 +116,8 @@ tableParseRouter.post('/generate-products', validate(generateProductsSchema), (_
     return;
   }
 
-  // sharedPartName → quantity 聚合
-  const productQtyMap = new Map<string, ProductEntry>();
+  // 未聚合的产品列表：每个 item 每个零件一条，顺序与 items 一致（同一 item 的零件连续）
+  const products: ProductEntry[] = [];
   const unresolvedIndices: number[] = [];
 
   for (let i = 0; i < items.length; i++) {
@@ -195,19 +195,14 @@ tableParseRouter.post('/generate-products', validate(generateProductsSchema), (_
       for (const partName of partNames) {
         const partRow = getPartRow(partName);
         const sharedPartName = partRow?.sharedPartName || partName;
+        const discount = getDiscountPercent(sharedPartName);
 
-        const existing = productQtyMap.get(sharedPartName);
-        if (existing) {
-          existing.quantity += qty;
-        } else {
-          const discount = getDiscountPercent(sharedPartName);
-          productQtyMap.set(sharedPartName, {
-            productName: sharedPartName,
-            description: partRow?.description || '',
-            quantity: qty,
-            ...(discount !== undefined ? { discount } : {}),
-          });
-        }
+        products.push({
+          productName: sharedPartName,
+          description: partRow?.description || '',
+          quantity: qty,
+          ...(discount !== undefined ? { discount } : {}),
+        });
       }
 
       resolvedCount++;
@@ -220,7 +215,7 @@ tableParseRouter.post('/generate-products', validate(generateProductsSchema), (_
   }
 
   // 从 items 表中找出所有配件 shapeType 对应的 sharedPartName，
-  // 用于将配件产品排在最终结果末尾
+  // 作为全目录配件集合返回，供前端在复制 CSV/创建报价时聚合排序（配件排末尾）
   const accSharedParts = new Set<string>();
   for (const itemRow of getAllItemRows()) {
     if (ACCESSORY_SHAPE_TYPE_CODES.includes(itemRow.shapeTypeCode)) {
@@ -234,16 +229,9 @@ tableParseRouter.post('/generate-products', validate(generateProductsSchema), (_
     }
   }
 
-  // 排序：非配件在前、配件在后；同组内按 productName 字母排序
-  const products = [...productQtyMap.values()].sort((a, b) => {
-    const aIsAcc = accSharedParts.has(a.productName) ? 1 : 0;
-    const bIsAcc = accSharedParts.has(b.productName) ? 1 : 0;
-    if (aIsAcc !== bIsAcc) return aIsAcc - bIsAcc;
-    return a.productName.localeCompare(b.productName);
-  });
-
   res.json({
     products,
+    accessoryProductNames: Array.from(accSharedParts),
     unresolvedCount: unresolvedIndices.length,
     unresolvedIndices,
   });
