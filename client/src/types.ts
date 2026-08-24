@@ -73,6 +73,8 @@ export interface ProductEntry {
 /** POST /api/generate-products 的完整响应 */
 export interface GenerateProductsResponse {
   products: ProductEntry[];
+  /** 全目录配件 sharedPartName 集合（用于前端导出时把配件排到末尾） */
+  accessoryProductNames: string[];
   /** 未能解析的行数 */
   unresolvedCount: number;
   /** 未能解析的行索引列表 */

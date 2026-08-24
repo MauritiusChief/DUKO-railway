@@ -75,6 +75,26 @@ function applyStatusToItems(items: ParsedItem[], results: (boolean | null)[]): P
   });
 }
 
+/** 按 productName 合并数量，配件排末尾，同组按名称字母序排序 */
+function aggregateAndSort(products: ProductEntry[], accessoryProductNames: string[]): ProductEntry[] {
+  const accSet = new Set(accessoryProductNames);
+  const map = new Map<string, ProductEntry>();
+  for (const p of products) {
+    const existing = map.get(p.productName);
+    if (existing) {
+      existing.quantity += p.quantity;
+    } else {
+      map.set(p.productName, { ...p });
+    }
+  }
+  return [...map.values()].sort((a, b) => {
+    const aIsAcc = accSet.has(a.productName) ? 1 : 0;
+    const bIsAcc = accSet.has(b.productName) ? 1 : 0;
+    if (aIsAcc !== bIsAcc) return aIsAcc - bIsAcc;
+    return a.productName.localeCompare(b.productName);
+  });
+}
+
 interface TableParseState {
   /** 用户粘贴的清单文本 */
   input: string;
@@ -92,6 +112,8 @@ interface TableParseState {
   fromHistoryRestored: boolean;
   /** 生成的产品列表 */
   products: ProductEntry[];
+  /** 全目录配件 sharedPartName 集合（导出聚合排序时用于把配件排末尾） */
+  accessoryProductNames: string[];
   /** 是否正在生成产品 */
   productsLoading: boolean;
   /** 未解析的行数 */
@@ -201,6 +223,7 @@ export const useTableParseStore = create<TableParseState>((set, get) => {
   error: '',
   fromHistoryRestored: false,
   products: [],
+  accessoryProductNames: [],
   productsLoading: false,
   unresolvedCount: 0,
   unresolvedIndices: [],
@@ -523,7 +546,7 @@ export const useTableParseStore = create<TableParseState>((set, get) => {
     newItems.splice(index, 1);
 
     // 清除已生成的产品列表（表格已变化，旧产品列表失效）
-    set({ items: newItems, products: [], unresolvedCount: 0, unresolvedIndices: [] });
+    set({ items: newItems, products: [], accessoryProductNames: [], unresolvedCount: 0, unresolvedIndices: [] });
     syncToStorage(newItems);
 
     // 删除后重新检查 Exposed-Items 匹配状态
@@ -544,7 +567,7 @@ export const useTableParseStore = create<TableParseState>((set, get) => {
       status: 'missing',
     };
     const newItems = [...items, emptyItem];
-    set({ items: newItems, products: [], unresolvedCount: 0, unresolvedIndices: [], resultCollapsed: false });
+    set({ items: newItems, products: [], accessoryProductNames: [], unresolvedCount: 0, unresolvedIndices: [], resultCollapsed: false });
     syncToStorage(newItems);
   },
 
@@ -555,7 +578,7 @@ export const useTableParseStore = create<TableParseState>((set, get) => {
     const { items, productsLoading } = get();
     if (items.length === 0 || productsLoading) return;
 
-    set({ productsLoading: true, products: [], unresolvedCount: 0, unresolvedIndices: [] });
+    set({ productsLoading: true, products: [], accessoryProductNames: [], unresolvedCount: 0, unresolvedIndices: [] });
 
     try {
       const res = await fetchWithAuth('/api/generate-products', {
@@ -575,6 +598,7 @@ export const useTableParseStore = create<TableParseState>((set, get) => {
       const data: GenerateProductsResponse = await res.json();
       set({
         products: data.products,
+        accessoryProductNames: data.accessoryProductNames,
         unresolvedCount: data.unresolvedCount,
         unresolvedIndices: data.unresolvedIndices,
         productsLoading: false,
@@ -606,10 +630,11 @@ export const useTableParseStore = create<TableParseState>((set, get) => {
     }
   },
 
-  /** 将当前产品清单转为 CSV 字符串（productName,quantity,discount；无折扣时第三列留空） */
+  /** 将当前产品清单聚合（按 productName 合并数量）、配件排末尾后转为 CSV（productName,quantity,discount；无折扣时第三列留空） */
   getProductsCsv: () => {
-    const { products } = get();
-    return 'productName,quantity,discount\n' + products
+    const { products, accessoryProductNames } = get();
+    const aggregated = aggregateAndSort(products, accessoryProductNames);
+    return 'productName,quantity,discount\n' + aggregated
       .map((p) => `${p.productName},${p.quantity},${p.discount ?? ''}`)
       .join('\n');
   },
@@ -658,7 +683,7 @@ export const useTableParseStore = create<TableParseState>((set, get) => {
 
   /** 从外部加载解析结果（文件导入或其它来源），同步写入 localStorage */
   loadArchiveData: (items) => {
-    set({ items, products: [], unresolvedCount: 0, unresolvedIndices: [],
+    set({ items, products: [], accessoryProductNames: [], unresolvedCount: 0, unresolvedIndices: [],
           resultCollapsed: false, productsCollapsed: false, fromImage: false });
     syncToStorage(items);
   },
