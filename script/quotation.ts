@@ -174,7 +174,7 @@ export async function fillProduct(row: Element, model: string): Promise<boolean>
 
 /**
  * 在当前选中行填入折扣百分比。
- * 不按 Enter，由随后的数量填写统一提交（避免提前结束编辑态）。
+ * 不按 Enter，由后续提交步骤统一提交（避免提前结束编辑态）。
  */
 export async function fillDiscount(row: Element, discount: number): Promise<void> {
   const input = row.querySelector(EDITABLE_DISCOUNT_INPUT_SELECTOR) as HTMLInputElement | null;
@@ -193,7 +193,7 @@ export async function fillDiscount(row: Element, discount: number): Promise<void
 
 /**
  * 在当前选中行填入数量。
- * 填入后按 Enter 提交（Odoo 行编辑依赖 Enter 确认）。
+ * 只填值，不提交。Odoo 每次修改数量都会清空已填折扣，因此必须先填数量。
  */
 export async function fillQuantity(row: Element, quantity: number): Promise<void> {
   const input = row.querySelector(EDITABLE_QUANTITY_INPUT_SELECTOR) as HTMLInputElement | null;
@@ -206,8 +206,19 @@ export async function fillQuantity(row: Element, quantity: number): Promise<void
   input.focus();
   input.select();
   document.execCommand('insertText', false, String(quantity));
+}
 
-  // 按 Enter 确认（Odoo 依赖此事件完成行保存）
+/** 在数量输入框按 Enter 提交当前行。 */
+export function submitEditableRow(row: Element): void {
+  const input = row.querySelector(EDITABLE_QUANTITY_INPUT_SELECTOR) as HTMLInputElement | null;
+  if (!input) {
+    console.warn('[submitEditableRow] 找不到可编辑的数量输入框');
+    return;
+  }
+
+  input.focus();
+
+  // Odoo 行编辑依赖 Enter 确认。
   input.dispatchEvent(
     new KeyboardEvent('keydown', {
       bubbles: true,
@@ -283,13 +294,15 @@ export async function writePartsToQuotation(
       // 动态等待选中行被 Odoo 重新确认（autocomplete 选定后行可能被重建）
       await waitForSelector(QUOTATION_SELECTED_ROW_SELECTOR, 3000);
 
-      // c. 先填折扣（如指定）、再填数量；数量回车统一提交行
+      // c. 先填数量、再填折扣（如指定）、最后统一提交。
+      // Odoo 修改数量会清空当前行已有折扣，因此折扣必须在数量之后填写。
       const filledRow = getSelectedRow();
       if (filledRow) {
+        await fillQuantity(filledRow, part.quantity);
         if (part.discount !== undefined) {
           await fillDiscount(filledRow, part.discount);
         }
-        await fillQuantity(filledRow, part.quantity);
+        submitEditableRow(filledRow);
         successCount++;
       } else {
         unfilledParts.push(part);
