@@ -53,3 +53,62 @@ export function toUtcIsoOrNull(value: unknown): string | null {
   const date = value instanceof Date ? value : new Date(value);
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
+
+// ==================================================================
+//  仓库 API 请求 schema（body 经 validate 中间件解析，query 在路由内 safeParse）
+// ==================================================================
+
+/** SKU 字符串：规范化后非空 */
+export const warehouseSkuSchema = z
+  .string()
+  .transform(normalizeSerial)
+  .pipe(z.string().min(1, 'SKU 不能为空'));
+
+/** 可解析为时间的字符串，转换为 UTC ISO-8601 */
+const utcIsoSchema = z
+  .string()
+  .refine((v) => !Number.isNaN(new Date(v).getTime()), '无效的时间格式')
+  .transform((v) => new Date(v).toISOString());
+
+/** POST /api/warehouse/scans —— 提交一组扫码（型号 + 产品） */
+export const warehouseScanSchema = z.object({
+  modelSeriNum: modelSeriNumSchema,
+  productSeriNum: productSeriNumSchema,
+});
+
+/** PATCH /api/warehouse/mappings/:modelSeriNum —— 修改 SKU 或全局重命名型号（二选一） */
+export const warehouseUpdateMappingSchema = z
+  .object({
+    sku: warehouseSkuSchema.optional(),
+    newModelSeriNum: modelSeriNumSchema.optional(),
+  })
+  .refine((v) => (v.sku !== undefined) !== (v.newModelSeriNum !== undefined), {
+    message: '只能修改 SKU 或型号序列号之一',
+  });
+
+/** GET /api/warehouse/scans —— 筛选/分页查询参数 */
+export const warehouseScansQuerySchema = z.object({
+  sku: z.string().min(1).optional(),
+  modelSeriNum: z.string().min(1).optional(),
+  productSeriNum: z.string().min(1).optional(),
+  from: utcIsoSchema.optional(),
+  to: utcIsoSchema.optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+
+/** GET /api/warehouse/summary —— 汇总时间范围参数 */
+export const warehouseSummaryQuerySchema = z.object({
+  from: utcIsoSchema.optional(),
+  to: utcIsoSchema.optional(),
+});
+
+/** PATCH /api/warehouse/scans/:productSeriNum —— 编辑单条记录（至少提供一项） */
+export const warehouseUpdateScanSchema = z
+  .object({
+    modelSeriNum: modelSeriNumSchema.optional(),
+    newProductSeriNum: productSeriNumSchema.optional(),
+  })
+  .refine((v) => v.modelSeriNum !== undefined || v.newProductSeriNum !== undefined, {
+    message: '至少提供型号序列号或产品序列号之一',
+  });

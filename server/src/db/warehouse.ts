@@ -95,6 +95,25 @@ export function listMappings(): ModelSeriNumMappingRow[] {
     .all() as ModelSeriNumMappingRow[];
 }
 
+/** 映射行 + 关联扫描记录数（全局重命名前供 UI 显示影响数量） */
+export interface ModelSeriNumMappingWithCount extends ModelSeriNumMappingRow {
+  record_count: number;
+}
+
+/** 全量映射列表（含关联扫描记录数，按型号序列号排序） */
+export function listMappingsWithCounts(): ModelSeriNumMappingWithCount[] {
+  return getDb()
+    .prepare(`
+      SELECT m.model_seri_num, m.sku, m.created_at, m.updated_at,
+             COUNT(r.product_seri_num) AS record_count
+      FROM model_seri_num_mappings m
+      LEFT JOIN product_seri_num_records r ON r.model_seri_num = m.model_seri_num
+      GROUP BY m.model_seri_num
+      ORDER BY m.model_seri_num ASC
+    `)
+    .all() as ModelSeriNumMappingWithCount[];
+}
+
 /** 某型号序列号关联的扫描记录数（全局重命名前供 UI 显示影响数量） */
 export function countScanRecordsByModel(modelSeriNum: string): number {
   const row = getDb()
