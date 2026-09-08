@@ -624,6 +624,10 @@ export const messages = {
     zh: '经理',
     en: 'Manager',
   },
+  仓库: {
+    zh: '仓库',
+    en: 'Warehouse',
+  },
   修改角色: {
     zh: '修改角色',
     en: 'Change Role',

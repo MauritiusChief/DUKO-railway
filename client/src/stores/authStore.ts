@@ -16,7 +16,7 @@ import { create } from 'zustand';
 export interface AuthUser {
   id: number;
   username: string;
-  role: 'admin' | 'manager' | 'user';
+  role: 'admin' | 'manager' | 'warehouse' | 'user';
   created_at: string;
 }
 

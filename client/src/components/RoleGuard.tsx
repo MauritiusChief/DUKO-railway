@@ -13,7 +13,7 @@ import { useAuthStore } from '../stores/authStore';
 
 interface RoleGuardProps {
   /** 允许访问的角色列表 */
-  allowedRoles: Array<'admin' | 'manager' | 'user'>;
+  allowedRoles: Array<'admin' | 'manager' | 'warehouse' | 'user'>;
   children: ReactNode;
 }
 

@@ -39,7 +39,7 @@ export default function LoginPage() {
   const [adminPwd, setAdminPwd] = useState('');
   const [newUsername, setNewUsername] = useState('');
   const [newPassword, setNewPassword] = useState('');
-  const [newRole, setNewRole] = useState<'user' | 'manager'>('user');
+  const [newRole, setNewRole] = useState<'user' | 'manager' | 'warehouse'>('user');
   const [mgmtLoading, setMgmtLoading] = useState(false);
   const [mgmtError, setMgmtError] = useState('');
   const [mgmtSuccess, setMgmtSuccess] = useState('');
@@ -120,14 +120,33 @@ export default function LoginPage() {
     setAdminPwd('');
     setNewUsername('');
     setNewPassword('');
-    setNewRole(currentRole === 'manager' ? 'manager' : 'user');
+    setNewRole(
+      ()=>{switch (currentRole) {
+        case 'manager':
+          return 'manager'
+        case 'warehouse':
+          return 'warehouse'
+        default:
+          return 'user'
+      }}
+    );
     setMgmtError('');
     setMgmtSuccess('');
   };
 
   /** 角色显示文案 */
-  const roleLabel = (role: string) =>
-    role === 'admin' ? t('管理员') : role === 'manager' ? t('经理') : t('普通用户');
+  const roleLabel = (role: string) => {
+    switch (role) {
+      case 'admin':
+        return t('管理员')
+      case 'manager':
+        return t('经理')
+      case 'warehouse':
+        return t('仓库')
+      default:
+        return t('普通用户')
+    }
+  }
 
   /** 删除用户 */
   const handleDeleteUser = async (e: FormEvent) => {
@@ -211,7 +230,7 @@ export default function LoginPage() {
     }
   };
 
-  /** 修改角色（仅 user ↔ manager） */
+  /** 修改角色（仅 user / manager / warehouse） */
   const handleRoleChange = async (e: FormEvent) => {
     e.preventDefault();
     setMgmtLoading(true);
@@ -328,6 +347,9 @@ export default function LoginPage() {
                             )}
                             {u.role === 'manager' && (
                               <span className="user-list-item-badge user-list-item-badge-manager">{t('经理')}</span>
+                            )}
+                            {u.role === 'warehouse' && (
+                              <span className="user-list-item-badge user-list-item-badge-warehouse">{t('仓库')}</span>
                             )}
                           </span>
                           <span className="user-list-item-meta">
@@ -462,10 +484,11 @@ export default function LoginPage() {
                                   <label>{t('角色')}</label>
                                   <select
                                     value={newRole}
-                                    onChange={(e) => setNewRole(e.target.value as 'user' | 'manager')}
+                                    onChange={(e) => setNewRole(e.target.value as 'user' | 'manager' | 'warehouse')}
                                   >
                                     <option value="user">{t('普通用户')}</option>
                                     <option value="manager">{t('经理')}</option>
+                                    <option value="warehouse">{t('仓库')}</option>
                                   </select>
                                 </div>
                                 <div className="mgmt-action-btns">
