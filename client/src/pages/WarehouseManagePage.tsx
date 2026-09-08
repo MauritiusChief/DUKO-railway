@@ -11,7 +11,7 @@
  *    扫描记录，UI 显示影响数量并需二次确认。
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ChangeEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchWithAuth } from '../lib/fetchWithAuth';
 import { useI18n } from '../i18n/context';
@@ -44,6 +44,25 @@ interface MappingItem {
   record_count: number;
   created_at: string;
   updated_at: string;
+}
+
+/** 导入预检分析（POST /imports/validate 响应） */
+interface ImportAnalysis {
+  existingRecordCount: number;
+  existingMappingCount: number;
+  recordCount: number;
+  newCount: number;
+  identicalCount: number;
+  upgrades: number;
+  productConflicts: {
+    product: string;
+    existingModel: string;
+    existingScannedAt: string;
+    importedModel: string;
+    importedScannedAt: string;
+  }[];
+  mappingConflicts: { model: string; existingSku: string; importedSku: string }[];
+  skuCollisions: { sku: string; models: string[] }[];
 }
 
 /** 从响应中提取可读错误信息 */
@@ -94,6 +113,17 @@ export default function WarehouseManagePage() {
   } | null>(null);
   const [skuEdit, setSkuEdit] = useState<{ model: string; value: string } | null>(null);
   const [renameEdit, setRenameEdit] = useState<{ model: string; value: string } | null>(null);
+
+  // JSON 导入
+  const [importOpen, setImportOpen] = useState(false);
+  const [importMode, setImportMode] = useState<'merge' | 'replace'>('merge');
+  const [importPayload, setImportPayload] = useState<unknown>(null);
+  const [importAnalysis, setImportAnalysis] = useState<ImportAnalysis | null>(null);
+  const [productDecisions, setProductDecisions] = useState<Record<string, 'keep' | 'adopt'>>({});
+  const [mappingDecisions, setMappingDecisions] = useState<Record<string, 'keep' | 'adopt'>>({});
+  const [replaceConfirmed, setReplaceConfirmed] = useState(false);
+  const [importError, setImportError] = useState('');
+  const [importing, setImporting] = useState(false);
 
   /** 将当前时间范围选择转换为 UTC 查询边界 */
   const rangeParams = (): { from?: string; to?: string } => {
@@ -287,6 +317,89 @@ export default function WarehouseManagePage() {
       setError(t('网络错误'));
     } finally {
       setLoading(false);
+    }
+  };
+
+  // ---- JSON 导入 ----
+
+  const resetImport = () => {
+    setImportPayload(null);
+    setImportAnalysis(null);
+    setProductDecisions({});
+    setMappingDecisions({});
+    setReplaceConfirmed(false);
+  };
+
+  const handleImportFile = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setImportError('');
+    resetImport();
+    try {
+      const payload = JSON.parse(await file.text()) as unknown;
+      const res = await fetchWithAuth('/api/warehouse/imports/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ payload }),
+      });
+      const data = (await res.json()) as { analysis?: ImportAnalysis; error?: string; detail?: string };
+      if (!res.ok || !data.analysis) {
+        setImportError(data.detail || data.error || `HTTP ${res.status}`);
+        return;
+      }
+      setImportPayload(payload);
+      setImportAnalysis(data.analysis);
+    } catch (err) {
+      setImportError(err instanceof SyntaxError ? t('文件内容不是有效 JSON') : t('网络错误'));
+    }
+  };
+
+  const runImport = async () => {
+    if (!importPayload || importing) return;
+    if (importMode === 'replace' && !replaceConfirmed) return;
+    setImporting(true);
+    setImportError('');
+    try {
+      const res = await fetchWithAuth('/api/warehouse/imports', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ payload: importPayload, mode: importMode, productDecisions, mappingDecisions }),
+      });
+      const data = (await res.json()) as {
+        records?: number;
+        mappings?: number;
+        inserted?: number;
+        updated?: number;
+        skipped?: number;
+        mappingsAdded?: number;
+        mappingsUpdated?: number;
+        error?: string;
+      };
+      if (!res.ok) {
+        setImportError(data.error || `HTTP ${res.status}`);
+        return;
+      }
+      flashSuccess(
+        importMode === 'replace'
+          ? t('替换导入完成：写入 {records} 条记录、{mappings} 条映射', {
+              records: data.records ?? 0,
+              mappings: data.mappings ?? 0,
+            })
+          : t('导入完成：记录新增 {inserted}、更新 {updated}、跳过 {skipped}；映射新增 {mappingsAdded}、更新 {mappingsUpdated}', {
+              inserted: data.inserted ?? 0,
+              updated: data.updated ?? 0,
+              skipped: data.skipped ?? 0,
+              mappingsAdded: data.mappingsAdded ?? 0,
+              mappingsUpdated: data.mappingsUpdated ?? 0,
+            }),
+      );
+      resetImport();
+      await Promise.all([loadMain(), loadMappings()]);
+    } catch {
+      setImportError(t('网络错误'));
+    } finally {
+      setImporting(false);
     }
   };
 
@@ -602,6 +715,199 @@ export default function WarehouseManagePage() {
                   count: mappings.find((m) => m.model_seri_num === renameEdit.model)?.record_count ?? 0,
                 })}
               </p>
+            )}
+          </div>
+        )}
+      </section>
+
+      {/* ---- JSON 导入 ---- */}
+      <section className="wm-card">
+        <button className="wm-collapse" onClick={() => setImportOpen(!importOpen)}>
+          {importOpen ? '▾' : '▸'} {t('JSON 导入')}
+        </button>
+
+        {importOpen && (
+          <div className="wm-import">
+            <p className="wm-import-hint">{t('仅支持 warehouse-count-helper 导出的 JSON 文件')}</p>
+            <div className="wm-filter-row">
+              <input type="file" accept="application/json,.json" onChange={handleImportFile} disabled={importing} />
+              <SegSwitch
+                options={[
+                  { value: 'merge', label: t('合并') },
+                  { value: 'replace', label: t('替换') },
+                ]}
+                value={importMode}
+                onChange={(v) => {
+                  setImportMode(v);
+                  setReplaceConfirmed(false);
+                }}
+              />
+            </div>
+
+            {importError && <p className="wm-msg wm-msg-error">{importError}</p>}
+
+            {importAnalysis && (
+              <>
+                <table className="wm-table wm-import-summary">
+                  <tbody>
+                    <tr>
+                      <td>{t('记录总数')}</td>
+                      <td className="wm-num">{importAnalysis.recordCount}</td>
+                      <td>{t('新增')}</td>
+                      <td className="wm-num">{importAnalysis.newCount}</td>
+                    </tr>
+                    <tr>
+                      <td>{t('内容相同将跳过')}</td>
+                      <td className="wm-num">{importAnalysis.identicalCount}</td>
+                      <td>{t('占位映射自动升级')}</td>
+                      <td className="wm-num">{importAnalysis.upgrades}</td>
+                    </tr>
+                  </tbody>
+                </table>
+
+                {importAnalysis.productConflicts.length > 0 && (
+                  <>
+                    <h3 className="wm-card-title">{t('产品冲突')}</h3>
+                    <div className="wm-table-wrap">
+                      <table className="wm-table">
+                        <thead>
+                          <tr>
+                            <th>{t('产品序列号')}</th>
+                            <th>{t('现有')}</th>
+                            <th>{t('导入值')}</th>
+                            <th>{t('操作')}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {importAnalysis.productConflicts.map((c) => (
+                            <tr key={c.product}>
+                              <td className="wm-mono">{c.product}</td>
+                              <td className="wm-time">
+                                {c.existingModel} · {formatTime(c.existingScannedAt)}
+                              </td>
+                              <td className="wm-time">
+                                {c.importedModel} · {formatTime(c.importedScannedAt)}
+                              </td>
+                              <td className="wm-actions-cell">
+                                <label>
+                                  <input
+                                    type="radio"
+                                    checked={(productDecisions[c.product] ?? 'keep') === 'keep'}
+                                    onChange={() =>
+                                      setProductDecisions((prev) => ({ ...prev, [c.product]: 'keep' }))
+                                    }
+                                  />{' '}
+                                  {t('保留现有')}
+                                </label>
+                                <label className="wm-radio-adopt">
+                                  <input
+                                    type="radio"
+                                    checked={productDecisions[c.product] === 'adopt'}
+                                    onChange={() =>
+                                      setProductDecisions((prev) => ({ ...prev, [c.product]: 'adopt' }))
+                                    }
+                                  />{' '}
+                                  {t('采用导入')}
+                                </label>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                )}
+
+                {importAnalysis.mappingConflicts.length > 0 && (
+                  <>
+                    <h3 className="wm-card-title">{t('映射冲突')}</h3>
+                    <div className="wm-table-wrap">
+                      <table className="wm-table">
+                        <thead>
+                          <tr>
+                            <th>{t('型号序列号')}</th>
+                            <th>{t('现有')} SKU</th>
+                            <th>{t('导入值')} SKU</th>
+                            <th>{t('操作')}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {importAnalysis.mappingConflicts.map((c) => (
+                            <tr key={c.model}>
+                              <td className="wm-mono">{c.model}</td>
+                              <td className="wm-mono">{c.existingSku}</td>
+                              <td className="wm-mono">{c.importedSku}</td>
+                              <td className="wm-actions-cell">
+                                <label>
+                                  <input
+                                    type="radio"
+                                    checked={(mappingDecisions[c.model] ?? 'keep') === 'keep'}
+                                    onChange={() =>
+                                      setMappingDecisions((prev) => ({ ...prev, [c.model]: 'keep' }))
+                                    }
+                                  />{' '}
+                                  {t('保留现有')}
+                                </label>
+                                <label className="wm-radio-adopt">
+                                  <input
+                                    type="radio"
+                                    checked={mappingDecisions[c.model] === 'adopt'}
+                                    onChange={() =>
+                                      setMappingDecisions((prev) => ({ ...prev, [c.model]: 'adopt' }))
+                                    }
+                                  />{' '}
+                                  {t('采用导入')}
+                                </label>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                )}
+
+                {importAnalysis.skuCollisions.length > 0 && (
+                  <div className="wm-import-warning">
+                    <strong>{t('SKU 冲突')}</strong>
+                    {importAnalysis.skuCollisions.map((c) => (
+                      <span key={c.sku}>
+                        {c.sku}: {c.models.join(', ')}
+                      </span>
+                    ))}
+                    <span>{t('采用导入映射将导致 SKU 一对一冲突，请改为保留现有或先调整现有映射')}</span>
+                  </div>
+                )}
+
+                {importMode === 'replace' && (
+                  <div className="wm-import-danger">
+                    <p>
+                      {t('替换将清空全部仓库数据，不可恢复')}
+                      <br />
+                      {t('现有扫描记录 {records} 条、映射 {mappings} 条', {
+                        records: importAnalysis.existingRecordCount,
+                        mappings: importAnalysis.existingMappingCount,
+                      })}
+                    </p>
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={replaceConfirmed}
+                        onChange={(e) => setReplaceConfirmed(e.target.checked)}
+                      />{' '}
+                      {t('我确认清空全部数据')}
+                    </label>
+                  </div>
+                )}
+
+                <button
+                  className="wm-btn wm-btn-primary wm-import-run"
+                  disabled={importing || (importMode === 'replace' && !replaceConfirmed)}
+                  onClick={runImport}
+                >
+                  {t('执行导入')}
+                </button>
+              </>
             )}
           </div>
         )}

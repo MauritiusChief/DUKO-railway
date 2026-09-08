@@ -27,6 +27,8 @@ import {
   warehouseSummaryQuerySchema,
   warehouseUpdateMappingSchema,
   warehouseUpdateScanSchema,
+  warehouseImportValidateSchema,
+  warehouseImportApplySchema,
 } from '../validation/warehouse.js';
 import {
   createScanRecord,
@@ -38,8 +40,13 @@ import {
   renameMappingModel,
   updateMappingSku,
   updateScanRecord,
+  analyzeImport,
+  applyImportMerge,
+  applyImportReplace,
+  checkImportInternal,
   DuplicateProductSeriNumError,
   WarehouseConflictError,
+  type ImportRecordInput,
 } from '../db/warehouse.js';
 
 export const warehouseScanRouter = Router();
@@ -259,6 +266,64 @@ warehouseRouter.get('/summary', (req: Request, res: Response) => {
   }));
   res.json({ summary });
 });
+
+/** POST /api/warehouse/imports/validate —— 校验导入 JSON，返回预览与冲突清单 */
+warehouseRouter.post(
+  '/imports/validate',
+  validate(warehouseImportValidateSchema),
+  (req: Request, res: Response) => {
+    const records = (req.body as { payload: { records: ImportRecordInput[] } }).payload.records;
+
+    const internalErrors = checkImportInternal(records);
+    if (internalErrors.length > 0) {
+      res.status(400).json({ error: '导入文件内部数据不一致', detail: internalErrors.join('; ') });
+      return;
+    }
+
+    res.json({ analysis: analyzeImport(records) });
+  },
+);
+
+/** POST /api/warehouse/imports —— 按模式与决策在事务中写入；任何错误不改变现有数据 */
+warehouseRouter.post(
+  '/imports',
+  validate(warehouseImportApplySchema),
+  (req: Request, res: Response) => {
+    const { payload, mode, productDecisions, mappingDecisions } = req.body as {
+      payload: { records: ImportRecordInput[] };
+      mode: 'replace' | 'merge';
+      productDecisions?: Record<string, 'keep' | 'adopt'>;
+      mappingDecisions?: Record<string, 'keep' | 'adopt'>;
+    };
+    const records = payload.records;
+
+    const internalErrors = checkImportInternal(records);
+    if (internalErrors.length > 0) {
+      res.status(400).json({ error: '导入文件内部数据不一致', detail: internalErrors.join('; ') });
+      return;
+    }
+
+    try {
+      if (mode === 'replace') {
+        const result = applyImportReplace(records);
+        res.json({ mode, ...result });
+      } else {
+        const result = applyImportMerge(records, productDecisions ?? {}, mappingDecisions ?? {});
+        res.json({ mode, ...result });
+      }
+    } catch (err) {
+      if (err instanceof WarehouseConflictError) {
+        res.status(409).json({ error: err.message });
+        return;
+      }
+      if (isUniqueConstraintError(err)) {
+        res.status(409).json({ error: '导入数据违反唯一性约束，未写入任何数据' });
+        return;
+      }
+      res.status(500).json({ error: '导入失败，未写入任何数据' });
+    }
+  },
+);
 
 /** 判断是否为 SQLite 唯一约束冲突（如 SKU 大小写不敏感唯一） */
 function isUniqueConstraintError(err: unknown): boolean {

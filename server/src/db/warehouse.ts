@@ -361,3 +361,286 @@ export function getScanSummary(scannedFrom?: string, scannedTo?: string): ScanSu
 
   return database.prepare(sql).all(...params) as ScanSummaryItem[];
 }
+
+// ==================================================================
+//  JSON 导入 —— 原型 warehouse-count-helper 导出文件
+// ==================================================================
+
+/** 导入记录（schema 层已规范化并转换时间为 UTC ISO） */
+export interface ImportRecordInput {
+  sku?: string;
+  model: string;
+  product: string;
+  createdAt: string;
+}
+
+/** 产品序列号内容冲突（库中已有同号但型号/时间不同） */
+export interface ImportProductConflict {
+  product: string;
+  existingModel: string;
+  existingScannedAt: string;
+  importedModel: string;
+  importedScannedAt: string;
+}
+
+/** 映射 SKU 冲突（库中已有该型号的非占位映射且 SKU 不同） */
+export interface ImportMappingConflict {
+  model: string;
+  existingSku: string;
+  importedSku: string;
+}
+
+/** 按「全部采用导入映射」假设推演后仍存在的 SKU 一对一冲突（硬错误） */
+export interface ImportSkuCollision {
+  sku: string;
+  models: string[];
+}
+
+/** 导入预检分析结果 */
+export interface ImportAnalysis {
+  existingRecordCount: number;
+  existingMappingCount: number;
+  recordCount: number;
+  newCount: number;
+  identicalCount: number;
+  upgrades: number;
+  productConflicts: ImportProductConflict[];
+  mappingConflicts: ImportMappingConflict[];
+  skuCollisions: ImportSkuCollision[];
+}
+
+/** 从导入记录推导 型号 → SKU 映射；SKU 为空视为 model -> model 占位 */
+function deriveImportMappings(records: ImportRecordInput[]): Map<string, string> {
+  const mappings = new Map<string, string>();
+  for (const r of records) {
+    const sku = r.sku && r.sku.trim() ? normalizeSerial(r.sku) : r.model;
+    mappings.set(r.model, sku);
+  }
+  return mappings;
+}
+
+/** 校验导入文件内部一致性，返回错误列表（空数组 = 通过） */
+export function checkImportInternal(records: ImportRecordInput[]): string[] {
+  const errors: string[] = [];
+  const products = new Set<string>();
+  const modelSkus = new Map<string, Set<string>>();
+  const skuModels = new Map<string, Set<string>>();
+
+  for (const r of records) {
+    if (products.has(r.product)) {
+      errors.push(`产品序列号在文件中重复: ${r.product}`);
+    }
+    products.add(r.product);
+
+    const sku = r.sku && r.sku.trim() ? normalizeSerial(r.sku) : r.model;
+    if (!modelSkus.has(r.model)) modelSkus.set(r.model, new Set());
+    modelSkus.get(r.model)!.add(sku);
+    if (!skuModels.has(sku)) skuModels.set(sku, new Set());
+    skuModels.get(sku)!.add(r.model);
+  }
+
+  for (const [model, skus] of modelSkus) {
+    if (skus.size > 1) errors.push(`型号 ${model} 在文件中对应多个 SKU: ${[...skus].join(', ')}`);
+  }
+  for (const [sku, models] of skuModels) {
+    if (models.size > 1) errors.push(`SKU ${sku} 在文件中对应多个型号: ${[...models].join(', ')}`);
+  }
+  return errors;
+}
+
+/** 导入预检：对比导入数据与现有库内容，产出预览与冲突清单 */
+export function analyzeImport(records: ImportRecordInput[]): ImportAnalysis {
+  const database = getDb();
+  const derived = deriveImportMappings(records);
+
+  const existingRecordCount = (
+    database.prepare('SELECT COUNT(*) AS cnt FROM product_seri_num_records').get() as { cnt: number }
+  ).cnt;
+  const existingMappingCount = (
+    database.prepare('SELECT COUNT(*) AS cnt FROM model_seri_num_mappings').get() as { cnt: number }
+  ).cnt;
+
+  let newCount = 0;
+  let identicalCount = 0;
+  const productConflicts: ImportProductConflict[] = [];
+  for (const r of records) {
+    const existing = getScanRecord(r.product);
+    if (!existing) {
+      newCount++;
+    } else if (existing.model_seri_num === r.model && existing.scanned_at === r.createdAt) {
+      identicalCount++;
+    } else {
+      productConflicts.push({
+        product: r.product,
+        existingModel: existing.model_seri_num,
+        existingScannedAt: existing.scanned_at,
+        importedModel: r.model,
+        importedScannedAt: r.createdAt,
+      });
+    }
+  }
+
+  let upgrades = 0;
+  const mappingConflicts: ImportMappingConflict[] = [];
+  for (const [model, sku] of derived) {
+    const existing = getMappingByModel(model);
+    if (!existing || existing.sku.toUpperCase() === sku) continue;
+    if (isPlaceholderMapping(existing)) {
+      upgrades++;
+    } else {
+      mappingConflicts.push({ model, existingSku: existing.sku, importedSku: sku });
+    }
+  }
+
+  // 按「全部采用导入映射」推演最终映射状态，找出仍会破坏一对一的 SKU
+  const finalModelSku = new Map<string, string>();
+  for (const m of listMappings()) finalModelSku.set(m.model_seri_num, m.sku.toUpperCase());
+  for (const [model, sku] of derived) {
+    finalModelSku.set(model, sku);
+  }
+  const bySku = new Map<string, string[]>();
+  for (const [model, sku] of finalModelSku) {
+    if (!bySku.has(sku)) bySku.set(sku, []);
+    bySku.get(sku)!.push(model);
+  }
+  const skuCollisions: ImportSkuCollision[] = [];
+  for (const [sku, models] of bySku) {
+    if (models.length > 1) skuCollisions.push({ sku, models });
+  }
+
+  return {
+    existingRecordCount,
+    existingMappingCount,
+    recordCount: records.length,
+    newCount,
+    identicalCount,
+    upgrades,
+    productConflicts,
+    mappingConflicts,
+    skuCollisions,
+  };
+}
+
+/** 替换导入：单一事务内清空并写入两表，任何错误整体回滚 */
+export function applyImportReplace(records: ImportRecordInput[]): { mappings: number; records: number } {
+  const database = getDb();
+  const derived = deriveImportMappings(records);
+  const now = new Date().toISOString();
+
+  const insertMapping = database.prepare(`
+    INSERT INTO model_seri_num_mappings (model_seri_num, sku, created_at, updated_at)
+    VALUES (?, ?, ?, ?)
+  `);
+  const insertRecord = database.prepare(`
+    INSERT INTO product_seri_num_records (product_seri_num, model_seri_num, scanned_at)
+    VALUES (?, ?, ?)
+  `);
+
+  const tx = database.transaction(() => {
+    database.prepare('DELETE FROM product_seri_num_records').run();
+    database.prepare('DELETE FROM model_seri_num_mappings').run();
+    for (const [model, sku] of derived) {
+      insertMapping.run(model, sku, now, now);
+    }
+    for (const r of records) {
+      insertRecord.run(r.product, r.model, r.createdAt);
+    }
+    return { mappings: derived.size, records: records.length };
+  });
+
+  return tx();
+}
+
+/** 合并导入的写入结果统计 */
+export interface ImportMergeResult {
+  mappingsAdded: number;
+  mappingsUpdated: number;
+  inserted: number;
+  updated: number;
+  skipped: number;
+}
+
+/**
+ * 合并导入：内容完全相同的记录跳过；产品内容不同或映射 SKU 冲突按决策处理
+ * （'adopt' 覆盖，其余保留现有）；现有占位映射自动升级为导入 SKU。
+ * 最终映射状态违反 SKU 一对一时抛 WarehouseConflictError 并整体回滚。
+ */
+export function applyImportMerge(
+  records: ImportRecordInput[],
+  productDecisions: Record<string, 'keep' | 'adopt'>,
+  mappingDecisions: Record<string, 'keep' | 'adopt'>,
+): ImportMergeResult {
+  const database = getDb();
+  const derived = deriveImportMappings(records);
+  const now = new Date().toISOString();
+
+  const insertMapping = database.prepare(`
+    INSERT INTO model_seri_num_mappings (model_seri_num, sku, created_at, updated_at)
+    VALUES (?, ?, ?, ?)
+  `);
+  const updateMappingSkuStmt = database.prepare(`
+    UPDATE model_seri_num_mappings SET sku = ?, updated_at = ? WHERE model_seri_num = ?
+  `);
+  const insertRecord = database.prepare(`
+    INSERT INTO product_seri_num_records (product_seri_num, model_seri_num, scanned_at)
+    VALUES (?, ?, ?)
+  `);
+  const updateRecord = database.prepare(`
+    UPDATE product_seri_num_records SET model_seri_num = ?, scanned_at = ? WHERE product_seri_num = ?
+  `);
+
+  const tx = database.transaction((): ImportMergeResult => {
+    // sku → 持有该 SKU 的型号（决策落定后的最终占用状态）
+    const finalSkus = new Map<string, string>();
+    for (const m of listMappings()) finalSkus.set(m.sku.toUpperCase(), m.model_seri_num);
+
+    const claimSku = (model: string, sku: string, release: string | undefined) => {
+      const owner = finalSkus.get(sku);
+      if (owner !== undefined && owner !== model) {
+        throw new WarehouseConflictError(`SKU ${sku} 已被型号 ${owner} 占用，未写入任何数据`);
+      }
+      if (release !== undefined && release !== sku) finalSkus.delete(release);
+      finalSkus.set(sku, model);
+    };
+
+    let mappingsAdded = 0;
+    let mappingsUpdated = 0;
+    for (const [model, sku] of derived) {
+      const existing = getMappingByModel(model);
+      if (!existing) {
+        claimSku(model, sku, undefined);
+        insertMapping.run(model, sku, now, now);
+        mappingsAdded++;
+      } else if (existing.sku.toUpperCase() !== sku) {
+        if (isPlaceholderMapping(existing) || mappingDecisions[model] === 'adopt') {
+          claimSku(model, sku, existing.sku.toUpperCase());
+          updateMappingSkuStmt.run(sku, now, model);
+          mappingsUpdated++;
+        }
+        // 其余情况保留现有映射
+      }
+    }
+
+    let inserted = 0;
+    let updated = 0;
+    let skipped = 0;
+    for (const r of records) {
+      const existing = getScanRecord(r.product);
+      if (!existing) {
+        insertRecord.run(r.product, r.model, r.createdAt);
+        inserted++;
+      } else if (existing.model_seri_num === r.model && existing.scanned_at === r.createdAt) {
+        skipped++;
+      } else if (productDecisions[r.product] === 'adopt') {
+        updateRecord.run(r.model, r.createdAt, r.product);
+        updated++;
+      } else {
+        skipped++;
+      }
+    }
+
+    return { mappingsAdded, mappingsUpdated, inserted, updated, skipped };
+  });
+
+  return tx();
+}

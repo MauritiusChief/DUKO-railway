@@ -235,3 +235,58 @@
   justify-content: flex-end;
   margin-top: 12px;
 }
+
+/* ---- JSON 导入 ---- */
+
+.wm-import {
+  margin-top: 8px;
+}
+
+.wm-import-hint {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: #6b7684;
+}
+
+.wm-import-summary {
+  margin-bottom: 14px;
+}
+
+.wm-import-summary td {
+  border-bottom: 1px solid #eef1f5;
+}
+
+.wm-radio-adopt {
+  margin-left: 12px;
+}
+
+.wm-import-warning {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid #e8cfa8;
+  border-radius: 6px;
+  background: #fdf6e8;
+  color: #a56b2a;
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.wm-import-danger {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid #e5b5b0;
+  border-radius: 6px;
+  background: #fdecea;
+  color: #a4453f;
+  font-size: 13px;
+}
+
+.wm-import-danger p {
+  margin: 0 0 8px;
+}
+
+.wm-import-run {
+  margin-top: 14px;
+}

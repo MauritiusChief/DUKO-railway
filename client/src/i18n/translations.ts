@@ -816,6 +816,98 @@ export const messages = {
     zh: '重命名型号',
     en: 'Rename Model',
   },
+  'JSON 导入': {
+    zh: 'JSON 导入',
+    en: 'JSON Import',
+  },
+  '仅支持 warehouse-count-helper 导出的 JSON 文件': {
+    zh: '仅支持 warehouse-count-helper 导出的 JSON 文件',
+    en: 'Only JSON files exported by warehouse-count-helper are supported',
+  },
+  '文件内容不是有效 JSON': {
+    zh: '文件内容不是有效 JSON',
+    en: 'File content is not valid JSON',
+  },
+  合并: {
+    zh: '合并',
+    en: 'Merge',
+  },
+  替换: {
+    zh: '替换',
+    en: 'Replace',
+  },
+  执行导入: {
+    zh: '执行导入',
+    en: 'Run Import',
+  },
+  记录总数: {
+    zh: '记录总数',
+    en: 'Total Records',
+  },
+  新增: {
+    zh: '新增',
+    en: 'New',
+  },
+  内容相同将跳过: {
+    zh: '内容相同将跳过',
+    en: 'Identical (skipped)',
+  },
+  占位映射自动升级: {
+    zh: '占位映射自动升级',
+    en: 'Placeholders auto-upgraded',
+  },
+  产品冲突: {
+    zh: '产品冲突',
+    en: 'Product Conflicts',
+  },
+  映射冲突: {
+    zh: '映射冲突',
+    en: 'Mapping Conflicts',
+  },
+  现有: {
+    zh: '现有',
+    en: 'Existing',
+  },
+  导入值: {
+    zh: '导入值',
+    en: 'Imported',
+  },
+  保留现有: {
+    zh: '保留现有',
+    en: 'Keep Existing',
+  },
+  采用导入: {
+    zh: '采用导入',
+    en: 'Adopt Import',
+  },
+  'SKU 冲突': {
+    zh: 'SKU 冲突',
+    en: 'SKU Conflicts',
+  },
+  '采用导入映射将导致 SKU 一对一冲突，请改为保留现有或先调整现有映射': {
+    zh: '采用导入映射将导致 SKU 一对一冲突，请改为保留现有或先调整现有映射',
+    en: 'Adopting the imported mappings would break SKU uniqueness. Keep existing or adjust mappings first.',
+  },
+  '替换将清空全部仓库数据，不可恢复': {
+    zh: '替换将清空全部仓库数据，不可恢复',
+    en: 'Replace erases ALL warehouse data. This cannot be undone.',
+  },
+  '现有扫描记录 {records} 条、映射 {mappings} 条': {
+    zh: '现有扫描记录 {records} 条、映射 {mappings} 条',
+    en: '{records} scan records and {mappings} mappings exist',
+  },
+  '我确认清空全部数据': {
+    zh: '我确认清空全部数据',
+    en: 'I confirm erasing all data',
+  },
+  '导入完成：记录新增 {inserted}、更新 {updated}、跳过 {skipped}；映射新增 {mappingsAdded}、更新 {mappingsUpdated}': {
+    zh: '导入完成：记录新增 {inserted}、更新 {updated}、跳过 {skipped}；映射新增 {mappingsAdded}、更新 {mappingsUpdated}',
+    en: 'Import done: records +{inserted}, ~{updated}, ={skipped}; mappings +{mappingsAdded}, ~{mappingsUpdated}',
+  },
+  '替换导入完成：写入 {records} 条记录、{mappings} 条映射': {
+    zh: '替换导入完成：写入 {records} 条记录、{mappings} 条映射',
+    en: 'Replace import done: {records} records and {mappings} mappings written',
+  },
   修改角色: {
     zh: '修改角色',
     en: 'Change Role',

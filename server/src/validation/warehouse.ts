@@ -112,3 +112,44 @@ export const warehouseUpdateScanSchema = z
   .refine((v) => v.modelSeriNum !== undefined || v.newProductSeriNum !== undefined, {
     message: '至少提供型号序列号或产品序列号之一',
   });
+
+// ==================================================================
+//  JSON 导入（原型 warehouse-count-helper 导出文件）
+// ==================================================================
+
+/** 导入单条记录：model/product/createdAt 严格校验，id/updatedAt 无对应列、导入时忽略 */
+export const warehouseImportRecordSchema = z.object({
+  sku: warehouseSkuSchema.optional(),
+  model: modelSeriNumSchema,
+  product: productSeriNumSchema,
+  createdAt: z
+    .string()
+    .refine((v) => !Number.isNaN(new Date(v).getTime()), '无效的 createdAt 时间')
+    .transform((v) => new Date(v).toISOString()),
+});
+
+/** 导入根对象：app/version 固定值；formats/exportedAt 仅作元数据保留（passthrough），不用其正则替代服务端规则 */
+export const warehouseImportPayloadSchema = z
+  .object({
+    app: z.literal('warehouse-count-helper', {
+      errorMap: () => ({ message: '仅支持 warehouse-count-helper 导出的 JSON 文件' }),
+    }),
+    version: z.literal(1, {
+      errorMap: () => ({ message: '仅支持 version 1 的导出文件' }),
+    }),
+    records: z.array(warehouseImportRecordSchema).min(1, 'records 不能为空'),
+  })
+  .passthrough();
+
+/** POST /api/warehouse/imports/validate */
+export const warehouseImportValidateSchema = z.object({
+  payload: warehouseImportPayloadSchema,
+});
+
+/** POST /api/warehouse/imports —— 模式 + 经确认的冲突决策 */
+export const warehouseImportApplySchema = z.object({
+  payload: warehouseImportPayloadSchema,
+  mode: z.enum(['replace', 'merge']),
+  productDecisions: z.record(z.enum(['keep', 'adopt'])).optional(),
+  mappingDecisions: z.record(z.enum(['keep', 'adopt'])).optional(),
+});
