@@ -60,7 +60,10 @@ export default function LoginPage() {
     await login(username, password);
     const accessToken = useAuthStore.getState().accessToken;
     if (accessToken) {
-      const redirect = searchParams.get('redirect') || '/';
+      // 仓库角色默认进入扫码页，其余角色进入系统首页
+      const role = useAuthStore.getState().user?.role;
+      const fallback = role === 'warehouse' ? '/warehouse-scan' : '/';
+      const redirect = searchParams.get('redirect') || fallback;
       navigate(redirect, { replace: true });
     }
   };

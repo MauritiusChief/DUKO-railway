@@ -1,0 +1,277 @@
+/**
+ * 仓库扫码页（面向 Android Chrome 的移动端页面）
+ *
+ * 流程：点击「扫描条码」用后置相机拍一张照片 → 浏览器 BarcodeDetector 解码 →
+ * 填充本轮型号/产品序列号 → 确认录入提交服务端。
+ *
+ * 扫码规则（与计划一致）：
+ *  - 每张图片解码收集全部条码，只接受至多一个型号格式值和一个产品格式值；
+ *  - 额外条码、两个同类型有效值或格式外条码使整次扫码无效，不改变本轮状态；
+ *  - 恰好一个有效序列号且本轮两码均已填时，先清空本轮再填入本次值（开始下一件）；
+ *  - 服务端写入成功后清空本轮；重复产品序列号显示原记录摘要（不振动）。
+ *
+ * 经理/管理员在此页额外看到映射管理入口；仓库角色只能看到录入结果与待确认提示。
+ */
+
+import { useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuthStore } from '../stores/authStore';
+import { fetchWithAuth } from '../lib/fetchWithAuth';
+import { useI18n } from '../i18n/context';
+import './WarehouseScanPage.css';
+
+/** 与服务端/原型一致的固定格式（不使用导入元数据中的正则） */
+const MODEL_RE = /^[A-Z]{2}-[A-Z]{2}-\d{6}$/;
+const PRODUCT_RE = /^[A-Z]{2}-[A-Z0-9]{8}-\d{6}$/;
+
+/** 序列号规范化：trim + 大写 */
+function normalizeSerial(value: string): string {
+  return value.trim().toUpperCase();
+}
+
+/** 扫描记录（POST /scans 响应） */
+interface ScanRecord {
+  product_seri_num: string;
+  model_seri_num: string;
+  sku: string;
+  scanned_at: string;
+}
+
+type ScanPageMessage = { kind: 'success' | 'error' | 'info'; text: string };
+
+export default function WarehouseScanPage() {
+  const { t } = useI18n();
+  const user = useAuthStore((s) => s.user);
+  const navigate = useNavigate();
+
+  const [detectorState, setDetectorState] = useState<'checking' | 'ready' | 'unsupported'>('checking');
+  const detectorRef = useRef<BarcodeDetector | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [model, setModel] = useState('');
+  const [product, setProduct] = useState('');
+  const [lastSku, setLastSku] = useState<{ sku: string; placeholder: boolean } | null>(null);
+  const [duplicate, setDuplicate] = useState<{ sku: string; model: string; scannedAt: string } | null>(null);
+  const [message, setMessage] = useState<ScanPageMessage | null>(null);
+  const [scanning, setScanning] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  // feature detection 初始化 BarcodeDetector（不显示持续摄像头画面）
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!('BarcodeDetector' in globalThis)) {
+        setDetectorState('unsupported');
+        return;
+      }
+      try {
+        const formats = await BarcodeDetector.getSupportedFormats();
+        if (cancelled) return;
+        detectorRef.current = formats.length ? new BarcodeDetector({ formats }) : new BarcodeDetector();
+        setDetectorState('ready');
+      } catch {
+        if (!cancelled) setDetectorState('unsupported');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  /** 依计划应用一次解码结果（codes 已规范化） */
+  const applyCodes = (codes: string[]) => {
+    if (codes.length === 0) {
+      setMessage({ kind: 'error', text: t('未识别到条码，请对准条码后重试') });
+      return;
+    }
+
+    const models = codes.filter((c) => MODEL_RE.test(c));
+    const products = codes.filter((c) => PRODUCT_RE.test(c));
+    // 额外条码、两个同类型有效值或格式外条码 → 整次无效
+    if (models.length + products.length !== codes.length || models.length > 1 || products.length > 1) {
+      setMessage({ kind: 'error', text: t('识别到多个或不符合格式的条码，本次扫码无效') });
+      return;
+    }
+
+    const newModel = models[0];
+    const newProduct = products[0];
+    setDuplicate(null);
+
+    // 恰好一个有效序列号且两码均已填 → 清空本轮再填入（开始下一件）
+    if (codes.length === 1 && model && product) {
+      setModel(newModel ?? '');
+      setProduct(newProduct ?? '');
+      setLastSku(null);
+      setMessage({
+        kind: 'info',
+        text: newModel ? t('已扫描型号，请扫描产品条码') : t('已扫描产品，请扫描型号条码'),
+      });
+      return;
+    }
+
+    // 新值指向已占用槽位且与现值不同 → 整次无效
+    if ((newModel && model && model !== newModel) || (newProduct && product && product !== newProduct)) {
+      setMessage({ kind: 'error', text: t('与本轮已扫描内容不一致，本次扫码无效') });
+      return;
+    }
+
+    const nextModel = newModel ?? model;
+    const nextProduct = newProduct ?? product;
+    setModel(nextModel);
+    setProduct(nextProduct);
+    if (nextModel && nextProduct) {
+      setMessage({ kind: 'info', text: t('本轮已就绪，请确认录入或清空本轮') });
+    } else if (nextModel) {
+      setMessage({ kind: 'info', text: t('已扫描型号，请扫描产品条码') });
+    } else {
+      setMessage({ kind: 'info', text: t('已扫描产品，请扫描型号条码') });
+    }
+  };
+
+  const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !detectorRef.current || scanning) return;
+
+    setScanning(true);
+    setMessage(null);
+    try {
+      const bitmap = await createImageBitmap(file);
+      let codes: string[] = [];
+      try {
+        const found = await detectorRef.current.detect(bitmap);
+        codes = found.map((item) => normalizeSerial(item.rawValue)).filter(Boolean);
+      } finally {
+        bitmap.close();
+      }
+      applyCodes(codes);
+    } catch {
+      setMessage({ kind: 'error', text: t('图片处理失败，请重试') });
+    } finally {
+      setScanning(false);
+    }
+  };
+
+  const clearRound = () => {
+    setModel('');
+    setProduct('');
+    setLastSku(null);
+    setDuplicate(null);
+    setMessage(null);
+  };
+
+  const handleSubmit = async () => {
+    if (!model || !product || submitting) return;
+    setSubmitting(true);
+    setMessage(null);
+    try {
+      const res = await fetchWithAuth('/api/warehouse/scans', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ modelSeriNum: model, productSeriNum: product }),
+      });
+      const data = (await res.json()) as { record?: ScanRecord; existing?: ScanRecord; error?: string };
+
+      if (res.status === 201 && data.record) {
+        const rec = data.record;
+        const placeholder = rec.sku.toUpperCase() === rec.model_seri_num.toUpperCase();
+        setLastSku({ sku: rec.sku, placeholder });
+        setMessage({ kind: 'success', text: placeholder ? t('已保存，SKU 待确认') : t('已保存') });
+        setModel('');
+        setProduct('');
+        setDuplicate(null);
+      } else if (res.status === 409 && data.existing) {
+        // 重复：显示原记录摘要，不改变本轮状态，不振动
+        setDuplicate({
+          sku: data.existing.sku,
+          model: data.existing.model_seri_num,
+          scannedAt: data.existing.scanned_at,
+        });
+        setMessage({ kind: 'error', text: t('产品序列号已存在') });
+      } else {
+        setMessage({ kind: 'error', text: data.error || t('保存失败') });
+      }
+    } catch {
+      setMessage({ kind: 'error', text: t('网络错误') });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const canManage = user?.role === 'admin' || user?.role === 'manager';
+
+  return (
+    <div className="ws-page">
+      <div className="ws-header">
+        <h1>{t('仓库扫码')}</h1>
+        {canManage && (
+          <button className="ws-manage-link" onClick={() => navigate('/warehouse-manage')}>
+            {t('仓库管理')}
+          </button>
+        )}
+      </div>
+
+      {detectorState === 'unsupported' && (
+        <p className="ws-banner ws-banner-error">{t('此浏览器不支持条码识别，请使用 Android Chrome')}</p>
+      )}
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        hidden
+        onChange={handleFileChange}
+      />
+
+      <button
+        className="ws-scan-btn"
+        disabled={detectorState !== 'ready' || scanning || submitting}
+        onClick={() => fileInputRef.current?.click()}
+      >
+        {scanning ? t('正在识别条码...') : t('扫描条码')}
+      </button>
+
+      <div className="ws-status">
+        <div className="ws-status-row">
+          <span className="ws-status-label">{t('型号序列号')}</span>
+          <span className={`ws-status-value ${model ? '' : 'ws-status-empty'}`}>{model || '—'}</span>
+        </div>
+        <div className="ws-status-row">
+          <span className="ws-status-label">{t('产品序列号')}</span>
+          <span className={`ws-status-value ${product ? '' : 'ws-status-empty'}`}>{product || '—'}</span>
+        </div>
+        <div className="ws-status-row">
+          <span className="ws-status-label">SKU</span>
+          <span className={`ws-status-value ${lastSku ? (lastSku.placeholder ? 'ws-status-pending' : '') : 'ws-status-empty'}`}>
+            {lastSku ? (lastSku.placeholder ? `${lastSku.sku}（${t('待确认 SKU')}）` : lastSku.sku) : '—'}
+          </span>
+        </div>
+      </div>
+
+      {message && <p className={`ws-message ws-message-${message.kind}`}>{message.text}</p>}
+
+      {duplicate && (
+        <div className="ws-duplicate">
+          <strong>{t('原记录')}</strong>
+          <span>SKU: {duplicate.sku}</span>
+          <span>{t('型号序列号')}: {duplicate.model}</span>
+          <span>{t('扫描时间')}: {new Date(duplicate.scannedAt).toLocaleString()}</span>
+        </div>
+      )}
+
+      <div className="ws-actions">
+        <button
+          className="ws-submit-btn"
+          disabled={!model || !product || submitting}
+          onClick={handleSubmit}
+        >
+          {submitting ? t('保存中...') : t('确认录入')}
+        </button>
+        <button className="ws-clear-btn" onClick={clearRound} disabled={submitting}>
+          {t('清空本轮')}
+        </button>
+      </div>
+    </div>
+  );
+}
