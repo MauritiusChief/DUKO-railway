@@ -16,7 +16,7 @@
 ## 非目标
 
 - 不写入 Odoo，不修改现有库存 CSV、库存看板或 auto worker。
-- 不迁移 `experiment` 原型的 localStorage 数据。
+- 不直接读取浏览器 localStorage；原型数据只能先由原型页面导出 JSON，再导入正式系统。
 - 不引入持续显示摄像头预览、第三方扫码 SDK 或手机振动。
 - 本阶段不提供 JSON 导出、盘点任务/批次、目标数量或差异计算。
 
@@ -118,19 +118,25 @@
 
 ## JSON 导入
 
-导入只接受一个 JSON 文件，由管理页读取文件文本并提交给服务端，不新增文件上传中间件。标准结构如下：
+导入只接受 `experiment/warehouse_count_helper_cn.html` 已导出的单一 JSON 文件，由管理页读取文件文本并提交给服务端，不新增文件上传中间件。必须兼容原型实际导出的以下结构：
 
 ```json
 {
+  "app": "warehouse-count-helper",
   "version": 1,
-  "modelSeriNumMappings": [
-    { "modelSeriNum": "DK-CA-002919", "sku": "SKU-001" }
-  ],
-  "productSeriNumRecords": [
+  "exportedAt": "2026-09-08T08:30:00.000Z",
+  "formats": {
+    "model": "^[A-Z]{2}-[A-Z]{2}-\\d{6}$",
+    "product": "^[A-Z]{2}-[A-Z0-9]{8}-\\d{6}$"
+  },
+  "records": [
     {
-      "modelSeriNum": "DK-CA-002919",
-      "productSeriNum": "DK-P0016073-347836",
-      "scannedAt": "2026-09-08T08:30:00.000Z"
+      "id": "原型本地 ID",
+      "sku": "SKU-001",
+      "model": "DK-CA-002919",
+      "product": "DK-P0016073-347836",
+      "createdAt": "2026-09-08T08:30:00.000Z",
+      "updatedAt": ""
     }
   ]
 }
@@ -138,10 +144,13 @@
 
 导入流程：
 
-1. 先调用校验接口，严格验证两个序列号格式、UTC 时间、映射一对一关系、产品序列号唯一性，以及每条记录都有对应映射。
-2. 用户选择“替换”或“合并”。替换模式在完整校验通过后，于单一事务中清空并写入两表；任一错误均不改变现有数据。
-3. 合并模式跳过已存在且内容完全相同的产品序列号；产品序列号内容不同或任一型号/SKU 映射冲突时不自动覆盖，先显示冲突并要求选择保留现有或采用导入映射后再提交。
-4. 导入文件可显式包含占位映射，例如 `"sku": "DK-CA-002919"`。
+1. 校验根对象的 `app = warehouse-count-helper`、`version = 1` 和 `records` 数组；`formats`、`exportedAt` 仅作原型元数据保留，不以其中正则替代服务端固定校验规则。
+2. 对每个原型记录严格验证 `model`、`product` 和 `createdAt`；`id` 与 `updatedAt` 没有正式表对应列，导入时忽略。
+3. 从每条记录的 `sku + model` 自动推导 `model_seri_num_mappings`：`model` 写入 `model_seri_num`；有 SKU 时写入 `sku`；SKU 为空时写入 `model -> model` 占位映射。
+4. 将 `product` 写入 `product_seri_num_records.product_seri_num`，`model` 写入 `model_seri_num`，`createdAt` 原样规范化为 UTC 后写入 `scanned_at`。
+5. 在导入预检中验证推导后的型号/SKU 一对一关系、产品序列号唯一性，以及每条扫描记录都有对应映射。
+6. 用户选择“替换”或“合并”。替换模式在完整校验通过后，于单一事务中清空并写入两表；任一错误均不改变现有数据。
+7. 合并模式跳过已存在且内容完全相同的产品序列号；产品序列号内容不同或任一型号/SKU 映射冲突时不自动覆盖，先显示冲突并要求选择保留现有或采用导入映射后再提交。
 
 ## 本地 PM2 与手机测试
 
