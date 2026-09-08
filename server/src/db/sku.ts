@@ -11,6 +11,10 @@
  *
  * 索引覆盖 itemName、colorCode、shapeTypeCode、shapeSizeCode，
  * 支持常见查询模式的高效查找。
+ *
+ * 另含仓库扫码两张业务表（DDL 见文件末尾，CRUD 在 db/warehouse.ts）：
+ *   model_seri_num_mappings / product_seri_num_records，
+ * 依赖本文件启用 PRAGMA foreign_keys = ON 实现外键级联。
  */
 
 import Database from 'better-sqlite3';
@@ -28,6 +32,8 @@ export function initSkuDB(dbDir: string): void {
 
   db.pragma('journal_mode = WAL');
   db.pragma('synchronous = NORMAL');
+  // SQLite 默认关闭外键约束；仓库扫码表的外键级联（ON UPDATE CASCADE）依赖此开关
+  db.pragma('foreign_keys = ON');
 
   db.exec(`
     -- 主物品查询表（Exposed-Items.csv）
@@ -118,7 +124,33 @@ export function initSkuDB(dbDir: string): void {
       last_successful_refresh_at TEXT,
       source                     TEXT
     );
+
+    -- 仓库扫码：型号序列号 ↔ SKU 全局一对一映射。
+    -- sku === model_seri_num 时表示「待确认 SKU」的占位映射，不单设占位列。
+    -- sku 大小写不敏感唯一，保证 SKU 与型号的一对一关系。
+    CREATE TABLE IF NOT EXISTS model_seri_num_mappings (
+      model_seri_num TEXT PRIMARY KEY,
+      sku            TEXT NOT NULL COLLATE NOCASE UNIQUE,
+      created_at     TEXT NOT NULL,
+      updated_at     TEXT NOT NULL
+    );
+
+    -- 仓库扫码：产品序列号扫描记录，产品序列号全局唯一（主键覆盖重复检查）。
+    -- 型号外键 ON UPDATE CASCADE：全局重命名映射型号时级联更新关联记录；
+    -- 时间为服务端 UTC ISO-8601 字符串。
+    CREATE TABLE IF NOT EXISTS product_seri_num_records (
+      product_seri_num TEXT PRIMARY KEY,
+      model_seri_num   TEXT NOT NULL REFERENCES model_seri_num_mappings(model_seri_num) ON UPDATE CASCADE,
+      scanned_at       TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_product_records_scanned_at ON product_seri_num_records(scanned_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_product_records_model ON product_seri_num_records(model_seri_num);
   `);
+}
+
+/** 获取底层 SQLite 数据库连接（供仓库扫码等扩展数据模块使用） */
+export function getSkuDb(): Database.Database {
+  return db;
 }
 
 // ==================================================================
