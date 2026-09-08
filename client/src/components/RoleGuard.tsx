@@ -3,7 +3,7 @@
  *
  * 包裹仅限指定角色访问的页面（如库存看板仅 manager / admin）：
  *  - 未登录时重定向到 /login，并将当前路径保存为 redirect 参数
- *  - 已登录但角色不匹配时重定向到 /（系统主页面）
+ *  - 已登录但角色不匹配时重定向到 /login, 不带 redirect 参数
  *  - 通过 /api/me 从服务端确认用户角色后再渲染，防止篡改 localStorage 绕过权限
  */
 
@@ -49,7 +49,7 @@ export default function RoleGuard({ allowedRoles, children }: RoleGuardProps) {
   }
 
   if (!user || !allowedRoles.includes(user.role)) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/login" replace />;
   }
 
   return <>{children}</>;
