@@ -2,22 +2,30 @@
  * 报价单写入流程 —— 追加 / 覆写模式
  *
  * 逐行通过 quotation-table.ts 填入产品与数量，每行结果即时回调。
- * 行级失败不中断后续行；覆写模式先精确删除多余行再追加新增项。
+ * 行级失败不中断后续行；覆写模式保留型号与数量均匹配的行，
+ * 删除不在输入中的行以及数量不一致的行，再按输入重新写入。
  */
 
-import type { Page } from 'playwright'
+import type { Locator, Page } from 'playwright'
 import {
   addNewEditableRow,
   fillProductAndChooseFromMenu,
+  fillDiscount,
   fillQuantity,
+  submitEditableRow,
   deselectCurrentRow,
   removeRow,
-  removeAllRows,
   getDataRows,
   ensureTableReady,
   getDataRowCount,
 } from './quotation-table.js'
-import { DETAIL_PRODUCT_CELL } from './selectors.js'
+import {
+  DETAIL_PRODUCT_CELL,
+  DETAIL_QUANTITY_CELL,
+  DETAIL_DISCOUNT_CELL,
+  QUOTATION_TABLE,
+  QUOTATION_DATA_ROW,
+} from './selectors.js'
 
 export interface WriteLineResult {
   lineNo: number
@@ -25,9 +33,17 @@ export interface WriteLineResult {
   error?: string
 }
 
+export interface WriteInputLine {
+  lineNo: number
+  partModel: string
+  quantity: number
+  /** 折扣百分比（%）—— undefined 表示不指定，不读取也不写入 Odoo 折扣 */
+  discount?: number
+}
+
 export interface WriteInput {
   mode: 'overwrite' | 'append'
-  lines: { lineNo: number; partModel: string; quantity: number }[]
+  lines: WriteInputLine[]
   onLineResult: (result: WriteLineResult) => Promise<void>
 }
 
@@ -69,11 +85,17 @@ async function appendLines(
         continue
       }
 
-      // autocomplete 选定后可能需要短暂等待 Odoo 重建选中行
-      // 如果当前所在行的 product cell 已被填充且不再 editable，说明产品已成功写入
+      // 填写步骤只负责填值：先数量、后折扣（Odoo 每次修改 qty 都会清空已填折扣）。
+      // 提交统一由 submitEditableRow 按 Enter 完成；提交会附带自动新增一行，
+      // 因此随后用 deselectCurrentRow 取消选中。
       await fillQuantity(newRow, line.quantity)
+      if (line.discount !== undefined) {
+        await fillDiscount(newRow, line.discount)
+      }
+      await submitEditableRow(newRow)
       await deselectCurrentRow(page)
 
+      // 不再逐行校验折扣：写入结果由最终整表校验统一判定（见 browser.ts）
       await input.onLineResult({
         lineNo: line.lineNo,
         status: 'success',
@@ -92,45 +114,68 @@ async function appendLines(
   }
 }
 
-/** 覆写模式：精确删除多余行后追加新增项 */
+/** 覆写模式：保留型号与数量均匹配的行；指定折扣时折扣也必须一致，
+ *  其余行删除后按输入重新写入。CSV 未指定折扣的输入行不检查 Odoo 现有折扣。 */
 async function overwriteLines(
   page: Page,
   input: WriteInput,
 ): Promise<void> {
-  // 1. 读取已有行的产品型号集合
-  const existingProducts = await readExistingProductNames(page)
-  const newProductSet = new Set(input.lines.map((l) => l.partModel))
+  // 1. 目标型号 -> 期望 {数量, 折扣?}
+  const target = new Map<string, { quantity: number; discount?: number }>()
+  for (const line of input.lines) target.set(line.partModel, { quantity: line.quantity, discount: line.discount })
 
-  // 2. 删除不在新集合中的行
-  const rows = await getDataRows(page)
-  for (const row of rows) {
-    const productName = await readProductFromRow(row)
-    if (productName && !newProductSet.has(productName)) {
-      const beforeCount = await getDataRowCount(page)
-      await removeRow(row)
-      // 等待行数减少
-      try {
-        await page.waitForFunction(
-          ({ sel, expected }: { sel: string; expected: number }) =>
-            document.querySelectorAll(sel).length <= expected - 1,
-          { sel: `${await getTableSel(page)} ${'tbody tr.o_data_row'}`, expected: beforeCount },
-          { timeout: 10_000 },
-        )
-      } catch { /* ignore */ }
+  // 2. 循环删除：型号不在目标集合、数量不一致，或指定折扣但现有折扣不一致的行。
+  //    每轮重查当前行、删最靠前的待删行后从头再扫，
+  //    避免删除导致后续行索引上移而漏删。
+  const dataRowSel = `${QUOTATION_TABLE} ${QUOTATION_DATA_ROW}`
+  let guard = 0
+  while (guard++ < 200) {
+    const rows = await getDataRows(page)
+    let targetRow: Locator | null = null
+    for (const row of rows) {
+      const { name, quantity, discount } = await readRowState(row)
+      if (!name) continue
+      const want = target.get(name)
+      if (
+        want === undefined ||
+        !sameQuantity(quantity, want.quantity) ||
+        (want.discount !== undefined && !sameDiscount(discount, want.discount))
+      ) {
+        targetRow = row
+        break
+      }
     }
+    if (!targetRow) break
+
+    const beforeCount = await getDataRowCount(page)
+    await removeRow(targetRow)
+    // 等待行数减少
+    try {
+      await page.waitForFunction(
+        ({ sel, expected }: { sel: string; expected: number }) =>
+          document.querySelectorAll(sel).length <= expected - 1,
+        { sel: dataRowSel, expected: beforeCount },
+        { timeout: 10_000 },
+      )
+    } catch { /* 行数未在超时内减少，下一轮重查 */ }
   }
 
-  // 3. 找出需要新增的项（新输入中有、已有列表中无）
-  const existingSet = new Set(existingProducts)
-  const linesToAdd = input.lines.filter((l) => !existingSet.has(l.partModel))
+  // 3. 重读存活行得到保留集合；不在集合中的输入行按 append 模式重写
+  //    （数量或折扣不一致的行已在第 2 步删除，此处会按新值重新写入）
+  const keptProducts = new Set<string>()
+  for (const row of await getDataRows(page)) {
+    const { name } = await readRowState(row)
+    if (name) keptProducts.add(name)
+  }
 
+  const linesToAdd = input.lines.filter((l) => !keptProducts.has(l.partModel))
   if (linesToAdd.length > 0) {
     await appendLines(page, { ...input, lines: linesToAdd })
   }
 
-  // 4. 对已存在的行（未删除的），标记为成功
+  // 4. 保留行（型号、数量、指定折扣均匹配）按输入序报成功
   for (const line of input.lines) {
-    if (existingSet.has(line.partModel)) {
+    if (keptProducts.has(line.partModel)) {
       await input.onLineResult({
         lineNo: line.lineNo,
         status: 'success',
@@ -139,26 +184,38 @@ async function overwriteLines(
   }
 }
 
-/** 从已保存行读取 product 名称 */
-async function readProductFromRow(row: import('playwright').Locator): Promise<string> {
-  const cell = row.locator(DETAIL_PRODUCT_CELL)
-  const cnt = await cell.count()
-  if (cnt === 0) return ''
-  return ((await cell.textContent()) ?? '').trim()
+/** 从已保存行读取 {产品型号, 数量文本, 折扣} */
+async function readRowState(
+  row: Locator,
+): Promise<{ name: string; quantity: string; discount?: number }> {
+  const productCell = row.locator(DETAIL_PRODUCT_CELL)
+  if ((await productCell.count()) === 0) return { name: '', quantity: '', discount: undefined }
+  const name = ((await productCell.textContent()) ?? '').trim()
+
+  const qtyCell = row.locator(DETAIL_QUANTITY_CELL)
+  const quantity = (await qtyCell.count()) > 0
+    ? ((await qtyCell.textContent()) ?? '').trim()
+    : ''
+
+  return { name, quantity, discount: await readDiscountFromRow(row) }
 }
 
-/** 读取当前表格中所有已有行的产品型号 */
-async function readExistingProductNames(page: Page): Promise<string[]> {
-  const rows = await getDataRows(page)
-  const names: string[] = []
-  for (const row of rows) {
-    const name = await readProductFromRow(row)
-    if (name) names.push(name)
-  }
-  return names
+/** 从已保存行读取折扣百分比（单元格不存在或无法解析时返回 undefined） */
+async function readDiscountFromRow(row: Locator): Promise<number | undefined> {
+  const cell = row.locator(DETAIL_DISCOUNT_CELL)
+  if ((await cell.count()) === 0) return undefined
+  const text = ((await cell.textContent()) ?? '').trim()
+  const parsed = Number.parseFloat(text)
+  return Number.isFinite(parsed) ? parsed : undefined
 }
 
-async function getTableSel(page: Page): Promise<string> {
-  // 使用 QUOTATION_TABLE 选择器
-  return 'div.o_field_widget.o_field_section_and_note_one2many table.o_section_and_note_list_view'
+/** 比较已保存行数量文本与期望数值是否一致（"1.00" 与 1 视为相等） */
+function sameQuantity(domText: string, want: number): boolean {
+  const parsed = Number.parseFloat(domText)
+  return Number.isFinite(parsed) && parsed === want
+}
+
+/** 比较已保存折扣与期望数值是否一致（"10.00" 与 10 视为相等） */
+function sameDiscount(saved: number | undefined, want: number): boolean {
+  return saved !== undefined && Number.isFinite(saved) && saved === want
 }

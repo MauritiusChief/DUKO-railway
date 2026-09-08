@@ -10,6 +10,8 @@ import {
   PRODUCT_AUTOCOMPLETE_MENU_SELECTOR,
   PRODUCT_AUTOCOMPLETE_ITEM_SELECTOR,
   EDITABLE_QUANTITY_INPUT_SELECTOR,
+  EDITABLE_DISCOUNT_INPUT_SELECTOR,
+  DETAIL_DISCOUNT_CELL_SELECTOR,
   ADD_PRODUCT_LINK_SELECTOR,
   REMOVE_ROW_BUTTON_SELECTOR,
   SELECT_CANCELLING,
@@ -168,11 +170,30 @@ export async function fillProduct(row: Element, model: string): Promise<boolean>
   return true;
 }
 
-// ---- 8. 填入数量 ----
+// ---- 8. 填入折扣 ----
+
+/**
+ * 在当前选中行填入折扣百分比。
+ * 不按 Enter，由后续提交步骤统一提交（避免提前结束编辑态）。
+ */
+export async function fillDiscount(row: Element, discount: number): Promise<void> {
+  const input = row.querySelector(EDITABLE_DISCOUNT_INPUT_SELECTOR) as HTMLInputElement | null;
+  if (!input) {
+    console.warn('[fillDiscount] 找不到可编辑的折扣输入框');
+    return;
+  }
+
+  input.scrollIntoView({ block: 'center' });
+  input.focus();
+  input.select();
+  document.execCommand('insertText', false, String(discount));
+}
+
+// ---- 9. 填入数量 ----
 
 /**
  * 在当前选中行填入数量。
- * 填入后按 Enter 提交（Odoo 行编辑依赖 Enter 确认）。
+ * 只填值，不提交。Odoo 每次修改数量都会清空已填折扣，因此必须先填数量。
  */
 export async function fillQuantity(row: Element, quantity: number): Promise<void> {
   const input = row.querySelector(EDITABLE_QUANTITY_INPUT_SELECTOR) as HTMLInputElement | null;
@@ -185,8 +206,19 @@ export async function fillQuantity(row: Element, quantity: number): Promise<void
   input.focus();
   input.select();
   document.execCommand('insertText', false, String(quantity));
+}
 
-  // 按 Enter 确认（Odoo 依赖此事件完成行保存）
+/** 在数量输入框按 Enter 提交当前行。 */
+export function submitEditableRow(row: Element): void {
+  const input = row.querySelector(EDITABLE_QUANTITY_INPUT_SELECTOR) as HTMLInputElement | null;
+  if (!input) {
+    console.warn('[submitEditableRow] 找不到可编辑的数量输入框');
+    return;
+  }
+
+  input.focus();
+
+  // Odoo 行编辑依赖 Enter 确认。
   input.dispatchEvent(
     new KeyboardEvent('keydown', {
       bubbles: true,
@@ -197,7 +229,7 @@ export async function fillQuantity(row: Element, quantity: number): Promise<void
   );
 }
 
-// ---- 9. 取消选中 ----
+// ---- 10. 取消选中 ----
 
 /**
  * 点击标题区域失焦，让当前编辑行退出 o_selected_row 状态。
@@ -208,7 +240,7 @@ export function deselectCurrentRow(): void {
   canceller?.click();
 }
 
-// ---- 10. 编排写入 ----
+// ---- 11. 编排写入 ----
 
 /**
  * 主入口：将零件列表逐行追加到 Odoo quotation 表格末尾。
@@ -262,10 +294,15 @@ export async function writePartsToQuotation(
       // 动态等待选中行被 Odoo 重新确认（autocomplete 选定后行可能被重建）
       await waitForSelector(QUOTATION_SELECTED_ROW_SELECTOR, 3000);
 
-      // c. 填入数量
+      // c. 先填数量、再填折扣（如指定）、最后统一提交。
+      // Odoo 修改数量会清空当前行已有折扣，因此折扣必须在数量之后填写。
       const filledRow = getSelectedRow();
       if (filledRow) {
         await fillQuantity(filledRow, part.quantity);
+        if (part.discount !== undefined) {
+          await fillDiscount(filledRow, part.discount);
+        }
+        submitEditableRow(filledRow);
         successCount++;
       } else {
         unfilledParts.push(part);
@@ -294,7 +331,7 @@ export async function writePartsToQuotation(
   return { successCount, unfilledParts };
 }
 
-// ---- 11. 读取已有行产品型号 ----
+// ---- 12. 读取已有行产品型号 ----
 
 /**
  * 从当前 Odoo quotation 表格的已有行中提取产品型号列表。
@@ -310,31 +347,38 @@ export function getExistingProducts(): string[] {
     .filter(Boolean);
 }
 
-// ---- 12. 覆写模式 ----
+// ---- 13. 覆写模式 ----
 
 /**
  * 覆写模式入口：对比已有 Odoo 列表与新输入，精确删除多余行后在末尾追加新内容。
  *
  * 流程：
  * 1. 读取已有行的产品型号
- * 2. 删除模型中不在新输入列表里的行（精确字符串匹配）
+ * 2. 删除型号不在新输入列表里的行，以及指定折扣但现有折扣不一致的行（精确匹配）
  * 3. 把新输入中有、但已有列表中无的项追加到表格末尾
+ *
+ * 注意：对未指定折扣的输入行，沿用原行为——保留已有匹配行且不读取、不清零其折扣。
  */
 export async function overwriteQuotation(
   parts: WrittenPart[],
 ): Promise<WriteResult> {
   await ensureTableReady();
 
-  // 1. 读取已有产品型号
-  const existingProducts = getExistingProducts();
-  const newProductSet = new Set(parts.map((p) => p.partModel));
+  const newMap = new Map(parts.map((p) => [p.partModel, p]));
 
-  // 2. 删除不在新列表中的行
+  // 2. 删除：型号不在新列表中，或指定折扣但现有折扣不一致的行
   const rows = getDataRows();
   for (const row of rows) {
     const productCell = row.querySelector(PRODUCT_CELL_SELECTOR);
     const productName = (productCell?.textContent ?? '').trim();
-    if (productName && !newProductSet.has(productName)) {
+    if (!productName) continue;
+    const want = newMap.get(productName);
+    let shouldRemove = !want;
+    if (want && want.discount !== undefined) {
+      const saved = readDiscountFromRow(row);
+      if (saved === undefined || saved !== want.discount) shouldRemove = true;
+    }
+    if (shouldRemove) {
       const countBefore = getDataRows().length;
       removeRow(row);
       // 动态等待数据行数减少
@@ -342,9 +386,10 @@ export async function overwriteQuotation(
     }
   }
 
-  // 3. 找出只在新输入中但不在已有列表中的项
+  // 3. 保留行（未被删除的）视为已写入；不在保留列表中的输入行追加
+  const keptProducts = new Set(getExistingProducts());
   const partsToAdd = parts.filter(
-    (p) => !existingProducts.includes(p.partModel),
+    (p) => !keptProducts.has(p.partModel),
   );
 
   if (partsToAdd.length === 0) {
@@ -356,4 +401,12 @@ export async function overwriteQuotation(
 
   // 4. 追加新项
   return writePartsToQuotation(partsToAdd);
+}
+
+/** 从已保存行读取折扣百分比（无折扣单元格或无法解析时返回 undefined） */
+function readDiscountFromRow(row: Element): number | undefined {
+  const cell = row.querySelector(DETAIL_DISCOUNT_CELL_SELECTOR);
+  if (!cell) return undefined;
+  const parsed = Number.parseFloat((cell.textContent ?? '').trim());
+  return Number.isFinite(parsed) ? parsed : undefined;
 }

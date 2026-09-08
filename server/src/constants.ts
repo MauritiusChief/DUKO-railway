@@ -4,7 +4,28 @@ export const AMERICAN_STYLE_CODES = ["14", "15", "16", "17", "25", "27", "28", "
 export const EUROPEAN_STYLE_CODES = ["32", "37", "38", "42", "34", "52", "54", "60"]
 export const UNIPACK_STYLE_CODES  = ["02", "04"]
 
-export const DISCOUNT_STYLE_CODES = ['02', '04', '15', '16', '27', '29']
+/** 最终产品型号颜色前缀 → 折扣百分比（%） */
+export const COLOR_DISCOUNT_PERCENT: Record<string, number> = {
+  '02': 10,
+  '04': 10,
+  '11': 10,
+  '15': 15,
+  '16': 15,
+  '27': 15,
+  '29': 15,
+}
+
+/**
+ * 根据最终输出产品型号推导折扣百分比。
+ * 规则：取型号前两位作为颜色代码查 COLOR_DISCOUNT_PERCENT；
+ * 10/30 柜体、无颜色前缀或不在映射中的颜色一律不打折（返回 undefined）。
+ * 该判断在 sharedPartName（最终产品型号）之上执行，因此 29→02 等
+ * 重映射后的最终产品按其实际输出型号的折扣档位处理。
+ */
+export function getDiscountPercent(productName: string): number | undefined {
+  const prefix = productName.substring(0, 2);
+  return COLOR_DISCOUNT_PERCENT[prefix];
+}
 
 export const NONE_EURO_STYLE_CODES = [...AMERICAN_STYLE_CODES, ...UNIPACK_STYLE_CODES]
 
@@ -51,11 +72,8 @@ export const ACCESSORY_SHAPE_TYPE_CODES = [
   "GD",
 ];
 
-// 换色配件：在 /generate-products 步骤中，将指定颜色的配件重映射到参考颜色
-// 29 (美式) 使用 02 的配件，32 (欧式) 使用 12 的配件
-export const NONE_EURO_COLOR_MAPPED_SHAPE_TYPE_CODES = new Set(['CM', 'ACM', 'CCM', 'OCM', 'PNL', 'SK', 'SM', 'TK', 'BM']);
-export const EURO_COLOR_MAPPED_SHAPE_TYPE_CODES = new Set(['CM', 'ACM', 'CCM', 'OCM', 'SM', 'TK', 'BM']);
-export const ACCESSORY_COLOR_REMAP: Record<string, string> = { '29': '02', '32': '12' };
+// 颜色重映射规则已迁移至 services/sku-derive.ts 的 COLOR_REMAP_RULES，
+// 在 Parts 表层面将源色件（29/32）解析到目标色件（02/12）。
 
 // Shape types whose color field can be N/A (not tied to any specific color/finish)
 export const SHAPE_TYPES_COLOR_NA = new Set([

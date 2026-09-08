@@ -33,7 +33,7 @@ import { findComboExists, findRecordByItemNameCI, getItemRow, getPartRow, getAll
 import { insertRecord } from '../db/users.js';
 import { insertTraceSession, markSessionCompleted, markSessionError } from '../services/trace.js';
 import type { TraceContext } from '../types/trace.js';
-import { ACCESSORY_SHAPE_TYPE_CODES, SHAPE_TYPES_COLOR_NA, SHAPE_TYPES_SIZE_NA, NONE_EURO_COLOR_MAPPED_SHAPE_TYPE_CODES, EURO_COLOR_MAPPED_SHAPE_TYPE_CODES, ACCESSORY_COLOR_REMAP } from '../constants.js';
+import { ACCESSORY_SHAPE_TYPE_CODES, SHAPE_TYPES_COLOR_NA, SHAPE_TYPES_SIZE_NA, getDiscountPercent } from '../constants.js';
 
 export const tableParseRouter = Router();
 
@@ -104,6 +104,8 @@ interface ProductEntry {
   productName: string;
   description: string;
   quantity: number;
+  /** 折扣百分比（%）—— 按最终产品型号颜色前缀推导；不打折时省略 */
+  discount?: number;
 }
 
 tableParseRouter.post('/generate-products', validate(generateProductsSchema), (_req: Request, res: Response) => {
@@ -114,8 +116,8 @@ tableParseRouter.post('/generate-products', validate(generateProductsSchema), (_
     return;
   }
 
-  // sharedPartName → quantity 聚合
-  const productQtyMap = new Map<string, ProductEntry>();
+  // 未聚合的产品列表：每个 item 每个零件一条，顺序与 items 一致（同一 item 的零件连续）
+  const products: ProductEntry[] = [];
   const unresolvedIndices: number[] = [];
 
   for (let i = 0; i < items.length; i++) {
@@ -148,19 +150,11 @@ tableParseRouter.post('/generate-products', validate(generateProductsSchema), (_
     const typeStr = typeVals[0].toUpperCase();
     const sizeStr = sizeIsNA ? '' : sizeVals[0].toUpperCase();
 
-    // 换色配件：29→02, 32→12
-    let effectiveColorStr = colorStr;
-    if (typeStr && colorStr && ACCESSORY_COLOR_REMAP[colorStr]) {
-      const targetColor = ACCESSORY_COLOR_REMAP[colorStr];
-      if (targetColor === '02' && NONE_EURO_COLOR_MAPPED_SHAPE_TYPE_CODES.has(typeStr)) {
-        effectiveColorStr = targetColor;
-      } else if (targetColor === '12' && EURO_COLOR_MAPPED_SHAPE_TYPE_CODES.has(typeStr)) {
-        effectiveColorStr = targetColor;
-      }
-    }
+    // 颜色重映射（29→02, 32→12 等）已下沉到 Parts 表层，由 sku-derive.ts 的 COLOR_REMAP_RULES 处理。
+    // 此处直接用原始颜色码构建 itemName，源色件会通过 getPartRow 解析到目标色 sharedPartName。
 
     // 特殊处理GD
-    let itemName = typeStr === 'GD' ? 'Glass Doors' : (effectiveColorStr + typeStr + sizeStr);
+    let itemName = typeStr === 'GD' ? 'Glass Doors' : (colorStr + typeStr + sizeStr);
 
     const qty = typeof row.quantity === 'number' && row.quantity > 0 ? Math.round(row.quantity) : 1;
 
@@ -201,17 +195,14 @@ tableParseRouter.post('/generate-products', validate(generateProductsSchema), (_
       for (const partName of partNames) {
         const partRow = getPartRow(partName);
         const sharedPartName = partRow?.sharedPartName || partName;
+        const discount = getDiscountPercent(sharedPartName);
 
-        const existing = productQtyMap.get(sharedPartName);
-        if (existing) {
-          existing.quantity += qty;
-        } else {
-          productQtyMap.set(sharedPartName, {
-            productName: sharedPartName,
-            description: partRow?.description || '',
-            quantity: qty,
-          });
-        }
+        products.push({
+          productName: sharedPartName,
+          description: partRow?.description || '',
+          quantity: qty,
+          ...(discount !== undefined ? { discount } : {}),
+        });
       }
 
       resolvedCount++;
@@ -224,7 +215,7 @@ tableParseRouter.post('/generate-products', validate(generateProductsSchema), (_
   }
 
   // 从 items 表中找出所有配件 shapeType 对应的 sharedPartName，
-  // 用于将配件产品排在最终结果末尾
+  // 作为全目录配件集合返回，供前端在复制 CSV/创建报价时聚合排序（配件排末尾）
   const accSharedParts = new Set<string>();
   for (const itemRow of getAllItemRows()) {
     if (ACCESSORY_SHAPE_TYPE_CODES.includes(itemRow.shapeTypeCode)) {
@@ -238,16 +229,9 @@ tableParseRouter.post('/generate-products', validate(generateProductsSchema), (_
     }
   }
 
-  // 排序：非配件在前、配件在后；同组内按 productName 字母排序
-  const products = [...productQtyMap.values()].sort((a, b) => {
-    const aIsAcc = accSharedParts.has(a.productName) ? 1 : 0;
-    const bIsAcc = accSharedParts.has(b.productName) ? 1 : 0;
-    if (aIsAcc !== bIsAcc) return aIsAcc - bIsAcc;
-    return a.productName.localeCompare(b.productName);
-  });
-
   res.json({
     products,
+    accessoryProductNames: Array.from(accSharedParts),
     unresolvedCount: unresolvedIndices.length,
     unresolvedIndices,
   });
@@ -326,6 +310,10 @@ tableParseLlmRouter.post('/', validate(tableParseSchema), async (req: Request, r
       } else if (event.type === 'round_start') {
         sse.send('round_start', { round: event.round });
       }
+    },
+    /** 清单被 LLM 工具修改后，立即推送新快照给前端 */
+    onItemsUpdated: (items) => {
+      sse.send('result', { items });
     },
   });
 

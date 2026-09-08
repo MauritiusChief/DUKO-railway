@@ -75,6 +75,26 @@ function applyStatusToItems(items: ParsedItem[], results: (boolean | null)[]): P
   });
 }
 
+/** 按 productName 合并数量，配件排末尾，同组按名称字母序排序 */
+function aggregateAndSort(products: ProductEntry[], accessoryProductNames: string[]): ProductEntry[] {
+  const accSet = new Set(accessoryProductNames);
+  const map = new Map<string, ProductEntry>();
+  for (const p of products) {
+    const existing = map.get(p.productName);
+    if (existing) {
+      existing.quantity += p.quantity;
+    } else {
+      map.set(p.productName, { ...p });
+    }
+  }
+  return [...map.values()].sort((a, b) => {
+    const aIsAcc = accSet.has(a.productName) ? 1 : 0;
+    const bIsAcc = accSet.has(b.productName) ? 1 : 0;
+    if (aIsAcc !== bIsAcc) return aIsAcc - bIsAcc;
+    return a.productName.localeCompare(b.productName);
+  });
+}
+
 interface TableParseState {
   /** 用户粘贴的清单文本 */
   input: string;
@@ -88,8 +108,12 @@ interface TableParseState {
   loading: boolean;
   /** 请求错误信息 */
   error: string;
+  /** 是否通过历史记录自动恢复了本次解析结果（显示恢复提示用） */
+  fromHistoryRestored: boolean;
   /** 生成的产品列表 */
   products: ProductEntry[];
+  /** 全目录配件 sharedPartName 集合（导出聚合排序时用于把配件排末尾） */
+  accessoryProductNames: string[];
   /** 是否正在生成产品 */
   productsLoading: boolean;
   /** 未解析的行数 */
@@ -133,6 +157,8 @@ interface TableParseState {
   ) => void;
   /** 删除某一行 */
   removeItem: (index: number) => void;
+  /** 手动添加一个空行（所有字段为空，数量为 1，status 为 missing） */
+  addEmptyItem: () => void;
   /** 重新检查所有行的 Exposed-Items 匹配状态（blur 后调用） */
   checkExposedItems: () => Promise<void>;
   /** 生成产品清单 */
@@ -195,7 +221,9 @@ export const useTableParseStore = create<TableParseState>((set, get) => {
   items: cached,
   loading: false,
   error: '',
+  fromHistoryRestored: false,
   products: [],
+  accessoryProductNames: [],
   productsLoading: false,
   unresolvedCount: 0,
   unresolvedIndices: [],
@@ -253,7 +281,7 @@ export const useTableParseStore = create<TableParseState>((set, get) => {
     if (!input.trim() || get().loading) return;
 
     const lineCount = input.split('\n').filter((l) => l.trim()).length;
-    set({ items: [], loading: true, error: '', parseInputLineCount: lineCount });
+    set({ items: [], loading: true, error: '', fromHistoryRestored: false, parseInputLineCount: lineCount });
 
     // 通知 ChatPanel：解析开始（附带行数和已勾选颜色代码，供 rich parse_start 消息使用）
     parseEventCallback?.({ type: 'parse_start', data: {
@@ -340,9 +368,37 @@ export const useTableParseStore = create<TableParseState>((set, get) => {
       parseEventCallback?.({ type: 'done', data: {} });
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : `请求失败，请检查网络连接。${tOutside('联系支持')}`;
-      parseEventCallback?.({ type: 'error', data: { message: errMsg } });
-      set({ error: errMsg, loading: false });
-      parseEventCallback?.({ type: 'done', data: {} });
+
+      // 自动从最新历史记录恢复（仅当 input 完全匹配时）
+      let recovered = false;
+      try {
+        const historyRes = await fetchWithAuth('/api/htory');
+        if (historyRes.ok) {
+          const records: { id: number }[] = await historyRes.json();
+          if (records.length > 0) {
+            const detailRes = await fetchWithAuth(`/api/htory/${records[0].id}`);
+            if (detailRes.ok) {
+              const detail: { input: string; items: ParsedItem[]; colorHints: string[]; conversation: ConversationEntry[] } = await detailRes.json();
+              if (detail.input && detail.input.trim() === input.trim()) {
+                get().replaceItems(detail.items);
+                get().setColorHints(detail.colorHints);
+                get().setFillConversation(detail.conversation);
+                set({ error: '', loading: false, fromHistoryRestored: true });
+                parseEventCallback?.({ type: 'done', data: {} });
+                recovered = true;
+              }
+            }
+          }
+        }
+      } catch {
+        // 恢复失败，静默
+      }
+
+      if (!recovered) {
+        parseEventCallback?.({ type: 'error', data: { message: errMsg } });
+        set({ error: errMsg, loading: false });
+        parseEventCallback?.({ type: 'done', data: {} });
+      }
     }
   },
 
@@ -490,11 +546,29 @@ export const useTableParseStore = create<TableParseState>((set, get) => {
     newItems.splice(index, 1);
 
     // 清除已生成的产品列表（表格已变化，旧产品列表失效）
-    set({ items: newItems, products: [], unresolvedCount: 0, unresolvedIndices: [] });
+    set({ items: newItems, products: [], accessoryProductNames: [], unresolvedCount: 0, unresolvedIndices: [] });
     syncToStorage(newItems);
 
     // 删除后重新检查 Exposed-Items 匹配状态
     get().checkExposedItems();
+  },
+
+  /** 手动添加一个空行：所有字段为空，数量为 1，status 为 missing。
+   *  不触发 Exposed-Items 检查（空行无有效字段），等待用户自行填写。
+   *  与删除行一致：清空已生成的产品和未解析统计。 */
+  addEmptyItem: () => {
+    const { items } = get();
+    const emptyItem: ParsedItem = {
+      originalName: '',
+      color: { values: [] },
+      shapeType: { values: [] },
+      shapeSize: { values: [] },
+      quantity: 1,
+      status: 'missing',
+    };
+    const newItems = [...items, emptyItem];
+    set({ items: newItems, products: [], accessoryProductNames: [], unresolvedCount: 0, unresolvedIndices: [], resultCollapsed: false });
+    syncToStorage(newItems);
   },
 
   /** 根据当前编辑后的表格生成 DUKO 产品清单。
@@ -504,7 +578,7 @@ export const useTableParseStore = create<TableParseState>((set, get) => {
     const { items, productsLoading } = get();
     if (items.length === 0 || productsLoading) return;
 
-    set({ productsLoading: true, products: [], unresolvedCount: 0, unresolvedIndices: [] });
+    set({ productsLoading: true, products: [], accessoryProductNames: [], unresolvedCount: 0, unresolvedIndices: [] });
 
     try {
       const res = await fetchWithAuth('/api/generate-products', {
@@ -524,6 +598,7 @@ export const useTableParseStore = create<TableParseState>((set, get) => {
       const data: GenerateProductsResponse = await res.json();
       set({
         products: data.products,
+        accessoryProductNames: data.accessoryProductNames,
         unresolvedCount: data.unresolvedCount,
         unresolvedIndices: data.unresolvedIndices,
         productsLoading: false,
@@ -555,10 +630,13 @@ export const useTableParseStore = create<TableParseState>((set, get) => {
     }
   },
 
-  /** 将当前产品清单转为 CSV 字符串（productName,quantity） */
+  /** 将当前产品清单聚合（按 productName 合并数量）、配件排末尾后转为 CSV（productName,quantity,discount；无折扣时第三列留空） */
   getProductsCsv: () => {
-    const { products } = get();
-    return 'productName,quantity\n' + products.map((p) => `${p.productName},${p.quantity}`).join('\n');
+    const { products, accessoryProductNames } = get();
+    const aggregated = aggregateAndSort(products, accessoryProductNames);
+    return 'productName,quantity,discount\n' + aggregated
+      .map((p) => `${p.productName},${p.quantity},${p.discount ?? ''}`)
+      .join('\n');
   },
 
   /** 复制产品 CSV 到剪贴板，并设置 copySuccess 标志（2 秒后自动重置） */
@@ -605,7 +683,7 @@ export const useTableParseStore = create<TableParseState>((set, get) => {
 
   /** 从外部加载解析结果（文件导入或其它来源），同步写入 localStorage */
   loadArchiveData: (items) => {
-    set({ items, products: [], unresolvedCount: 0, unresolvedIndices: [],
+    set({ items, products: [], accessoryProductNames: [], unresolvedCount: 0, unresolvedIndices: [],
           resultCollapsed: false, productsCollapsed: false, fromImage: false });
     syncToStorage(items);
   },

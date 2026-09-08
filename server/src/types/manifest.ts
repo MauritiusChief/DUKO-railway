@@ -38,6 +38,8 @@ export interface ProductEntry {
   productName: string;
   description: string;
   quantity: number;
+  /** 折扣百分比（%）—— 按最终产品型号颜色前缀推导；不打折时省略 */
+  discount?: number;
 }
 
 // ==================================================================

@@ -124,6 +124,12 @@ export const adminDeleteUserSchema = z.object({
   adminPassword: z.string().min(1, '请输入管理员密码'),
 });
 
+/** PATCH /api/auth/users/:id/role —— 管理员修改用户角色（仅 user / manager） */
+export const adminUpdateRoleSchema = z.object({
+  role: z.enum(['user', 'manager']),
+  adminPassword: z.string().min(1, '请输入管理员密码'),
+});
+
 /** POST /api/debug/tool */
 export const debugToolSchema = z.object({
   tool: z.string().min(1, '工具名称不能为空'),
@@ -165,6 +171,7 @@ export const createQuotationTaskSchema = z.object({
       z.object({
         partModel: z.string().min(1, '产品型号不能为空'),
         quantity: z.number().int().min(1, '数量至少为 1'),
+        discount: z.number().min(0, '折扣不能为负').max(100, '折扣不能超过 100').optional(),
       }),
     )
     .min(1, '至少需要一行产品'),

@@ -79,6 +79,19 @@ export interface TableParseAgentContext extends AgentContext {
   fromImage?: boolean;
 }
 
+/** TableParseAgent 专用扩展配置（含清单 items 推送回调） */
+export interface TableParseAgentExtendedConfig extends BaseAgentConfig {
+  /** 清单被工具修改后调用，推送新的 items 快照给前端 */
+  onItemsUpdated?: (items: ParsedItem[]) => void;
+}
+
+/** 会修改清单的工具名集合 */
+const MANIFEST_MUTATING_TOOLS = new Set<ToolName>([
+  'addItem',
+  'editItemCell',
+  'deleteItem',
+]);
+
 // ==================================================================
 //  TableParseAgent
 // ==================================================================
@@ -98,10 +111,12 @@ export class TableParseAgent extends BaseAgent<ChatMessage> {
     'lookupItemComponents',
   ];
 
+  declare protected config: TableParseAgentExtendedConfig;
+
   private colorTable: string;
   private shapeTypeTable: string;
 
-  constructor(llm: LlmProvider<ChatMessage>, config: BaseAgentConfig) {
+  constructor(llm: LlmProvider<ChatMessage>, config: TableParseAgentExtendedConfig) {
     super(llm, config);
     this.colorTable = getColorTable();
     this.shapeTypeTable = getShapeTypeTable();
@@ -255,14 +270,32 @@ export class TableParseAgent extends BaseAgent<ChatMessage> {
       case 'readParsedItems':
         return executeReadParsedItems(ctx.manifest);
 
-      case 'addItem':
-        return executeAddItem(ctx.manifest, args);
+      case 'addItem': {
+        const result = executeAddItem(ctx.manifest, args);
+        if (MANIFEST_MUTATING_TOOLS.has(tc.function.name)) {
+          computeExposedStatus(ctx.manifest.items as ParsedItem[]);
+          this.config.onItemsUpdated?.(ctx.manifest.items as ParsedItem[]);
+        }
+        return result;
+      }
 
-      case 'deleteItem':
-        return executeDeleteItem(ctx.manifest, args);
+      case 'deleteItem': {
+        const result = executeDeleteItem(ctx.manifest, args);
+        if (MANIFEST_MUTATING_TOOLS.has(tc.function.name)) {
+          computeExposedStatus(ctx.manifest.items as ParsedItem[]);
+          this.config.onItemsUpdated?.(ctx.manifest.items as ParsedItem[]);
+        }
+        return result;
+      }
 
-      case 'editItemCell':
-        return executeEditItemCell(ctx.manifest, args);
+      case 'editItemCell': {
+        const result = executeEditItemCell(ctx.manifest, args);
+        if (MANIFEST_MUTATING_TOOLS.has(tc.function.name)) {
+          computeExposedStatus(ctx.manifest.items as ParsedItem[]);
+          this.config.onItemsUpdated?.(ctx.manifest.items as ParsedItem[]);
+        }
+        return result;
+      }
 
       // ---- 产品查询工具 ----
 

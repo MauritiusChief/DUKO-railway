@@ -6,9 +6,9 @@
 
 脚本在匹配 `https://dukouserp.com/odoo/*` 的页面加载后注入浮动面板。用户粘贴 CSV、在页面上确认操作，脚本直接通过浏览器 DOM 驱动当前已登录的 Odoo 页面：
 
-- 解析 CSV 文本并展示待写入项目。
+- 解析 CSV 文本并展示待写入项目（`productName,quantity[,discount]`；折扣为百分数，空值不触碰 Odoo 折扣）。
 - 读取现有报价行以辅助核验。
-- 逐行点击 “Add a product”，使用 Odoo autocomplete 选择产品并填写数量。
+- 逐行点击 “Add a product”，使用 Odoo autocomplete 选择产品；先填写数量、再按需填写折扣并提交。Odoo 修改数量会清空当前行已填折扣，因此折扣不能先于数量填写。
 - 对找不到的产品进行清理并汇总未填项目。
 
 它依赖当前 Odoo DOM 选择器和用户已有登录态。没有 server 任务记录、远程确认、断线重试、SQLite 持久化或库存 worker 能力。

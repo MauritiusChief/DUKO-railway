@@ -97,6 +97,14 @@ export const messages = {
     zh: '删除此行',
     en: 'Delete this row',
   },
+  添加空行: {
+    zh: '添加空行',
+    en: 'Add Empty Row',
+  },
+  暂无结果: {
+    zh: '暂无解析结果，可点击下方按钮手动添加行',
+    en: 'No parsed results yet. Add rows manually below.',
+  },
   生成中: {
     zh: '生成中...',
     en: 'Generating...',
@@ -128,6 +136,10 @@ export const messages = {
   描述: {
     zh: '描述',
     en: 'Description',
+  },
+  '折扣%': {
+    zh: '折扣%',
+    en: 'Discount%',
   },
   复制CSV: {
     zh: '复制 CSV',
@@ -608,6 +620,18 @@ export const messages = {
     zh: '普通用户',
     en: 'User',
   },
+  经理: {
+    zh: '经理',
+    en: 'Manager',
+  },
+  修改角色: {
+    zh: '修改角色',
+    en: 'Change Role',
+  },
+  角色: {
+    zh: '角色',
+    en: 'Role',
+  },
   进入系统: {
     zh: '进入系统',
     en: 'Enter System',
@@ -963,5 +987,11 @@ export const messages = {
   返回未选中: {
     zh: '返回',
     en: 'Back',
+  },
+
+  /* ---- 自动恢复提示 ---- */
+  从历史恢复提示: {
+    zh: '连接中断，已从历史记录自动恢复解析结果',
+    en: 'Connection lost; results auto-recovered from history',
   },
 } as const;

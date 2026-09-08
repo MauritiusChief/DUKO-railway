@@ -32,6 +32,8 @@ import { notesRouter } from './routes/notes.js';
 import { layoutGenerateListRouter } from './routes/layoutGenerateList.js';
 import { traceRouter } from './routes/trace.js';
 import { quotationRouter } from './routes/quotation.js';
+import { inventoryRouter } from './routes/inventory.js';
+import { autoWorkerRouter } from './routes/auto-worker.js';
 import { authenticateToken } from './middleware/auth.js';
 import { apiLimiter, llmLimiter } from './middleware/rateLimit.js';
 import { config, validateSecrets } from './config/env.js';
@@ -135,6 +137,8 @@ app.use('/api', historyRouter);       // GET/POST/DELETE /api/history[/:id] —�
 app.use('/api', notesRouter);         // GET/POST /api/notes —— 用户笔记
 app.use('/api', layoutGenerateListRouter); // POST /api/layout/generate-list —— 物料清单
 app.use('/api', quotationRouter);     // GET/POST /api/quotation-tasks[/:id[/cancel|/events]] —— 报价任务
+app.use('/api', inventoryRouter);     // POST /api/inventory/jobs|/upload, GET /api/inventory/jobs/:id[/events|/cancel] —— 库存看板
+app.use('/api', autoWorkerRouter);    // GET /api/auto-worker/status —— Auto worker 在线状态
 
 // ---- 前端静态文件（生产模式） ----
 const clientDist = path.resolve(__dirname, '../../client/dist');

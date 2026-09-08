@@ -11,12 +11,12 @@
 | `/history` | `HistoryPage` | 已登录 | 当前用户解析历史 |
 | `/quotation-tasks` | `QuotationTasksPage` | 已登录 | 报价任务、确认、实时日志与失败行恢复 |
 | `/layout-recognize` | `LayoutRecognizePage` | 已登录 | 图片布局识别、双轨编辑、物料生成 |
-| `/inventory` | `InventoryDashboardPage` | 已登录 | 库存下载/上传、趋势查验和分类 |
+| `/inventory` | `InventoryDashboardPage` | 管理员 / 经理 | 库存下载/上传、趋势查验和分类 |
 | `/debug` | `DebugPage` | 管理员 | 直接测试 SKU 搜索工具 |
 | `/trace` | `TracePage` | 管理员 | 查看最近 30 天 LLM trace |
 | `/all-history` | `AllHistoryPage` | 管理员 | 浏览全部用户解析历史 |
 
-当前主页提供报价、库存、个人历史和用户脚本下载入口；布局及管理员页面虽然有路由，但不应假设所有页面都在主页有导航按钮，必要时可直接访问路径。
+当前主页提供报价、库存（仅 manager/admin 可见）、个人历史和用户脚本下载入口；布局及管理员页面虽然有路由，但不应假设所有页面都在主页有导航按钮，必要时可直接访问路径。
 
 ## 状态分层
 
@@ -26,7 +26,7 @@
 - `client/src/stores/quotationStore.ts`：任务列表、选中详情、两路 SSE、确认和草稿。
 - 页面局部 state：库存 job UI、历史详情选择、图片临时数据、布局物料输出等。
 
-浏览器持久化不是统一数据库：解析 items、当前布局、报价草稿、库存最近结果和 access token 使用不同 `localStorage` key；用户历史、笔记和报价任务则由服务端 SQLite 保存。清除浏览器数据不会删除服务端记录，服务端重启也不会删除 SQLite，但会丢失库存 job 等内存状态。
+浏览器持久化不是统一数据库：解析 items、当前布局、报价草稿和 access token 使用不同 `localStorage` key；用户历史、笔记、报价任务和成功的库存识别结果则由服务端 SQLite 保存。清除浏览器数据不会删除服务端记录，服务端重启也不会删除 SQLite，但会丢失运行中的库存 job、SSE 订阅等内存状态。
 
 ## 通信约定
 

@@ -5,7 +5,7 @@
 ## SKU 与产品层级
 
 - 普通 `itemName` 通常由 `colorCode + shapeTypeCode + shapeSizeCode` 组成；无颜色或无尺寸的型号允许对应字段为空。
-- `Product-raw.csv` 是原始产品导出。处理链依次生成 `Product.csv`、`Color.csv`、`Parts.csv`、`Items.csv`、`Exposed-Items.csv`、`Exposed-Color.csv`、`Exposed-Types.csv`。
+- `Product-raw.csv` 是原始产品导出。实际刷新输入源为库存看板自动下载暂存的 `Product-raw-YYYY-MM-DD.csv`（UTC 日期，每次清理旧文件后只保留一个最新），CLI 自动选取后回退兼容历史固定名 `Product-raw.csv`。处理链依次生成 `Product.csv`、`Color.csv`、`Parts.csv`、`Items.csv`、`Exposed-Items.csv`、`Exposed-Color.csv`、`Exposed-Types.csv`。
 - `Parts.csv` 表达“单一零件名 -> 共享零件名”。带 `/` 的共享编码可能拆成多个可查询零件；尺寸分数、复合模式、左右变体和双颜色兼容有专门规则。
 - `Items.csv` 表达可售物品及其柜体、门和额外零件；`Exposed-Items` 是检索层，增加颜色、形状、尺寸、别名、描述与 `subItemsName`。
 - `subItemsName` 非空表示组合物品，生成产品清单时需要拆为子项；高柜、烤箱柜、背板、带垃圾桶地柜及部分冰箱/洗碗机板由代码生成组合规则。

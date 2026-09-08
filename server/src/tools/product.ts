@@ -12,7 +12,16 @@
 import { markdownTable } from 'markdown-table';
 import type { ToolDefinition } from '../types/tool.js';
 import type { MutableManifest, ProductEntry } from '../types/manifest.js';
-import { findRecordByItemNameCI, getItemRow, getPartRow, getProductRow } from '../db/sku.js';
+import { findRecordByItemNameCI, getItemRow, getPartRow, getProductRow, getSkuRefreshMetadata } from '../db/sku.js';
+
+/** 构造库存快照新鲜度脚注，依据 sku_refresh_metadata 动态生成 */
+function inventorySnapshotFooter(): string {
+  const meta = getSkuRefreshMetadata();
+  const when = meta?.lastSuccessfulRefreshAt
+    ? `上次成功刷新 ${meta.lastSuccessfulRefreshAt} (UTC)`
+    : '上次成功刷新时间未知';
+  return `> ⚠️ **注意**: 库存数据来自产品数据库的静态快照（${when}），**并非实时 ERP 数据**。实际库存请以 ERP 系统为准。`;
+}
 
 // ==================================================================
 //  lookupProductInventory
@@ -45,7 +54,7 @@ export function executeLookupProductInventory(args: Record<string, unknown>): st
 
   const exposedRecord = findRecordByItemNameCI(itemName);
   if (!exposedRecord) {
-    return `## lookupProductInventory 结果\n\n**未找到**: Exposed-Items 中不存在产品 "${itemName}"。请核实名称是否正确。`;
+    return `## lookupProductInventory 结果\n\n**未找到**: Exposed-Items 中不存在产品 "${itemName}"。请核实名称是否正确。\n\n${inventorySnapshotFooter()}`;
   }
 
   const itemNamesToResolve: string[] = [];
@@ -100,7 +109,9 @@ export function executeLookupProductInventory(args: Record<string, unknown>): st
   if (rows.length === 0) {
     return `## lookupProductInventory 结果
 
-**"${itemName}"** 在 Exposed-Items 中存在（${exposedRecord.mainDescription || '无描述'}），但其对应的实际产品无法在 Items.csv / Parts.csv 中解析。可能是配件或特殊产品。`;
+**"${itemName}"** 在 Exposed-Items 中存在（${exposedRecord.mainDescription || '无描述'}），但其对应的实际产品无法在 Items.csv / Parts.csv 中解析。可能是配件或特殊产品。
+
+${inventorySnapshotFooter()}`;
   }
 
   const header = ['#', 'Exposed Item', 'Product Name', 'Description', 'Forecasted Qty', 'Free to Use', 'Qty On Hand'];
@@ -124,7 +135,7 @@ export function executeLookupProductInventory(args: Record<string, unknown>): st
 - ${hasSubItems ? `**复合产品**: 包含 ${itemNamesToResolve.length} 个子项` : '**单一产品**'}
 - **匹配产品数**: ${rows.length}
 
-> ⚠️ **注意**: 库存数据来自产品数据库的静态快照，**并非实时 ERP 数据**。实际库存请以 ERP 系统为准。
+${inventorySnapshotFooter()}
 
 ${table}`;
 }

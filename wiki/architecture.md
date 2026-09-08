@@ -94,7 +94,7 @@ REST 用于短请求、查询和命令；SSE 用于 LLM 流式结果、报价全
 1. 浏览器提交文本，或先把图片发给多模态 Agent 得到可人工修改的文本。
 2. TableParseAgent 通过 SSE 输出轮次、工具调用、回复片段和结构化 items。
 3. 服务端自动把解析结果写入当前用户历史；浏览器把当前 items 保存到本地。
-4. 用户修正候选字段后，服务端用 SQLite 校验组合并拆解/聚合为产品清单。
+4. 用户修正候选字段后，服务端用 SQLite 校验组合并拆解为未聚合产品清单；复制 CSV/创建报价时前端再聚合排序。
 5. ChatAgent 接收当前 items、products、笔记和短对话历史，可调用工具并返回更新后的状态；发生实质 items 变化时再次写历史。
 
 相关入口：`server/src/routes/imageParse.ts`、`tableParse.ts`、`chat.ts`。
@@ -111,7 +111,7 @@ REST 用于短请求、查询和命令；SSE 用于 LLM 流式结果、报价全
 
 ### 报价任务
 
-1. 用户提交报价标识/精确 URL、写入模式和 SKU/数量行，任务及行写入 `users.sqlite`。
+1. 用户提交报价标识/精确 URL、写入模式和 SKU/数量/可选折扣行，任务及行写入 `users.sqlite`。
 2. 服务端按全局 FIFO 队列向在线 `auto` 派发；全局 SSE 更新 worker、队列和用户任务列表。
 3. worker 打开 Odoo、定位并核验报价，网页确认后逐行写入。
 4. worker 上报进度、逐行结果和最终快照；服务端持久化并通过单任务 SSE 推送。

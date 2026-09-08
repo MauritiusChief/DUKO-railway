@@ -14,6 +14,8 @@
 - `exposed_colors`、`exposed_types` 提供代码对照。
 - `items`、`parts` 保存产品与部件映射。
 - `products` 保存预测库存、可用库存和现有库存数量。
+- `inventory_results` 保存最近 20 次成功库存识别的全局共享结果（执行人、查询参数、分类统计与完整分类 JSON）。
+- `sku_refresh_metadata` 单例记录最后一次完整 SKU 刷新的成功时间与来源，供 Chat Agent 提示库存数据新鲜度。
 
 结构化 CRUD、过滤、精确查找、组件与库存查询都使用 SQLite。数据库启用 WAL 和 `synchronous=NORMAL`。
 
@@ -46,7 +48,22 @@ BM25 描述索引从 `sku.sqlite` 全量读取并在进程启动时预热。它�
 
 库存看板有两种输入：用户上传 CSV，或由 auto worker 从 Odoo 下载 CSV。server 在内存中清洗、按可用库存阈值筛选，再请求 worker 查询近期库存移动并按出库量分为警告、提醒和信息。
 
-库存 job、原始 CSV、趋势结果和分类均不写 server 数据库；终态超过一小时后会从内存清理，服务重启也会立即丢失。当前前端负责将分类结果保存到浏览器 localStorage。它不是跨设备、跨浏览器的服务端历史。
+自动下载模式在取得 CSV 后会同时做两件事：进入库存识别链路；把该 CSV 以 `Product-raw-YYYY-MM-DD.csv`（UTC 日期）暂存到 `DB_DIR`，并删除旧的 `Product-raw*.csv`，保证最终只剩一个最新文件，供管理员择机手动重建 SKU 数据（见下）。上传模式不暂存文件。暂存失败只记日志，不阻断本次识别。
+
+分类成功完成后，结果写入 `sku.sqlite` 的 `inventory_results` 表（全局共享，保留最近 20 条，按完成时间倒序裁剪）；写入失败会使该库存 job 失败。库存历史通过 `GET /api/inventory/results`（摘要）与 `GET /api/inventory/results/:id`（完整分类）查询，仅 manager/admin 可访问。
+
+库存 job 本身（运行态、原始 CSV、趋势中间结果）仍只存在于 `server/src/services/inventory.ts` 的内存 Map；终态超过约一小时清理，服务重启丢失。分类结果不再写浏览器 localStorage；前端默认加载最新一条历史，运行期可切换历史。
+
+## 手动 SKU 数据刷新
+
+完整 SKU 数据刷新（清洗派生 CSV、重建 `sku.sqlite` 引用表、重建 LanceDB 向量）不由库存下载自动触发，而由管理员择机手动执行：
+
+1. 库存看板的自动下载把最新 CSV 暂存为 `DB_DIR/Product-raw-YYYY-MM-DD.csv`。
+2. 管理员在非工作时间运行 `node server/dist/refresh-data-cli.js`，CLI 自动选取最新一份 `Product-raw-*.csv`（回退兼容历史固定名 `Product-raw.csv`）。
+3. 刷新成功后 CLI 在 `sku_refresh_metadata` 记录最后成功刷新时间与 `source='manual-cli'`。
+4. 需重启 Web Service 以重载进程内 BM25/LanceDB 句柄/颜色等缓存——CLI 进程内预热的索引不会自动注入运行中的 Web 进程。
+
+完整刷新仍逐表事务性全量替换 SQLite 引用表、drop/recreate LanceDB 表，没有跨库原子发布；中途失败可能留下半替换状态，需重新完整刷新。刷新只操作 SKU 数据表，不会清除 `inventory_results` 或 `sku_refresh_metadata`。
 
 ## 一致性与备份
 

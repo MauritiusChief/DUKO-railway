@@ -14,7 +14,7 @@ import { z } from 'zod';
 // ==================================================================
 
 /** 当前协议版本（必须与 server 一致） */
-export const PROTOCOL_VERSION = '1';
+export const PROTOCOL_VERSION = '3';
 
 /** 应用层心跳间隔（毫秒） */
 export const HEARTBEAT_INTERVAL_MS = 30_000;
@@ -23,13 +23,17 @@ export const HEARTBEAT_INTERVAL_MS = 30_000;
 export const HEARTBEAT_MAX_MISSED = 3;
 
 // ==================================================================
-//  任务相关类型
+//  任务种类
 // ==================================================================
+
+export type TaskKind = 'quotation' | 'inventory-download' | 'inventory-trend';
 
 /** 报价快照行（读取用） */
 export interface QuotationSnapshotLine {
   productModel: string
   quantity: string
+  /** 折扣百分比（%）—— 未指定时不返回 */
+  discount?: number
 }
 
 export type QuotationWriteMode = 'overwrite' | 'append';
@@ -38,6 +42,8 @@ export interface TaskLine {
   lineNo: number;
   partModel: string;
   quantity: number;
+  /** 折扣百分比（%）—— 未指定时不返回 */
+  discount?: number;
 }
 
 export interface QuotationTask {
@@ -56,28 +62,48 @@ export interface LineResult {
   error?: string;
 }
 
+// inventory 趋势任务的库存移动数据
+export interface TrendMove {
+  date: string;
+  qty: number;
+  dir: 'in' | 'out';
+}
+export interface TrendItemResult {
+  name: string;
+  moves: TrendMove[];
+}
+
 // ==================================================================
 //  入站消息（Server → Auto）Zod 校验
 // ==================================================================
 
+// task-assigned 运行时校验：扁平 object（kind + 各变体字段可选）。
+// 不能用嵌套 discriminatedUnion（Zod 的顶层 discriminatedUnion 要求成员为 ZodObject），
+// 因此用单一扁平 schema 做入站校验，下方再用 TS 联合类型保证调用方类型安全。
 export const taskAssignedSchema = z.object({
   type: z.literal('task-assigned'),
-  taskId: z.number().int().positive(),
-  quotationNumber: z.string(),
-  odooUrl: z.string(),
-  writeMode: z.enum(['overwrite', 'append']),
-  lines: z.array(
-    z.object({
-      lineNo: z.number().int().positive(),
-      partModel: z.string(),
-      quantity: z.number().int().positive(),
-    }),
-  ),
+  taskId: z.number().int(),
+  kind: z.enum(['quotation', 'inventory-download', 'inventory-trend']),
+  quotationNumber: z.string().optional(),
+  odooUrl: z.string().optional(),
+  writeMode: z.enum(['overwrite', 'append']).optional(),
+  lines: z
+    .array(
+      z.object({
+        lineNo: z.number().int().positive(),
+        partModel: z.string(),
+        quantity: z.number().int().positive(),
+        discount: z.number().optional(),
+      }),
+    )
+    .optional(),
+  items: z.array(z.string()).optional(),
+  recentMonths: z.number().int().min(1).optional(),
 });
 
 export const ackSchema = z.object({
   type: z.literal('ack'),
-  taskId: z.number().int().positive(),
+  taskId: z.number().int(),
   attempt: z.number().int().positive(),
 });
 
@@ -92,8 +118,14 @@ export const serverErrorSchema = z.object({
 
 export const confirmResponseSchema = z.object({
   type: z.literal('confirm-response'),
-  taskId: z.number().int().positive(),
+  taskId: z.number().int(),
   decision: z.enum(['confirmed', 'rejected']),
+});
+
+/** 中止任务（server → auto） */
+export const abortSchema = z.object({
+  type: z.literal('abort'),
+  taskId: z.number().int(),
 });
 
 export const inboundMessageSchema = z.discriminatedUnion('type', [
@@ -102,13 +134,38 @@ export const inboundMessageSchema = z.discriminatedUnion('type', [
   heartbeatAckSchema,
   serverErrorSchema,
   confirmResponseSchema,
+  abortSchema,
 ]);
 
 // ==================================================================
 //  入站消息 TypeScript 类型
 // ==================================================================
 
-export type TaskAssignedMessage = z.infer<typeof taskAssignedSchema>;
+export interface QuotationTaskAssignedMessage {
+  type: 'task-assigned';
+  taskId: number;
+  kind: 'quotation';
+  quotationNumber: string;
+  odooUrl: string;
+  writeMode: 'overwrite' | 'append';
+  lines: TaskLine[];
+}
+export interface InventoryDownloadTaskAssignedMessage {
+  type: 'task-assigned';
+  taskId: number;
+  kind: 'inventory-download';
+}
+export interface InventoryTrendTaskAssignedMessage {
+  type: 'task-assigned';
+  taskId: number;
+  kind: 'inventory-trend';
+  items: string[];
+  recentMonths: number;
+}
+export type TaskAssignedMessage =
+  | QuotationTaskAssignedMessage
+  | InventoryDownloadTaskAssignedMessage
+  | InventoryTrendTaskAssignedMessage;
 export type AckMessage = z.infer<typeof ackSchema>;
 export type HeartbeatAckMessage = z.infer<typeof heartbeatAckSchema>;
 export type ServerErrorMessage = z.infer<typeof serverErrorSchema>;
@@ -144,14 +201,38 @@ export interface LineResultMessage {
   attempt: number;
 }
 
-export interface TaskCompletedMessage {
+export interface QuotationTaskCompletedMessage {
   type: 'task-completed';
   taskId: number;
+  kind: 'quotation';
   status: 'completed' | 'partial_failed';
   lines: (TaskLine & { status: 'pending' | 'success' | 'failed'; error?: string })[];
   finalSnapshot?: QuotationSnapshotLine[];
   attempt: number;
 }
+
+export interface InventoryDownloadTaskCompletedMessage {
+  type: 'task-completed';
+  taskId: number;
+  kind: 'inventory-download';
+  status: 'completed' | 'partial_failed';
+  result: { csv: string };
+  attempt: number;
+}
+
+export interface InventoryTrendTaskCompletedMessage {
+  type: 'task-completed';
+  taskId: number;
+  kind: 'inventory-trend';
+  status: 'completed' | 'partial_failed';
+  result: { items: TrendItemResult[] };
+  attempt: number;
+}
+
+export type TaskCompletedMessage =
+  | QuotationTaskCompletedMessage
+  | InventoryDownloadTaskCompletedMessage
+  | InventoryTrendTaskCompletedMessage;
 
 export interface TaskFailedMessage {
   type: 'task-failed';
@@ -170,7 +251,7 @@ export interface ConfirmRequestMessage {
   company: string;
   quotationNumber: string;
   existingLines: QuotationSnapshotLine[];
-  inputLines: { partModel: string; quantity: number }[];
+  inputLines: { partModel: string; quantity: number; discount?: number }[];
   attempt: number;
 }
 
@@ -178,6 +259,13 @@ export interface ProgressMessage {
   type: 'progress';
   taskId: number;
   message: string;
+  attempt: number;
+}
+
+export interface InventoryTrendResultMessage {
+  type: 'inventory-trend-result';
+  taskId: number;
+  result: TrendItemResult;
   attempt: number;
 }
 
@@ -190,4 +278,5 @@ export type OutboundMessage =
   | TaskFailedMessage
   | HeartbeatMessage
   | ConfirmRequestMessage
-  | ProgressMessage;
+  | ProgressMessage
+  | InventoryTrendResultMessage;

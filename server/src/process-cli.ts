@@ -27,11 +27,12 @@ import { deriveColorTable, deriveSinglePartTable } from './services/sku-derive.j
 import { generateItemsTable } from './services/sku-items.js';
 import { generateExposedItemsTable, generateExposedColorTable, generateExposedTypesTable } from './services/sku-exposed.js';
 import { config } from './config/env.js';
+import { discoverRawCsvPath } from './services/product-raw-stage.js';
 
 /** 根据 dataDir 计算所有输入/输出路径 */
 function resolvePaths(dataDir: string) {
   return {
-    raw: path.join(dataDir, 'Product-raw.csv'),
+    raw: discoverRawCsvPath(dataDir),
     clean: path.join(dataDir, 'Product.csv'),
     color: path.join(dataDir, 'Color.csv'),
     parts: path.join(dataDir, 'Parts.csv'),

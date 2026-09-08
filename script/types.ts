@@ -10,12 +10,16 @@ export interface WrittenPart {
   partModel: string;
   /** 数量 */
   quantity: number;
+  /** 折扣百分比（%）—— 未指定时留空，不触碰 Odoo 折扣 */
+  discount?: number;
 }
 
 /** CSV 解析后的一行预览数据 */
 export interface CsvRow {
   productName: string;
   quantity: number;
+  /** 折扣百分比（%）—— 未指定时留空 */
+  discount?: number;
 }
 
 /** 写入结果 */

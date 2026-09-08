@@ -2,7 +2,7 @@
 
 ## 认证与会话
 
-路由保护由 `client/src/components/AuthGuard.tsx` 和 `AdminGuard.tsx` 完成，服务端仍在中间件和各管理员路由重复执行真实权限检查，不能只依赖前端 guard。
+路由保护由 `client/src/components/AuthGuard.tsx`、`AdminGuard.tsx` 和 `RoleGuard.tsx` 完成：`AuthGuard` 仅要求登录，`AdminGuard` 要求 admin，`RoleGuard` 按传入角色校验（库存看板 `/inventory` 用其限定 manager/admin）。所有 guard 都在渲染前通过 `/api/me` 确认服务端角色，服务端仍在中间件和各路由重复执行真实权限检查，不能只依赖前端 guard。
 
 `client/src/stores/authStore.ts` 的会话模型：
 
@@ -18,12 +18,11 @@
 `client/src/pages/LoginPage.tsx` 在未登录时显示登录表单，并保留 guard 提供的 redirect。已登录时显示身份和进入系统按钮；管理员还可：
 
 - 创建普通用户。
-- 查看用户列表。
-- 在再次输入当前管理员密码后修改非种子用户的用户名/密码或删除用户。
+- 查看用户列表（含角色显示：管理员/经理/普通用户）。
+- 在再次输入当前管理员密码后修改非种子用户的用户名/密码或删除用户，也可在 `user` 与 `manager` 之间切换非管理员用户的角色。
+- 环境变量播种的管理员受保护，不能在该界面改名、改密、删除或改角色；管理员也不能删除自己。账号及 bcrypt 密码哈希位于 `users.sqlite`。删除用户会通过 SQLite 外键级联删除其解析历史、笔记、trace 和报价任务。
 
-环境变量播种的管理员受保护，不能在该界面改名、改密或删除；管理员也不能删除自己。账号及 bcrypt 密码哈希位于 `users.sqlite`。删除用户会通过 SQLite 外键级联删除其解析历史、笔记、trace 和报价任务。
-
-当前改密和删除不会撤销目标用户已经签发的 Access/Refresh Token，refresh 路由也不会先确认用户仍存在。因此管理界面的成功提示只证明数据库修改完成，不代表该账号的现有会话已经立即失效。
+当前改密和删除不会撤销目标用户已经签发的 Access/Refresh Token，refresh 路由也不会先确认用户仍存在。因此管理界面的成功提示只证明数据库修改完成，不代表该账号的现有会话已经立即失效。**修改角色是例外**——会撤销目标 refresh token，迫使在 access token 过期（≤15 分钟）后重新登录拿到新角色。
 
 ## 个人历史
 
@@ -61,7 +60,7 @@ Trace 可能包含用户输入、模型回复、推理、工具参数和工具�
 
 - 前端 AdminGuard 主要改善导航体验，真正授权以服务端 `requireAdmin` 为准。
 - access token 是浏览器级本地 key，存在 XSS 可读风险；HttpOnly 只保护 refresh token。
-- 登出不会统一删除 `duko_notes`、`duko_quotation_draft`、`duko_inventory_last`、`duko_parsed_data` 和 `duko_layout`。共享浏览器切换账号时可能看到上一账号的业务缓存，应使用独立浏览器 profile 或手工清理站点数据。
+- 登出不会统一删除 `duko_notes`、`duko_quotation_draft`、`duko_parsed_data` 和 `duko_layout`。共享浏览器切换账号时可能看到上一账号的业务缓存，应使用独立浏览器 profile 或手工清理站点数据。
 - 个人历史与本地当前表是两套状态；清除 `localStorage` 不删除历史，删除历史也不清空主页本地表。
 - 全部历史页只读原记录，但“填充回主页”会覆盖当前浏览器 store。
 - Trace 页面中的 provider/model 是记录创建时事实，不代表当前默认配置。

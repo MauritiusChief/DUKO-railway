@@ -20,7 +20,7 @@ interface UserListItem {
 }
 
 /** 用户操作类型 */
-type UserAction = 'none' | 'delete' | 'rename' | 'password';
+type UserAction = 'none' | 'delete' | 'rename' | 'password' | 'role';
 
 export default function LoginPage() {
   const { t } = useI18n();
@@ -39,6 +39,7 @@ export default function LoginPage() {
   const [adminPwd, setAdminPwd] = useState('');
   const [newUsername, setNewUsername] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [newRole, setNewRole] = useState<'user' | 'manager'>('user');
   const [mgmtLoading, setMgmtLoading] = useState(false);
   const [mgmtError, setMgmtError] = useState('');
   const [mgmtSuccess, setMgmtSuccess] = useState('');
@@ -107,20 +108,26 @@ export default function LoginPage() {
     setAdminPwd('');
     setNewUsername('');
     setNewPassword('');
+    setNewRole('user');
     setMgmtError('');
     setMgmtSuccess('');
   };
 
   /** 打开指定用户的某个操作面板 */
-  const openAction = (userId: number, action: UserAction) => {
+  const openAction = (userId: number, action: UserAction, currentRole?: string) => {
     setActiveUser(userId);
     setActiveAction(action);
     setAdminPwd('');
     setNewUsername('');
     setNewPassword('');
+    setNewRole(currentRole === 'manager' ? 'manager' : 'user');
     setMgmtError('');
     setMgmtSuccess('');
   };
+
+  /** 角色显示文案 */
+  const roleLabel = (role: string) =>
+    role === 'admin' ? t('管理员') : role === 'manager' ? t('经理') : t('普通用户');
 
   /** 删除用户 */
   const handleDeleteUser = async (e: FormEvent) => {
@@ -204,6 +211,35 @@ export default function LoginPage() {
     }
   };
 
+  /** 修改角色（仅 user ↔ manager） */
+  const handleRoleChange = async (e: FormEvent) => {
+    e.preventDefault();
+    setMgmtLoading(true);
+    setMgmtError('');
+    setMgmtSuccess('');
+    try {
+      const res = await fetchWithAuth(`/api/auth/users/${activeUser}/role`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: newRole, adminPassword: adminPwd }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setMgmtSuccess(t('修改成功'));
+        setUserList((prev) =>
+          prev.map((u) => (u.id === activeUser ? { ...u, role: data.user?.role ?? newRole } : u)),
+        );
+        setTimeout(resetAction, 1500);
+      } else {
+        setMgmtError(data.error || '操作失败');
+      }
+    } catch {
+      setMgmtError('网络错误');
+    } finally {
+      setMgmtLoading(false);
+    }
+  };
+
   /** 判断是否为种子管理员（当前登录者） */
   const isSelfAdmin = (u: { role: string; username: string }) =>
     u.role === 'admin' && u.username === user?.username;
@@ -227,7 +263,7 @@ export default function LoginPage() {
         <div className={`login-card ${user.role === 'admin' ? 'login-card-admin' : ''}`}>
           <h2>{t('已登录')}</h2>
           <p>
-            {t('当前用户')}: <strong>{user.username}</strong> ({user.role === 'admin' ? t('管理员') : t('普通用户')})
+            {t('当前用户')}: <strong>{user.username}</strong> ({roleLabel(user.role)})
           </p>
           <div className="login-actions">
             <button onClick={() => navigate(homeRedirect)}>{t('进入系统')}</button>
@@ -290,9 +326,12 @@ export default function LoginPage() {
                             {u.role === 'admin' && !isSeed && (
                               <span className="user-list-item-badge user-list-item-badge-admin">{t('管理员')}</span>
                             )}
+                            {u.role === 'manager' && (
+                              <span className="user-list-item-badge user-list-item-badge-manager">{t('经理')}</span>
+                            )}
                           </span>
                           <span className="user-list-item-meta">
-                            {u.role} · {u.created_at}
+                            {roleLabel(u.role)} · {u.created_at}
                           </span>
                         </div>
                         <div className="user-list-item-actions">
@@ -311,6 +350,13 @@ export default function LoginPage() {
                                 title={t('修改密码')}
                               >
                                 {t('修改密码')}
+                              </button>
+                              <button
+                                className="mgmt-action-btn mgmt-action-role"
+                                onClick={() => openAction(u.id, 'role', u.role)}
+                                title={t('修改角色')}
+                              >
+                                {t('修改角色')}
                               </button>
                               <button
                                 className="mgmt-action-btn mgmt-action-delete"
@@ -403,6 +449,31 @@ export default function LoginPage() {
                                   <button type="submit" className="mgmt-btn-danger" disabled={mgmtLoading}>
                                     {mgmtLoading ? t('解析中') + '...' : t('确认删除')}
                                   </button>
+                                  <button type="button" onClick={resetAction}>
+                                    {t('取消')}
+                                  </button>
+                                </div>
+                              </form>
+                            )}
+
+                            {activeAction === 'role' && (
+                              <form onSubmit={handleRoleChange}>
+                                <div className="mgmt-action-field">
+                                  <label>{t('角色')}</label>
+                                  <select
+                                    value={newRole}
+                                    onChange={(e) => setNewRole(e.target.value as 'user' | 'manager')}
+                                  >
+                                    <option value="user">{t('普通用户')}</option>
+                                    <option value="manager">{t('经理')}</option>
+                                  </select>
+                                </div>
+                                <div className="mgmt-action-btns">
+                                  {mgmtError && <p className="error-msg">{mgmtError}</p>}
+                                  {mgmtSuccess && <p className="success-msg">{mgmtSuccess}</p>}
+                                  {(mgmtError || mgmtSuccess) ? null : <button type="submit" disabled={mgmtLoading}>
+                                    {mgmtLoading ? t('解析中') + '...' : t('保存')}
+                                  </button>}
                                   <button type="button" onClick={resetAction}>
                                     {t('取消')}
                                   </button>

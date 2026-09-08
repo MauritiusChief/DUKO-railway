@@ -7,8 +7,10 @@ import HistoryPage from './pages/HistoryPage';
 import AllHistoryPage from './pages/AllHistoryPage';
 import TracePage from './pages/TracePage';
 import QuotationTasksPage from './pages/QuotationTasksPage';
+import InventoryDashboardPage from './pages/InventoryDashboardPage';
 import AuthGuard from './components/AuthGuard';
 import AdminGuard from './components/AdminGuard';
+import RoleGuard from './components/RoleGuard';
 
 export default function App() {
   return (
@@ -44,6 +46,14 @@ export default function App() {
           <AuthGuard>
             <LayoutRecognizePage />
           </AuthGuard>
+        }
+      />
+      <Route
+        path="/inventory"
+        element={
+          <RoleGuard allowedRoles={['admin', 'manager']}>
+            <InventoryDashboardPage />
+          </RoleGuard>
         }
       />
       <Route

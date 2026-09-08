@@ -66,11 +66,15 @@ export interface ProductEntry {
   description: string;
   /** 合并后的数量 */
   quantity: number;
+  /** 折扣百分比（%）—— 按最终产品型号颜色前缀推导；不打折时省略 */
+  discount?: number;
 }
 
 /** POST /api/generate-products 的完整响应 */
 export interface GenerateProductsResponse {
   products: ProductEntry[];
+  /** 全目录配件 sharedPartName 集合（用于前端导出时把配件排到末尾） */
+  accessoryProductNames: string[];
   /** 未能解析的行数 */
   unresolvedCount: number;
   /** 未能解析的行索引列表 */
@@ -315,6 +319,8 @@ export interface QuotationTaskLine {
   lineNo: number
   partModel: string
   quantity: number
+  /** 折扣百分比（%）—— 空值表示不指定，不触碰 Odoo 折扣 */
+  discount?: number
   status: 'pending' | 'success' | 'failed'
   error: string | null
 }
@@ -346,10 +352,11 @@ export interface QuotationTaskDetail extends QuotationTaskSummary {
 export interface QuotationSnapshotLine {
   productModel: string
   quantity: string
+  /** 折扣百分比（%）—— 空值表示 Odoo 中无折扣或未指定 */
+  discount?: number
 }
 
 export interface ActiveTaskSummaryResponse {
-  autoOnline: boolean
   activeTask?: {
     taskId: number
     quotationNumber: string
@@ -357,6 +364,10 @@ export interface ActiveTaskSummaryResponse {
     startedAt: string
     status: QuotationTaskStatus
   }
+}
+
+export interface WorkerStatusResponse {
+  autoOnline: boolean
 }
 
 /** 全局排队队列摘要（跨用户，公开） */

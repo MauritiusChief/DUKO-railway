@@ -12,7 +12,7 @@ import fs from 'fs';
 let db: Database.Database;
 
 /** 用户角色类型 */
-export type UserRole = 'admin' | 'user';
+export type UserRole = 'admin' | 'manager' | 'user';
 
 /** 数据库中的用户行 */
 export interface UserRow {
@@ -41,11 +41,16 @@ export function initUserDB(dbDir: string): void {
   db.pragma('foreign_keys = ON');
 
   db.exec(`
+    CREATE TABLE IF NOT EXISTS schema_migrations (
+      name       TEXT PRIMARY KEY,
+      applied_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
     CREATE TABLE IF NOT EXISTS users (
       id          INTEGER PRIMARY KEY AUTOINCREMENT,
       username    TEXT    NOT NULL UNIQUE,
       password_hash TEXT  NOT NULL,
-      role        TEXT    NOT NULL DEFAULT 'user' CHECK(role IN ('admin','user')),
+      role        TEXT    NOT NULL DEFAULT 'user' CHECK(role IN ('admin','manager','user')),
       created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
     );
 
@@ -153,11 +158,78 @@ export function initUserDB(dbDir: string): void {
       line_no    INTEGER NOT NULL,
       part_model TEXT    NOT NULL,
       quantity   INTEGER NOT NULL,
+      discount   REAL,
       status     TEXT    NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','success','failed')),
       error      TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_quotation_task_lines_task ON quotation_task_lines(task_id);
   `);
+
+  migrateUsersManagerRole(db);
+  migrateQuotationLineDiscount(db);
+}
+
+/**
+ * 版本化迁移：users 表放宽角色 CHECK 以支持 manager 角色。
+ *
+ * SQLite 不支持 ALTER 修改 CHECK 约束，必须用「关闭外键 → 建新表 → 复制 →
+ * 删旧 → 改名 → 开外键 → 校验」的标准重建模式。仅当 users 表当前 schema
+ * 不含 'manager' 时执行；已迁移或全新库直接记录迁移标记，保证幂等。
+ */
+function migrateUsersManagerRole(database: Database.Database): void {
+  const row = database.prepare(
+    "SELECT sql FROM sqlite_master WHERE type='table' AND name='users'",
+  ).get() as { sql: string } | undefined;
+  const alreadySupportsManager = !!row?.sql && row.sql.includes('manager');
+
+  if (!alreadySupportsManager) {
+    database.exec('PRAGMA foreign_keys = OFF;');
+    const rebuild = database.transaction(() => {
+      database.exec(`
+        CREATE TABLE users_new (
+          id          INTEGER PRIMARY KEY AUTOINCREMENT,
+          username    TEXT    NOT NULL UNIQUE,
+          password_hash TEXT  NOT NULL,
+          role        TEXT    NOT NULL DEFAULT 'user' CHECK(role IN ('admin','manager','user')),
+          created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+        );
+        INSERT INTO users_new (id, username, password_hash, role, created_at)
+          SELECT id, username, password_hash, role, created_at FROM users;
+        DROP TABLE users;
+        ALTER TABLE users_new RENAME TO users;
+      `);
+    });
+    rebuild();
+    database.exec('PRAGMA foreign_keys = ON;');
+    const violations = database.pragma('foreign_key_check', { simple: false });
+    if (Array.isArray(violations) && violations.length > 0) {
+      throw new Error(`users 表迁移后外键一致性检查失败: ${JSON.stringify(violations)}`);
+    }
+  }
+
+  database.prepare(
+    'INSERT OR IGNORE INTO schema_migrations (name) VALUES (?)',
+  ).run('0001_users_manager_role');
+}
+
+/**
+ * 版本化迁移：为已存在的 quotation_task_lines 表补充 discount 列（nullable REAL）。
+ * 全新库已由 CREATE TABLE 包含该列，此迁移仅处理升级场景，通过 PRAGMA
+ * table_info 判断幂等；列不存在时执行 ADD COLUMN。
+ */
+function migrateQuotationLineDiscount(database: Database.Database): void {
+  const columns = database.pragma('table_info(quotation_task_lines)', { simple: false }) as {
+    name: string;
+  }[];
+  const hasDiscount = columns.some((c) => c.name === 'discount');
+
+  if (!hasDiscount) {
+    database.exec('ALTER TABLE quotation_task_lines ADD COLUMN discount REAL');
+  }
+
+  database.prepare(
+    'INSERT OR IGNORE INTO schema_migrations (name) VALUES (?)',
+  ).run('0002_quotation_task_lines_discount');
 }
 
 /** 获取底层 SQLite 数据库连接（供 trace 等服务模块使用） */
@@ -401,5 +473,13 @@ export function updateUserPassword(userId: number, passwordHash: string): boolea
   const result = db.prepare(
     'UPDATE users SET password_hash = ? WHERE id = ?',
   ).run(passwordHash, userId);
+  return result.changes > 0;
+}
+
+/** 管理员专用：更新用户角色（仅允许 user / manager，不能授予 admin） */
+export function updateUserRole(userId: number, role: UserRole): boolean {
+  const result = db.prepare(
+    'UPDATE users SET role = ? WHERE id = ?',
+  ).run(role, userId);
   return result.changes > 0;
 }
