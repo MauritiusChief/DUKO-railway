@@ -3,7 +3,7 @@
  *
  * 包裹仅限指定角色访问的页面（如库存看板仅 manager / admin）：
  *  - 未登录时重定向到 /login，并将当前路径保存为 redirect 参数
- *  - 已登录但角色不匹配时重定向到 /（系统主页面）
+ *  - 已登录但角色不匹配时：仓库角色引导到 /warehouse-scan，其余重定向到 /login
  *  - 通过 /api/me 从服务端确认用户角色后再渲染，防止篡改 localStorage 绕过权限
  */
 
@@ -13,7 +13,7 @@ import { useAuthStore } from '../stores/authStore';
 
 interface RoleGuardProps {
   /** 允许访问的角色列表 */
-  allowedRoles: Array<'admin' | 'manager' | 'user'>;
+  allowedRoles: Array<'admin' | 'manager' | 'warehouse' | 'user'>;
   children: ReactNode;
 }
 
@@ -49,7 +49,11 @@ export default function RoleGuard({ allowedRoles, children }: RoleGuardProps) {
   }
 
   if (!user || !allowedRoles.includes(user.role)) {
-    return <Navigate to="/" replace />;
+    // 仓库角色只能使用扫码页：因角色不匹配被拒时引导到扫码页而非登录页
+    if (user?.role === 'warehouse') {
+      return <Navigate to="/warehouse-scan" replace />;
+    }
+    return <Navigate to="/login" replace />;
   }
 
   return <>{children}</>;

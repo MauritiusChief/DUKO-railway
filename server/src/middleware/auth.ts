@@ -1,7 +1,8 @@
 /**
  * JWT 认证中间件
  *
- * authenticateToken —— 从 Authorization 头提取并验证 Access Token
+ * authenticateToken —— 从 Authorization 头提取并验证 Access Token，
+ *                      再从 users.sqlite 读取当前用户与角色（降级/删号立即生效）
  * requireAdmin      —— 检查已认证用户是否为管理员
  * generateAccessToken  —— 签发 Access Token（15 分钟过期）
  * generateRefreshToken —— 签发 Refresh Token（7 天过期）
@@ -17,6 +18,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { config } from '../config/env.js';
+import { findUserById } from '../db/users.js';
 import type { UserRole } from '../db/users.js';
 
 /** JWT payload 中携带的用户信息 */
@@ -45,7 +47,7 @@ export function generateAccessToken(payload: JwtPayload): string {
   });
 }
 
-/** 验证 Access Token 并将解析出的用户信息挂载到 req.user */
+/** 验证 Access Token 并将数据库中的当前用户信息挂载到 req.user */
 export function authenticateToken(req: Request, res: Response, next: NextFunction): void {
   const authHeader = req.headers.authorization;
   const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : undefined;
@@ -60,7 +62,20 @@ export function authenticateToken(req: Request, res: Response, next: NextFunctio
     const decoded = jwt.verify(token, config.jwtAccessSecret, {
       algorithms: ['HS256'],
     }) as JwtPayload;
-    req.user = decoded;
+
+    // 角色以数据库为准：角色降级或账号删除立即生效，
+    // 不延续 access token 中可能已过时的用户名/角色
+    const current = findUserById(decoded.userId);
+    if (!current) {
+      res.status(401).json({ error: '用户不存在或已被删除' });
+      return;
+    }
+
+    req.user = {
+      userId: current.id,
+      username: current.username,
+      role: current.role,
+    };
     next();
   } catch {
     res.status(401).json({ error: '认证令牌无效或已过期' });

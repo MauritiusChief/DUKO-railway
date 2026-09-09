@@ -12,7 +12,7 @@ import fs from 'fs';
 let db: Database.Database;
 
 /** 用户角色类型 */
-export type UserRole = 'admin' | 'manager' | 'user';
+export type UserRole = 'admin' | 'manager' | 'warehouse' | 'user';
 
 /** 数据库中的用户行 */
 export interface UserRow {
@@ -50,7 +50,7 @@ export function initUserDB(dbDir: string): void {
       id          INTEGER PRIMARY KEY AUTOINCREMENT,
       username    TEXT    NOT NULL UNIQUE,
       password_hash TEXT  NOT NULL,
-      role        TEXT    NOT NULL DEFAULT 'user' CHECK(role IN ('admin','manager','user')),
+      role        TEXT    NOT NULL DEFAULT 'user' CHECK(role IN ('admin','manager','warehouse','user')),
       created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
     );
 
@@ -166,6 +166,7 @@ export function initUserDB(dbDir: string): void {
   `);
 
   migrateUsersManagerRole(db);
+  migrateUsersWarehouseRole(db);
   migrateQuotationLineDiscount(db);
 }
 
@@ -210,6 +211,48 @@ function migrateUsersManagerRole(database: Database.Database): void {
   database.prepare(
     'INSERT OR IGNORE INTO schema_migrations (name) VALUES (?)',
   ).run('0001_users_manager_role');
+}
+
+/**
+ * 版本化迁移：users 表放宽角色 CHECK 以支持 warehouse 角色。
+ *
+ * 复用 0001 的「重建表」模式：仅当 users 表当前 schema 不含 'warehouse'
+ * 时执行重建；已迁移或全新库直接记录迁移标记，保证幂等。
+ */
+function migrateUsersWarehouseRole(database: Database.Database): void {
+  const row = database.prepare(
+    "SELECT sql FROM sqlite_master WHERE type='table' AND name='users'",
+  ).get() as { sql: string } | undefined;
+  const alreadySupportsWarehouse = !!row?.sql && row.sql.includes('warehouse');
+
+  if (!alreadySupportsWarehouse) {
+    database.exec('PRAGMA foreign_keys = OFF;');
+    const rebuild = database.transaction(() => {
+      database.exec(`
+        CREATE TABLE users_new (
+          id          INTEGER PRIMARY KEY AUTOINCREMENT,
+          username    TEXT    NOT NULL UNIQUE,
+          password_hash TEXT  NOT NULL,
+          role        TEXT    NOT NULL DEFAULT 'user' CHECK(role IN ('admin','manager','warehouse','user')),
+          created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+        );
+        INSERT INTO users_new (id, username, password_hash, role, created_at)
+          SELECT id, username, password_hash, role, created_at FROM users;
+        DROP TABLE users;
+        ALTER TABLE users_new RENAME TO users;
+      `);
+    });
+    rebuild();
+    database.exec('PRAGMA foreign_keys = ON;');
+    const violations = database.pragma('foreign_key_check', { simple: false });
+    if (Array.isArray(violations) && violations.length > 0) {
+      throw new Error(`users 表迁移后外键一致性检查失败: ${JSON.stringify(violations)}`);
+    }
+  }
+
+  database.prepare(
+    'INSERT OR IGNORE INTO schema_migrations (name) VALUES (?)',
+  ).run('0003_users_warehouse_role');
 }
 
 /**
@@ -476,7 +519,7 @@ export function updateUserPassword(userId: number, passwordHash: string): boolea
   return result.changes > 0;
 }
 
-/** 管理员专用：更新用户角色（仅允许 user / manager，不能授予 admin） */
+/** 管理员专用：更新用户角色（仅允许 user / manager / warehouse，不能授予 admin） */
 export function updateUserRole(userId: number, role: UserRole): boolean {
   const result = db.prepare(
     'UPDATE users SET role = ? WHERE id = ?',

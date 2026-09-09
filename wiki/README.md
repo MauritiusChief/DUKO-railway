@@ -13,6 +13,7 @@
 - [Auto Worker](auto/README.md)：独立 Playwright worker 的配置、任务和运行边界。
 - [手工 CSV Quote Filler](script/README.md)：Odoo 用户脚本的构建、使用与 DOM 风险。
 - 部署资料：[Railway 部署](RAILWAY_SETUP.md)、[WSL 可选操作环境](RAILWAY_SETUP_WSL.md)。本索引不复制其中的平台步骤。
+- [Windows 局域网手机测试](windows-lan-mobile-testing.md)：PM2 本地服务在同一可信 Wi-Fi 中供 Android 手机访问时的防火墙、网络与相机排查。
 - [实施计划](plans/README.md)：需要跨组件协调或记录重要取舍的临时方案。
 
 ## 事实优先级

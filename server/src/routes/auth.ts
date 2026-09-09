@@ -125,12 +125,20 @@ authRouter.post('/refresh', authLimiter, (req: Request, res: Response) => {
   // Rotation：立即删除旧的 refresh token，签发新的
   revokeRefreshToken(payload.userId, refreshToken);
 
+  // 用户信息以数据库为准：账号已删除则终止会话，角色降级立即生效
+  const current = findUserById(payload.userId);
+  if (!current) {
+    clearRefreshCookie(res);
+    res.status(401).json({ error: '用户不存在或已被删除' });
+    return;
+  }
+
   // jwt.verify 返回的对象含 exp/iat 等 JWT 标准字段，
   // 重新签名须构造干净 payload，否则 jsonwebtoken 拒绝覆盖已有 exp 属性
   const signPayload: JwtPayload = {
-    userId: payload.userId,
-    username: payload.username,
-    role: payload.role,
+    userId: current.id,
+    username: current.username,
+    role: current.role,
   };
 
   const newAccessToken = generateAccessToken(signPayload);
@@ -138,12 +146,9 @@ authRouter.post('/refresh', authLimiter, (req: Request, res: Response) => {
   storeRefreshToken(signPayload.userId, newRefreshToken);
   setRefreshCookie(res, newRefreshToken);
 
-  // 查询最新用户信息返回
-  const user = findUserById(signPayload.userId);
-
   res.json({
     accessToken: newAccessToken,
-    user: user ?? undefined,
+    user: current,
   });
 });
 
@@ -272,7 +277,7 @@ authRouter.patch(
   },
 );
 
-/** PATCH /api/auth/users/:id/role —— 管理员修改用户角色（仅 user ↔ manager） */
+/** PATCH /api/auth/users/:id/role —— 管理员修改用户角色（仅 user / manager / warehouse） */
 authRouter.patch(
   '/users/:id/role',
   authenticateToken,
@@ -295,13 +300,13 @@ authRouter.patch(
       res.status(404).json({ error: '用户不存在' });
       return;
     }
-    // 不能修改现有 admin 的角色（也不能授予 admin，schema 已限制仅 user/manager）
+    // 不能修改现有 admin 的角色（也不能授予 admin，schema 已限制仅 user/manager/warehouse）
     if (target.role === 'admin') {
       res.status(403).json({ error: '不能修改管理员账户的角色' });
       return;
     }
 
-    const { role, adminPassword } = req.body as { role: 'user' | 'manager'; adminPassword: string };
+    const { role, adminPassword } = req.body as { role: 'user' | 'manager' | 'warehouse'; adminPassword: string };
 
     if (!verifyAdminPassword(req, adminPassword)) {
       res.status(403).json({ error: '管理员密码错误' });
