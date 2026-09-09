@@ -3,7 +3,7 @@
  *
  * 包裹仅限管理员访问的页面：
  *  - 未登录时重定向到 /login，并将当前路径保存为 redirect 参数
- *  - 已登录但非管理员时重定向到 /（系统主页面）
+ *  - 已登录但非管理员时重定向到 /login, 不带 redirect 参数
  *  - 通过 /api/me 从服务端确认用户角色，防止篡改 localStorage 绕过权限
  */
 
@@ -47,7 +47,7 @@ export default function AdminGuard({ children }: AdminGuardProps) {
   }
 
   if (!user || user.role !== 'admin') {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/login" replace />;
   }
 
   return <>{children}</>;

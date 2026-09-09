@@ -624,6 +624,290 @@ export const messages = {
     zh: '经理',
     en: 'Manager',
   },
+  仓库: {
+    zh: '仓库',
+    en: 'Warehouse',
+  },
+  仓库扫码: {
+    zh: '仓库扫码',
+    en: 'Warehouse Scan',
+  },
+  仓库管理: {
+    zh: '仓库管理',
+    en: 'Warehouse Manage',
+  },
+  返回扫码页: {
+    zh: '返回扫码页',
+    en: 'Back to Scan',
+  },
+  扫描条码: {
+    zh: '扫描条码',
+    en: 'Scan Barcode',
+  },
+  '正在识别条码...': {
+    zh: '正在识别条码...',
+    en: 'Recognizing barcode...',
+  },
+  '保存中...': {
+    zh: '保存中...',
+    en: 'Saving...',
+  },
+  型号序列号: {
+    zh: '型号序列号',
+    en: 'Model Serial No.',
+  },
+  产品序列号: {
+    zh: '产品序列号',
+    en: 'Product Serial No.',
+  },
+  确认录入: {
+    zh: '确认录入',
+    en: 'Confirm Entry',
+  },
+  清空本轮: {
+    zh: '清空本轮',
+    en: 'Clear This Round',
+  },
+  已保存: {
+    zh: '已保存',
+    en: 'Saved',
+  },
+  已删除: {
+    zh: '已删除',
+    en: 'Deleted',
+  },
+  '已保存，SKU 待确认': {
+    zh: '已保存，SKU 待确认',
+    en: 'Saved; SKU pending confirmation',
+  },
+  '待确认 SKU': {
+    zh: '待确认 SKU',
+    en: 'Pending SKU',
+  },
+  '未识别到条码，请对准条码后重试': {
+    zh: '未识别到条码，请对准条码后重试',
+    en: 'No barcode recognized. Aim at the barcode and retry.',
+  },
+  '识别到多个或不符合格式的条码，本次扫码无效': {
+    zh: '识别到多个或不符合格式的条码，本次扫码无效',
+    en: 'Multiple or invalid barcodes detected; this scan was discarded.',
+  },
+  '与本轮已扫描内容不一致，本次扫码无效': {
+    zh: '与本轮已扫描内容不一致，本次扫码无效',
+    en: 'Mismatch with current entries; this scan was discarded.',
+  },
+  '本轮已就绪，请确认录入或清空本轮': {
+    zh: '本轮已就绪，请确认录入或清空本轮',
+    en: 'Both codes ready. Confirm entry or clear this round.',
+  },
+  '已扫描型号，请扫描产品条码': {
+    zh: '已扫描型号，请扫描产品条码',
+    en: 'Model scanned. Now scan the product barcode.',
+  },
+  '已扫描产品，请扫描型号条码': {
+    zh: '已扫描产品，请扫描型号条码',
+    en: 'Product scanned. Now scan the model barcode.',
+  },
+  '此浏览器不支持条码识别，请使用 Android Chrome': {
+    zh: '此浏览器不支持条码识别，请使用 Android Chrome',
+    en: 'Barcode detection is not supported in this browser. Please use Android Chrome.',
+  },
+  '相机不可用或已取消，请重试': {
+    zh: '相机不可用或已取消，请重试',
+    en: 'Camera unavailable or cancelled. Please retry.',
+  },
+  '图片处理失败，请重试': {
+    zh: '图片处理失败，请重试',
+    en: 'Failed to process the image. Please retry.',
+  },
+  产品序列号已存在: {
+    zh: '产品序列号已存在',
+    en: 'Product serial number already exists',
+  },
+  原记录: {
+    zh: '原记录',
+    en: 'Original record',
+  },
+  扫描时间: {
+    zh: '扫描时间',
+    en: 'Scan Time',
+  },
+  保存失败: {
+    zh: '保存失败',
+    en: 'Save failed',
+  },
+  查询: {
+    zh: '查询',
+    en: 'Query',
+  },
+  按日: {
+    zh: '按日',
+    en: 'By Day',
+  },
+  按区间: {
+    zh: '按区间',
+    en: 'By Range',
+  },
+  汇总: {
+    zh: '汇总',
+    en: 'Summary',
+  },
+  扫描记录: {
+    zh: '扫描记录',
+    en: 'Scan Records',
+  },
+  映射: {
+    zh: '映射',
+    en: 'Mappings',
+  },
+  记录数: {
+    zh: '记录数',
+    en: 'Records',
+  },
+  筛选: {
+    zh: '筛选',
+    en: 'Filters',
+  },
+  时间: {
+    zh: '时间',
+    en: 'Time',
+  },
+  编辑: {
+    zh: '编辑',
+    en: 'Edit',
+  },
+  删除: {
+    zh: '删除',
+    en: 'Delete',
+  },
+  上一页: {
+    zh: '上一页',
+    en: 'Previous',
+  },
+  下一页: {
+    zh: '下一页',
+    en: 'Next',
+  },
+  重置: {
+    zh: '重置',
+    en: 'Reset',
+  },
+  '共 {total} 条': {
+    zh: '共 {total} 条',
+    en: '{total} in total',
+  },
+  '确定要删除该扫描记录吗？此操作不可撤销。': {
+    zh: '确定要删除该扫描记录吗？此操作不可撤销。',
+    en: 'Delete this scan record? This cannot be undone.',
+  },
+  '重命名将同步更新 {count} 条关联扫描记录': {
+    zh: '重命名将同步更新 {count} 条关联扫描记录',
+    en: 'Renaming will update {count} linked scan records',
+  },
+  确认重命名: {
+    zh: '确认重命名',
+    en: 'Confirm Rename',
+  },
+  '修改 SKU': {
+    zh: '修改 SKU',
+    en: 'Change SKU',
+  },
+  重命名型号: {
+    zh: '重命名型号',
+    en: 'Rename Model',
+  },
+  'JSON 导入': {
+    zh: 'JSON 导入',
+    en: 'JSON Import',
+  },
+  '仅支持 warehouse-count-helper 导出的 JSON 文件': {
+    zh: '仅支持 warehouse-count-helper 导出的 JSON 文件',
+    en: 'Only JSON files exported by warehouse-count-helper are supported',
+  },
+  '文件内容不是有效 JSON': {
+    zh: '文件内容不是有效 JSON',
+    en: 'File content is not valid JSON',
+  },
+  合并: {
+    zh: '合并',
+    en: 'Merge',
+  },
+  替换: {
+    zh: '替换',
+    en: 'Replace',
+  },
+  执行导入: {
+    zh: '执行导入',
+    en: 'Run Import',
+  },
+  记录总数: {
+    zh: '记录总数',
+    en: 'Total Records',
+  },
+  新增: {
+    zh: '新增',
+    en: 'New',
+  },
+  内容相同将跳过: {
+    zh: '内容相同将跳过',
+    en: 'Identical (skipped)',
+  },
+  占位映射自动升级: {
+    zh: '占位映射自动升级',
+    en: 'Placeholders auto-upgraded',
+  },
+  产品冲突: {
+    zh: '产品冲突',
+    en: 'Product Conflicts',
+  },
+  映射冲突: {
+    zh: '映射冲突',
+    en: 'Mapping Conflicts',
+  },
+  现有: {
+    zh: '现有',
+    en: 'Existing',
+  },
+  导入值: {
+    zh: '导入值',
+    en: 'Imported',
+  },
+  保留现有: {
+    zh: '保留现有',
+    en: 'Keep Existing',
+  },
+  采用导入: {
+    zh: '采用导入',
+    en: 'Adopt Import',
+  },
+  'SKU 冲突': {
+    zh: 'SKU 冲突',
+    en: 'SKU Conflicts',
+  },
+  '采用导入映射将导致 SKU 一对一冲突，请改为保留现有或先调整现有映射': {
+    zh: '采用导入映射将导致 SKU 一对一冲突，请改为保留现有或先调整现有映射',
+    en: 'Adopting the imported mappings would break SKU uniqueness. Keep existing or adjust mappings first.',
+  },
+  '替换将清空全部仓库数据，不可恢复': {
+    zh: '替换将清空全部仓库数据，不可恢复',
+    en: 'Replace erases ALL warehouse data. This cannot be undone.',
+  },
+  '现有扫描记录 {records} 条、映射 {mappings} 条': {
+    zh: '现有扫描记录 {records} 条、映射 {mappings} 条',
+    en: '{records} scan records and {mappings} mappings exist',
+  },
+  '我确认清空全部数据': {
+    zh: '我确认清空全部数据',
+    en: 'I confirm erasing all data',
+  },
+  '导入完成：记录新增 {inserted}、更新 {updated}、跳过 {skipped}；映射新增 {mappingsAdded}、更新 {mappingsUpdated}': {
+    zh: '导入完成：记录新增 {inserted}、更新 {updated}、跳过 {skipped}；映射新增 {mappingsAdded}、更新 {mappingsUpdated}',
+    en: 'Import done: records +{inserted}, ~{updated}, ={skipped}; mappings +{mappingsAdded}, ~{mappingsUpdated}',
+  },
+  '替换导入完成：写入 {records} 条记录、{mappings} 条映射': {
+    zh: '替换导入完成：写入 {records} 条记录、{mappings} 条映射',
+    en: 'Replace import done: {records} records and {mappings} mappings written',
+  },
   修改角色: {
     zh: '修改角色',
     en: 'Change Role',

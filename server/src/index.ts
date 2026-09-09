@@ -34,8 +34,9 @@ import { traceRouter } from './routes/trace.js';
 import { quotationRouter } from './routes/quotation.js';
 import { inventoryRouter } from './routes/inventory.js';
 import { autoWorkerRouter } from './routes/auto-worker.js';
+import { warehouseScanRouter, warehouseRouter } from './routes/warehouse.js';
 import { authenticateToken } from './middleware/auth.js';
-import { apiLimiter, llmLimiter } from './middleware/rateLimit.js';
+import { apiLimiter, llmLimiter, warehouseScanLimiter } from './middleware/rateLimit.js';
 import { config, validateSecrets } from './config/env.js';
 import { initDB } from './db/lance.js';
 import { initSkuDB, getRecordCount } from './db/sku.js';
@@ -101,6 +102,11 @@ app.use('/api/trace', apiLimiter, authenticateToken, traceRouter);              
 
 // ---- 管理员历史路由（管理员只读浏览所有用户历史）----
 app.use('/api/admin', apiLimiter, authenticateToken, adminHistoryRouter);                    // GET /api/admin/history[/:id]
+
+// ---- 仓库扫码（先注册避免被后续 /api 前缀的 apiLimiter 捕获）----
+// 提交扫码走专用限流：现场单次盘点约 1,000 条，通用 500/15 分钟会阻断正常作业
+app.use('/api/warehouse/scans', warehouseScanLimiter, authenticateToken, warehouseScanRouter); // POST /api/warehouse/scans
+app.use('/api/warehouse', apiLimiter, authenticateToken, warehouseRouter);                     // 管理端点（manager/admin）
 
 // ---- ScriptCat 脚本下载端点（无需登录）----
 // 供前端小按钮下载，文件名带构建时间戳以便用户确认是否为最新版本

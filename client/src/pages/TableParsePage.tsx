@@ -485,6 +485,11 @@ export default function TableParsePage() {
               库存看板
             </button>
           )}
+          {(user?.role === 'admin' || user?.role === 'manager') && (
+            <button className="tp-submit-btn tp-download-btn" onClick={() => navigate('/warehouse-scan')}>
+              {t('仓库扫码')}
+            </button>
+          )}
           <button className="tp-submit-btn tp-download-btn" onClick={handleDownloadScript}>
             {t('下载脚本')}
           </button>

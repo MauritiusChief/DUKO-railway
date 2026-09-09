@@ -8,9 +8,13 @@ import AllHistoryPage from './pages/AllHistoryPage';
 import TracePage from './pages/TracePage';
 import QuotationTasksPage from './pages/QuotationTasksPage';
 import InventoryDashboardPage from './pages/InventoryDashboardPage';
-import AuthGuard from './components/AuthGuard';
+import WarehouseScanPage from './pages/WarehouseScanPage';
+import WarehouseManagePage from './pages/WarehouseManagePage';
 import AdminGuard from './components/AdminGuard';
 import RoleGuard from './components/RoleGuard';
+
+/** 除仓库角色外的业务角色集合（warehouse 仅可访问扫码页） */
+const BUSINESS_ROLES: Array<'admin' | 'manager' | 'warehouse' | 'user'> = ['admin', 'manager', 'user'];
 
 export default function App() {
   return (
@@ -19,33 +23,49 @@ export default function App() {
       <Route
         path="/"
         element={
-          <AuthGuard>
+          <RoleGuard allowedRoles={BUSINESS_ROLES}>
             <TableParsePage />
-          </AuthGuard>
+          </RoleGuard>
         }
       />
       <Route
         path="/history"
         element={
-          <AuthGuard>
+          <RoleGuard allowedRoles={BUSINESS_ROLES}>
             <HistoryPage />
-          </AuthGuard>
+          </RoleGuard>
         }
       />
       <Route
         path="/quotation-tasks"
         element={
-          <AuthGuard>
+          <RoleGuard allowedRoles={BUSINESS_ROLES}>
             <QuotationTasksPage />
-          </AuthGuard>
+          </RoleGuard>
         }
       />
       <Route
         path="/layout-recognize"
         element={
-          <AuthGuard>
+          <RoleGuard allowedRoles={BUSINESS_ROLES}>
             <LayoutRecognizePage />
-          </AuthGuard>
+          </RoleGuard>
+        }
+      />
+      <Route
+        path="/warehouse-scan"
+        element={
+          <RoleGuard allowedRoles={['admin', 'manager', 'warehouse']}>
+            <WarehouseScanPage />
+          </RoleGuard>
+        }
+      />
+      <Route
+        path="/warehouse-manage"
+        element={
+          <RoleGuard allowedRoles={['admin', 'manager']}>
+            <WarehouseManagePage />
+          </RoleGuard>
         }
       />
       <Route
