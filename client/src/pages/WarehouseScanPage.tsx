@@ -8,6 +8,7 @@
  *  - 每张图片解码收集全部条码，只接受至多一个型号格式值和一个产品格式值；
  *  - 额外条码、两个同类型有效值或格式外条码使整次扫码无效，不改变本轮状态；
  *  - 恰好一个有效序列号且本轮两码均已填时，先清空本轮再填入本次值（开始下一件）；
+ *  - 合法结果与已填槽位不同时，丢弃旧轮次并使用当前图片的全部结果开始新一轮；
  *  - 服务端写入成功后清空本轮；重复产品序列号显示原记录摘要（不振动）。
  *
  * 经理/管理员在此页额外看到映射管理入口；仓库角色只能看到录入结果与待确认提示。
@@ -78,7 +79,7 @@ export default function WarehouseScanPage() {
     };
   }, []);
 
-  /** 依计划应用一次解码结果（codes 已规范化） */
+  /** 依规则应用一次解码结果（codes 已规范化） */
   const applyCodes = (codes: string[]) => {
     if (codes.length === 0) {
       setMessage({ kind: 'error', text: t('未识别到条码，请对准条码后重试') });
@@ -97,35 +98,46 @@ export default function WarehouseScanPage() {
     const newProduct = products[0];
     setDuplicate(null);
 
+    const setRound = (nextModel: string, nextProduct: string, replaced: boolean) => {
+      setModel(nextModel);
+      setProduct(nextProduct);
+      if (replaced) setLastSku(null);
+
+      if (nextModel && nextProduct) {
+        setMessage({
+          kind: 'info',
+          text: replaced
+            ? t('本轮已更新为最新扫描结果，请确认录入或清空本轮')
+            : t('本轮已就绪，请确认录入或清空本轮'),
+        });
+      } else if (nextModel) {
+        setMessage({
+          kind: 'info',
+          text: replaced ? t('本轮已更新为最新型号，请扫描产品条码') : t('已扫描型号，请扫描产品条码'),
+        });
+      } else {
+        setMessage({
+          kind: 'info',
+          text: replaced ? t('本轮已更新为最新产品，请扫描型号条码') : t('已扫描产品，请扫描型号条码'),
+        });
+      }
+    };
+
     // 恰好一个有效序列号且两码均已填 → 清空本轮再填入（开始下一件）
     if (codes.length === 1 && model && product) {
-      setModel(newModel ?? '');
-      setProduct(newProduct ?? '');
-      setLastSku(null);
-      setMessage({
-        kind: 'info',
-        text: newModel ? t('已扫描型号，请扫描产品条码') : t('已扫描产品，请扫描型号条码'),
-      });
+      setRound(newModel ?? '', newProduct ?? '', true);
       return;
     }
 
-    // 新值指向已占用槽位且与现值不同 → 整次无效
+    // 新值与已填槽位冲突时，以当前图片的全部合法结果开始新一轮。
     if ((newModel && model && model !== newModel) || (newProduct && product && product !== newProduct)) {
-      setMessage({ kind: 'error', text: t('与本轮已扫描内容不一致，本次扫码无效') });
+      setRound(newModel ?? '', newProduct ?? '', true);
       return;
     }
 
     const nextModel = newModel ?? model;
     const nextProduct = newProduct ?? product;
-    setModel(nextModel);
-    setProduct(nextProduct);
-    if (nextModel && nextProduct) {
-      setMessage({ kind: 'info', text: t('本轮已就绪，请确认录入或清空本轮') });
-    } else if (nextModel) {
-      setMessage({ kind: 'info', text: t('已扫描型号，请扫描产品条码') });
-    } else {
-      setMessage({ kind: 'info', text: t('已扫描产品，请扫描型号条码') });
-    }
+    setRound(nextModel, nextProduct, false);
   };
 
   const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {

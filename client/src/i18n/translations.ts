@@ -692,21 +692,29 @@ export const messages = {
     zh: '识别到多个或不符合格式的条码，本次扫码无效',
     en: 'Multiple or invalid barcodes detected; this scan was discarded.',
   },
-  '与本轮已扫描内容不一致，本次扫码无效': {
-    zh: '与本轮已扫描内容不一致，本次扫码无效',
-    en: 'Mismatch with current entries; this scan was discarded.',
-  },
   '本轮已就绪，请确认录入或清空本轮': {
     zh: '本轮已就绪，请确认录入或清空本轮',
     en: 'Both codes ready. Confirm entry or clear this round.',
+  },
+  '本轮已更新为最新扫描结果，请确认录入或清空本轮': {
+    zh: '本轮已更新为最新扫描结果，请确认录入或清空本轮',
+    en: 'This round was updated with the latest scan. Confirm entry or clear it.',
   },
   '已扫描型号，请扫描产品条码': {
     zh: '已扫描型号，请扫描产品条码',
     en: 'Model scanned. Now scan the product barcode.',
   },
+  '本轮已更新为最新型号，请扫描产品条码': {
+    zh: '本轮已更新为最新型号，请扫描产品条码',
+    en: 'This round was updated with the latest model. Now scan the product barcode.',
+  },
   '已扫描产品，请扫描型号条码': {
     zh: '已扫描产品，请扫描型号条码',
     en: 'Product scanned. Now scan the model barcode.',
+  },
+  '本轮已更新为最新产品，请扫描型号条码': {
+    zh: '本轮已更新为最新产品，请扫描型号条码',
+    en: 'This round was updated with the latest product. Now scan the model barcode.',
   },
   '此浏览器不支持条码识别，请使用 Android Chrome': {
     zh: '此浏览器不支持条码识别，请使用 Android Chrome',
