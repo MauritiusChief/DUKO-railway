@@ -33,7 +33,7 @@
 
 ## 库存看板
 
-`client/src/pages/InventoryDashboardPage.tsx` 路由由 `client/src/components/RoleGuard.tsx` 保护，仅 `admin` 与 `manager` 可访问（普通 `user` 直接访问会跳回主页）；服务端全部库存端点同样要求 manager/admin。入口按钮只存在于主页（TableParsePage），且仅 manager/admin 可见；报价任务页不再提供库存入口。
+`client/src/pages/InventoryDashboardPage.tsx` 路由由 `client/src/components/RoleGuard.tsx` 保护，仅 `admin` 与 `manager` 可访问（普通 `user` 直接访问会跳到 `/login`，仓库角色会被引导到扫码页）；服务端全部库存端点同样要求 manager/admin。入口按钮只存在于主页（TableParsePage），且仅 manager/admin 可见；报价任务页不再提供库存入口。
 
 看板提供两种起点：
 

@@ -97,6 +97,7 @@ Remove-NetFirewallRule -DisplayName "DUKO local phone test"
 | 手机显示无法连接 | IPv4 是否正确、同一 Wi-Fi、VPN/移动数据、Windows 专用网络防火墙规则、客户端隔离 |
 | 手机能打开页面但登录/API 失败 | 手机访问的是 `3023` 而不是 Vite `5273`；检查 PM2 日志和测试账号 |
 | 手机能登录但无法打开相机 | Android/Chrome 相机权限、Chrome 是否为当前版本、重新打开扫码页 |
+| 页面报 `crypto.randomUUID is not a function` | 纯 HTTP 局域网访问不是安全上下文，`crypto.randomUUID` 不可用（localhost/HTTPS 才有）；涉及该 API 的代码需准备降级路径后才能做局域网验收 |
 | 端口规则已添加仍不可达 | 路由器客户端隔离、第三方安全软件、防火墙规则是否限于错误的网络配置文件 |
 
 ## 停止测试

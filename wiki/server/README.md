@@ -21,6 +21,7 @@
 - SKU 形状模糊搜索、BM25 描述搜索、组合搜索、结构化过滤及本地向量语义检索。
 - 清单编辑、产品库存和组件查询、布局物料清单生成、用户笔记与解析历史。
 - 用户登录、管理员创建和维护用户、管理员浏览全量历史与 LLM trace。
+- 仓库条形码点数：扫码录入、型号↔SKU 映射维护、日期汇总与原型 JSON 导入（`warehouse` 角色 + manager/admin 管理页）。
 - 报价任务持久队列，通过外部 auto worker 在 Odoo 搜索、核验、确认并写入报价行。
 - 库存 CSV 上传或由 worker 下载，随后清洗、低库存筛选、近期移动趋势查验和分级。
 - LLM 步进、报价状态、全局队列和库存进度通过 SSE 推送；worker 使用 WebSocket 双向通信。
@@ -31,6 +32,7 @@
 - [数据与搜索](./data-and-search.md)
 - [认证与持久化](./auth-and-persistence.md)
 - [实时通信与自动化](./realtime-and-automation.md)
+- [仓库扫码](./warehouse-scan.md)
 - [Railway 部署](../RAILWAY_SETUP.md)
 
 ## 重要边界

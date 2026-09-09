@@ -9,7 +9,7 @@
 - [布局识别](client/layout-recognize.md)：图片识别、双轨布局编辑和物料清单。
 - [报价与库存](client/quotation-and-inventory.md)：报价任务队列、Odoo worker、库存下载/上传与趋势分类。
 - [管理、历史与追踪](client/admin-history-and-trace.md)：认证、用户管理、个人/全量历史、搜索调试与 LLM trace。
-- [Server 概览](server/README.md)：服务端入口；下分 [Agents 与工具](server/agents-and-tools.md)、[认证与持久化](server/auth-and-persistence.md)、[数据与搜索](server/data-and-search.md)、[实时通信与自动化](server/realtime-and-automation.md)。
+- [Server 概览](server/README.md)：服务端入口；下分 [Agents 与工具](server/agents-and-tools.md)、[认证与持久化](server/auth-and-persistence.md)、[数据与搜索](server/data-and-search.md)、[实时通信与自动化](server/realtime-and-automation.md)、[仓库扫码](server/warehouse-scan.md)。
 - [Auto Worker](auto/README.md)：独立 Playwright worker 的配置、任务和运行边界。
 - [手工 CSV Quote Filler](script/README.md)：Odoo 用户脚本的构建、使用与 DOM 风险。
 - 部署资料：[Railway 部署](RAILWAY_SETUP.md)、[WSL 可选操作环境](RAILWAY_SETUP_WSL.md)。本索引不复制其中的平台步骤。
