@@ -4,19 +4,21 @@
 
 用户密码使用 bcrypt，成本参数为 12。启动时由 `ADMIN_USERNAME` 和 `ADMIN_PASSWORD` 播种第一个管理员；若数据库中已经存在管理员则跳过，不会用环境变量密码覆盖现有账号。
 
-角色分为 `admin`、`manager`、`user` 三种。`manager` 是为库存看板引入的角色：可访问库存看板，但不具备管理员用户管理、全量历史、trace、debug 等能力。新建用户仍默认 `user`，管理员不能通过接口授予或修改 `admin` 角色。
+角色分为 `admin`、`manager`、`warehouse`、`user` 四种。`manager` 是为库存看板引入的角色：可访问库存看板，但不具备管理员用户管理、全量历史、trace、debug 等能力。`warehouse` 是为仓库条形码点数引入的角色：只能使用仓库扫码页及扫码录入 API，其他业务 API 一律 403（见 [仓库扫码](./warehouse-scan.md)）。新建用户仍默认 `user`，管理员可将非管理员用户在 `user`、`manager`、`warehouse` 之间切换，但不能通过接口授予或修改 `admin` 角色。
 
 登录后返回 15 分钟有效的 HS256 Access Token，客户端通过 `Authorization: Bearer ...` 访问受保护功能。7 天有效的 Refresh Token 只通过 HttpOnly Cookie 传输，Cookie 路径限定为 `/api/auth`，`SameSite=Lax`，生产环境启用 `Secure`。刷新时旧 token 会被撤销并轮换新 token。
 
-管理员可以创建普通用户、查看用户列表、修改非种子管理员用户的用户名或密码、删除用户，以及在 `user` 与 `manager` 之间切换非管理员用户的角色；敏感管理操作还要求当前管理员密码。种子管理员不能通过这些接口改名、改密或删除，当前管理员也不能删除自己。修改角色成功后会撤销目标用户已有的 refresh token，迫使其在 access token 过期（≤15 分钟）后重新登录拿到新角色；这 ≤15 分钟的旧 access token 残留窗口是当前接受的有意取舍。
+管理员可以创建普通用户、查看用户列表、修改非种子管理员用户的用户名或密码、删除用户，以及切换非管理员用户的角色；敏感管理操作还要求当前管理员密码。种子管理员不能通过这些接口改名、改密或删除，当前管理员也不能删除自己。
+
+**`authenticateToken` 在验证 JWT 签名后，每个请求都会从 `users.sqlite` 读取当前用户与角色**，`req.user` 以数据库为准而非 token 载荷。因此角色降级、改名立即生效；账号被删除后下一次请求即返回 401，refresh 路由在轮换前也会确认用户仍存在，删除账号等同于终止其会话。token 内的用户名/角色只是签发时快照，不参与授权判断。修改角色仍会撤销目标用户 refresh token 以加速会话轮换。修改密码不撤销已签发 token（密码不参与 token 校验），该会话保持到 token 自然过期，这是当前接受的取舍。
 
 ## 认证边界
 
 - Refresh Token 的有效集合保存在进程内存 `Map`，不写 SQLite。server 重启后所有 refresh token 失效，用户需要重新登录；这是当前实现，不是故障。
-- Access Token 自包含，在过期前只校验签名和算法。用户资料变更后，旧 token 内的用户名/角色可能保留到过期。
-- 当前修改密码或删除账号不会撤销该用户已签发的 Access/Refresh Token；refresh 路由也不会在轮换前确认用户仍存在。被删除或改密用户可能继续刷新会话，这是待修复的高风险认证边界，不能把数据库删除等同于立即终止访问。修改角色是例外：会撤销目标 refresh token（见上），但旧 access token 仍按 JWT 校验到过期。
+- Access Token 自包含，但授权信息以数据库为准：`authenticateToken` 每请求读 `users.sqlite`（主键查询，better-sqlite3 同步读取）。用户被删除后旧 token 立即失效；角色/用户名变更立即生效。
+- 修改密码不会撤销该用户已签发的 Access/Refresh Token（密码不参与 token 校验），已有会话保持到 token 自然过期；但账号删除会在下一次请求或刷新时终止会话（中间件与 refresh 路由都确认用户仍存在）。
 - `AUTO_WORKER_TOKEN` 是独立的 worker 共享密钥，不是用户 JWT。它通过 WebSocket 首条 `hello` 消息验证，必须与外部 auto 配置完全一致。
-- 登录、刷新和 LLM/普通 API 使用不同限流器；限流是单进程运行态，不是分布式策略。
+- 登录、刷新、LLM、普通 API 与仓库扫码提交使用不同限流器；限流是单进程运行态，不是分布式策略。
 - Inventory 路由整体要求有效 Access Token，且全部端点（创建、上传、快照、SSE、取消、历史查询）额外要求 `manager` 或 `admin` 角色。快照、SSE 与取消共用按 job `userId` 的所有权判断：非创建者（且非该 job 归属用户）无法读取或订阅他人 job；全局库存历史对所有 manager/admin 共享。
 - 报价全局 SSE 会向所有登录用户发送队列和活跃任务摘要，其中包含报价号和用户名；这属于当前跨用户可见边界，不应在摘要中加入更多客户或报价细节。
 - Access Token 位于 `localStorage`，可被页面 JavaScript 读取；HttpOnly 只保护 Refresh Token。CSP/Helmet 可降低但不能消除 XSS 导致 Access Token 泄露的风险。
@@ -35,8 +37,9 @@
 
 `users.sqlite` 有轻量版本化迁移机制：`schema_migrations` 表记录已应用迁移名，启动时执行。当前包含：
 
-- `0001_users_manager_role`——由于 SQLite 无法 ALTER 修改 CHECK 约束，该迁移在关闭外键的事务中重建 users 表以放宽角色 CHECK 到 `admin|manager|user`，原样复制全部用户行后恢复外键并做一致性校验，对已有库幂等。
+- `0001_users_manager_role`——由于 SQLite 无法 ALTER 修改 CHECK 约束，该迁移在关闭外键的事务中重建 users 表以放宽角色 CHECK，原样复制全部用户行后恢复外键并做一致性校验，对已有库幂等。
 - `0002_quotation_task_lines_discount`——为已存在的 `quotation_task_lines` 表补充 nullable `discount REAL` 列（报价折扣百分比）。全新库由 `CREATE TABLE` 直接包含该列，此迁移仅处理升级场景：通过 `PRAGMA table_info` 判断列是否已存在，不存在才 `ADD COLUMN`，幂等。旧行 `discount` 为 NULL，协议层视为「未指定」，写入 Odoo 时跳过折扣。
+- `0003_users_warehouse_role`——沿用 `0001` 的重建模式把角色 CHECK 放宽为 `admin|manager|warehouse|user`。全新库由 `CREATE TABLE` 直接包含 `warehouse`，此迁移仅处理升级场景，幂等。
 
 ## 报价持久队列
 

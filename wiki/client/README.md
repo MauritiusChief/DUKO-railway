@@ -7,16 +7,18 @@
 | 路径 | 页面 | 权限 | 主要用途 |
 | --- | --- | --- | --- |
 | `/login` | `LoginPage` | 公开 | 登录；登录后的管理员可创建和管理用户 |
-| `/` | `TableParsePage` | 已登录 | 清单解析、修正、产品生成和对话 |
-| `/history` | `HistoryPage` | 已登录 | 当前用户解析历史 |
-| `/quotation-tasks` | `QuotationTasksPage` | 已登录 | 报价任务、确认、实时日志与失败行恢复 |
-| `/layout-recognize` | `LayoutRecognizePage` | 已登录 | 图片布局识别、双轨编辑、物料生成 |
+| `/` | `TableParsePage` | admin / manager / user | 清单解析、修正、产品生成和对话 |
+| `/history` | `HistoryPage` | admin / manager / user | 当前用户解析历史 |
+| `/quotation-tasks` | `QuotationTasksPage` | admin / manager / user | 报价任务、确认、实时日志与失败行恢复 |
+| `/layout-recognize` | `LayoutRecognizePage` | admin / manager / user | 图片布局识别、双轨编辑、物料生成 |
+| `/warehouse-scan` | `WarehouseScanPage` | admin / manager / warehouse | 仓库条形码点数录入（见 [仓库扫码](../server/warehouse-scan.md)） |
+| `/warehouse-manage` | `WarehouseManagePage` | admin / manager | 扫码记录/映射维护、汇总与 JSON 导入 |
 | `/inventory` | `InventoryDashboardPage` | 管理员 / 经理 | 库存下载/上传、趋势查验和分类 |
 | `/debug` | `DebugPage` | 管理员 | 直接测试 SKU 搜索工具 |
 | `/trace` | `TracePage` | 管理员 | 查看最近 30 天 LLM trace |
 | `/all-history` | `AllHistoryPage` | 管理员 | 浏览全部用户解析历史 |
 
-当前主页提供报价、库存（仅 manager/admin 可见）、个人历史和用户脚本下载入口；布局及管理员页面虽然有路由，但不应假设所有页面都在主页有导航按钮，必要时可直接访问路径。
+路由由 `RoleGuard` 按角色列表统一保护：未登录跳 `/login` 并保留 redirect；`warehouse` 角色访问无权页面时被引导到 `/warehouse-scan`，其余角色不匹配跳 `/login`。仓库角色登录后默认进入扫码页。当前主页提供报价、库存、仓库扫码（仅 manager/admin 可见）、个人历史和用户脚本下载入口；布局及管理员页面虽然有路由，但不应假设所有页面都在主页有导航按钮，必要时可直接访问路径。
 
 ## 状态分层
 
@@ -42,3 +44,4 @@
 - [布局识别](layout-recognize.md)
 - [报价与库存](quotation-and-inventory.md)
 - [管理、历史与追踪](admin-history-and-trace.md)
+- [仓库扫码](../server/warehouse-scan.md)（扫码页/管理页交互规则见 Server 专题页）

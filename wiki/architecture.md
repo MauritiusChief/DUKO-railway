@@ -26,7 +26,7 @@ Odoo 页面 ---- script 用户脚本（直接操作当前页面 DOM）
 
 ## Client
 
-客户端以 `client/src/App.tsx` 为路由事实源。普通业务页由 `AuthGuard` 保护，调试、trace 和全部历史由 `AdminGuard` 保护。认证状态、表格状态、布局状态和报价状态分别位于 `client/src/stores/`。
+客户端以 `client/src/App.tsx` 为路由事实源。页面由 `RoleGuard` 按传入角色列表保护（业务页为 admin/manager/user，仓库扫码页为 admin/manager/warehouse，库存看板为 admin/manager），调试、trace 和全部历史由 `AdminGuard` 保护；仓库角色访问无权页面时被引导到扫码页。认证状态、表格状态、布局状态和报价状态分别位于 `client/src/stores/`。
 
 常规请求经 `client/src/lib/fetchWithAuth.ts`：附加 Bearer access token、携带 refresh cookie，并在 401 时对并发刷新去重后重试一次。浏览器原生 `EventSource` 不能附加 Authorization 头，因此持续 SSE 使用 `client/src/lib/sseStream.ts` 的 `fetch + ReadableStream` 实现；LLM 流也直接读取 POST 响应体。
 
@@ -45,7 +45,8 @@ Odoo 页面 ---- script 用户脚本（直接操作当前页面 DOM）
 - DeepSeek 文本 Agent：清单结构化、对话和布局编排。
 - OpenRouter 多模态 Agent：清单图片识别和布局图片 OCR。
 - SKU 工具：SQLite 结构化查询、BM25 内存索引和 LanceDB 向量检索。
-- 用户、历史、笔记、trace 和报价任务持久化。
+- 用户、历史、笔记、trace、报价任务与仓库扫码数据持久化。
+- 仓库条形码点数：扫码录入、型号↔SKU 映射、汇总与原型 JSON 导入。
 - 报价/库存任务队列、SSE 广播和 `auto` WebSocket 协议。
 - 客户端构建产物与用户脚本下载文件的提供。
 

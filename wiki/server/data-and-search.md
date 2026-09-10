@@ -16,8 +16,14 @@
 - `products` 保存预测库存、可用库存和现有库存数量。
 - `inventory_results` 保存最近 20 次成功库存识别的全局共享结果（执行人、查询参数、分类统计与完整分类 JSON）。
 - `sku_refresh_metadata` 单例记录最后一次完整 SKU 刷新的成功时间与来源，供 Chat Agent 提示库存数据新鲜度。
+- `model_seri_num_mappings`、`product_seri_num_records` 是仓库扫码的两张业务表（型号↔SKU 一对一映射与产品序列号扫描记录），CRUD 与 JSON 导入见 [仓库扫码](./warehouse-scan.md)。
 
-结构化 CRUD、过滤、精确查找、组件与库存查询都使用 SQLite。数据库启用 WAL 和 `synchronous=NORMAL`。
+结构化 CRUD、过滤、精确查找、组件与库存查询都使用 SQLite。数据库启用 WAL 和 `synchronous=NORMAL`，并启用 `PRAGMA foreign_keys = ON`（仓库扫码表的外键级联 `ON UPDATE CASCADE` 依赖它）。
+
+两点边界需要注意：
+
+- SKU 数据刷新（`refresh-data-cli` / `AUTO_INGEST`）只对既有引用表做事务性 `DELETE + INSERT`，不清除、不重建仓库扫码表，两者互不影响。
+- `sku.sqlite` 没有 `schema_migrations` 迁移机制，全部建表都是幂等 `CREATE TABLE IF NOT EXISTS`，只适用于「新增表/索引」。若将来需要修改仓库扫码表的列或约束，必须先为该库引入版本化迁移（参考 `users.sqlite` 的重建模式）。
 
 ### `sku.lance/`
 

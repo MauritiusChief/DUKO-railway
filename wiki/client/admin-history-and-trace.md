@@ -2,7 +2,7 @@
 
 ## 认证与会话
 
-路由保护由 `client/src/components/AuthGuard.tsx`、`AdminGuard.tsx` 和 `RoleGuard.tsx` 完成：`AuthGuard` 仅要求登录，`AdminGuard` 要求 admin，`RoleGuard` 按传入角色校验（库存看板 `/inventory` 用其限定 manager/admin）。所有 guard 都在渲染前通过 `/api/me` 确认服务端角色，服务端仍在中间件和各路由重复执行真实权限检查，不能只依赖前端 guard。
+路由保护由 `client/src/components/RoleGuard.tsx` 和 `AdminGuard.tsx` 完成：`RoleGuard` 按传入角色列表校验（未登录跳登录页并保留 redirect；仓库角色访问无权页面时被引导到 `/warehouse-scan`，其余角色不匹配跳 `/login`），`AdminGuard` 要求 admin。所有 guard 都在渲染前通过 `/api/me` 确认服务端角色，服务端仍在中间件和各路由重复执行真实权限检查，不能只依赖前端 guard。
 
 `client/src/stores/authStore.ts` 的会话模型：
 
@@ -18,11 +18,11 @@
 `client/src/pages/LoginPage.tsx` 在未登录时显示登录表单，并保留 guard 提供的 redirect。已登录时显示身份和进入系统按钮；管理员还可：
 
 - 创建普通用户。
-- 查看用户列表（含角色显示：管理员/经理/普通用户）。
-- 在再次输入当前管理员密码后修改非种子用户的用户名/密码或删除用户，也可在 `user` 与 `manager` 之间切换非管理员用户的角色。
+- 查看用户列表（含角色显示：管理员/经理/仓库/普通用户）。
+- 在再次输入当前管理员密码后修改非种子用户的用户名/密码或删除用户，也可在 `user`、`manager`、`warehouse` 之间切换非管理员用户的角色。
 - 环境变量播种的管理员受保护，不能在该界面改名、改密、删除或改角色；管理员也不能删除自己。账号及 bcrypt 密码哈希位于 `users.sqlite`。删除用户会通过 SQLite 外键级联删除其解析历史、笔记、trace 和报价任务。
 
-当前改密和删除不会撤销目标用户已经签发的 Access/Refresh Token，refresh 路由也不会先确认用户仍存在。因此管理界面的成功提示只证明数据库修改完成，不代表该账号的现有会话已经立即失效。**修改角色是例外**——会撤销目标 refresh token，迫使在 access token 过期（≤15 分钟）后重新登录拿到新角色。
+当前改密不会撤销目标用户已经签发的 Access/Refresh Token（密码不参与 token 校验），已有会话保持到 token 自然过期；但**删除账号会在下一次请求或刷新时立即终止会话**——服务端 `authenticateToken` 每请求从数据库读取当前用户与角色，refresh 路由也会在轮换前确认用户仍存在。修改角色同样立即生效，服务端还会撤销目标 refresh token 加速会话轮换。
 
 ## 个人历史
 

@@ -1,6 +1,6 @@
 # Windows 局域网手机测试
 
-本页用于排查 Windows 电脑以 PM2 运行 DUKO 后，Android 手机在同一可信 Wi-Fi 内无法访问本地测试页面的问题。
+本页用于排查 Windows 电脑以 PM2 运行 DUKO 后，Android 手机或 iOS 17+ iPhone 在同一可信 Wi-Fi 内无法访问本地测试页面的问题。
 
 ## 适用范围
 
@@ -42,13 +42,14 @@ Get-NetIPAddress -AddressFamily IPv4
 优先选择常见的私有局域网地址，例如 `192.168.x.x`、`10.x.x.x` 或 `172.16.x.x` 到 `172.31.x.x`；不要使用 `127.0.0.1`、虚拟网卡、VPN 或断开网络的地址。
 
 2. 确认手机与电脑使用相同 Wi-Fi 名称，关闭手机移动数据和电脑 VPN 后重试，避免请求走到其他网络。
-3. 在手机 Android Chrome 打开：
+3. 在手机 Android Chrome，或 iOS 17+ 的 Safari/Chrome 打开：
 
 ```text
 http://<电脑局域网 IPv4>:3023
 ```
 
-4. 页面首次请求相机时，在 Android 系统和 Chrome 中允许相机权限。
+4. 点击扫码后通过系统照片选择器拍照或选图。Android Chrome 与 iOS 浏览器均应能完成此流程；iPhone 不要求安装 Chrome。
+5. iOS 验收至少覆盖 Safari、实际仓库标签、拍照及照片库中的 HEIC/JPEG 图片。Chrome on iOS 仅作为可选的额外回归浏览器，因为它不能替代 WASM 后备实现。
 
 ## Windows 网络和防火墙
 
@@ -96,7 +97,9 @@ Remove-NetFirewallRule -DisplayName "DUKO local phone test"
 | 电脑本机也打不开页面 | `pm2 status`、`pm2 logs duko-advance`、构建是否完成、`3023` 监听状态 |
 | 手机显示无法连接 | IPv4 是否正确、同一 Wi-Fi、VPN/移动数据、Windows 专用网络防火墙规则、客户端隔离 |
 | 手机能打开页面但登录/API 失败 | 手机访问的是 `3023` 而不是 Vite `5273`；检查 PM2 日志和测试账号 |
-| 手机能登录但无法打开相机 | Android/Chrome 相机权限、Chrome 是否为当前版本、重新打开扫码页 |
+| 手机能登录但无法拍照或选图 | 系统照片/相机权限、浏览器是否为当前版本、重新打开扫码页 |
+| iPhone 显示条码识别器加载失败 | 检查页面请求的同源 `assets/*.wasm` 是否为 200；不得将 CSP 改为允许 CDN |
+| 页面报 `crypto.randomUUID is not a function` | 纯 HTTP 局域网访问不是安全上下文，`crypto.randomUUID` 不可用（localhost/HTTPS 才有）；涉及该 API 的代码需准备降级路径后才能做局域网验收 |
 | 端口规则已添加仍不可达 | 路由器客户端隔离、第三方安全软件、防火墙规则是否限于错误的网络配置文件 |
 
 ## 停止测试
