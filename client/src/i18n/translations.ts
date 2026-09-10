@@ -716,9 +716,13 @@ export const messages = {
     zh: '本轮已更新为最新产品，请扫描型号条码',
     en: 'This round was updated with the latest product. Now scan the model barcode.',
   },
-  '此浏览器不支持条码识别，请使用 Android Chrome': {
-    zh: '此浏览器不支持条码识别，请使用 Android Chrome',
-    en: 'Barcode detection is not supported in this browser. Please use Android Chrome.',
+  '正在准备条码识别器...': {
+    zh: '正在准备条码识别器...',
+    en: 'Preparing barcode detection...',
+  },
+  '条码识别器加载失败，请刷新页面后重试': {
+    zh: '条码识别器加载失败，请刷新页面后重试',
+    en: 'Failed to load barcode detection. Refresh the page and retry.',
   },
   '相机不可用或已取消，请重试': {
     zh: '相机不可用或已取消，请重试',

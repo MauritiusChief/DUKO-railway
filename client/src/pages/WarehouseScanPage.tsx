@@ -1,7 +1,7 @@
 /**
- * 仓库扫码页（面向 Android Chrome 的移动端页面）
+ * 仓库扫码页（Android Chrome 与 iOS 17+ 浏览器）
  *
- * 流程：点击「扫描条码」用后置相机拍一张照片 → 浏览器 BarcodeDetector 解码 →
+ * 流程：点击「扫描条码」用后置相机拍一张照片 → 原生 BarcodeDetector 或本地 WASM 解码 →
  * 填充本轮型号/产品序列号 → 确认录入提交服务端。
  *
  * 扫码规则（与计划一致）：
@@ -19,6 +19,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 import { fetchWithAuth } from '../lib/fetchWithAuth';
 import { useI18n } from '../i18n/context';
+import zxingReaderWasmUrl from 'zxing-wasm/reader/zxing_reader.wasm?url';
 import './WarehouseScanPage.css';
 
 /** 与服务端/原型一致的固定格式（不使用导入元数据中的正则） */
@@ -39,14 +40,17 @@ interface ScanRecord {
 }
 
 type ScanPageMessage = { kind: 'success' | 'error' | 'info'; text: string };
+type BarcodeDetectorLike = {
+  detect(source: Blob): Promise<{ rawValue: string }[]>;
+};
 
 export default function WarehouseScanPage() {
   const { t } = useI18n();
   const user = useAuthStore((s) => s.user);
   const navigate = useNavigate();
 
-  const [detectorState, setDetectorState] = useState<'checking' | 'ready' | 'unsupported'>('checking');
-  const detectorRef = useRef<BarcodeDetector | null>(null);
+  const [detectorState, setDetectorState] = useState<'checking' | 'ready' | 'failed'>('checking');
+  const detectorRef = useRef<BarcodeDetectorLike | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [model, setModel] = useState('');
@@ -57,21 +61,35 @@ export default function WarehouseScanPage() {
   const [scanning, setScanning] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  // feature detection 初始化 BarcodeDetector（不显示持续摄像头画面）
+  // 优先使用浏览器原生能力；iOS 等不支持时改用同源 WASM，图片始终只在设备本地解码。
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      if (!('BarcodeDetector' in globalThis)) {
-        setDetectorState('unsupported');
-        return;
+      if ('BarcodeDetector' in globalThis) {
+        try {
+          const formats = await BarcodeDetector.getSupportedFormats();
+          if (cancelled) return;
+          detectorRef.current = formats.length ? new BarcodeDetector({ formats }) : new BarcodeDetector();
+          setDetectorState('ready');
+          return;
+        } catch {
+          // 原生实现不可用时继续尝试同源 WASM 后备。
+        }
       }
+
       try {
-        const formats = await BarcodeDetector.getSupportedFormats();
+        const { BarcodeDetector: BarcodeDetectorPonyfill, prepareZXingModule } = await import('barcode-detector/ponyfill');
+        await prepareZXingModule({
+          fireImmediately: true,
+          overrides: {
+            locateFile: (path, prefix) => (path.endsWith('.wasm') ? zxingReaderWasmUrl : prefix + path),
+          },
+        });
         if (cancelled) return;
-        detectorRef.current = formats.length ? new BarcodeDetector({ formats }) : new BarcodeDetector();
+        detectorRef.current = new BarcodeDetectorPonyfill();
         setDetectorState('ready');
       } catch {
-        if (!cancelled) setDetectorState('unsupported');
+        if (!cancelled) setDetectorState('failed');
       }
     })();
     return () => {
@@ -148,14 +166,8 @@ export default function WarehouseScanPage() {
     setScanning(true);
     setMessage(null);
     try {
-      const bitmap = await createImageBitmap(file);
-      let codes: string[] = [];
-      try {
-        const found = await detectorRef.current.detect(bitmap);
-        codes = found.map((item) => normalizeSerial(item.rawValue)).filter(Boolean);
-      } finally {
-        bitmap.close();
-      }
+      const found = await detectorRef.current.detect(file);
+      const codes = found.map((item) => normalizeSerial(item.rawValue)).filter(Boolean);
       applyCodes(codes);
     } catch {
       setMessage({ kind: 'error', text: t('图片处理失败，请重试') });
@@ -223,8 +235,12 @@ export default function WarehouseScanPage() {
         )}
       </div>
 
-      {detectorState === 'unsupported' && (
-        <p className="ws-banner ws-banner-error">{t('此浏览器不支持条码识别，请使用 Android Chrome')}</p>
+      {detectorState === 'checking' && (
+        <p className="ws-banner ws-banner-info">{t('正在准备条码识别器...')}</p>
+      )}
+
+      {detectorState === 'failed' && (
+        <p className="ws-banner ws-banner-error">{t('条码识别器加载失败，请刷新页面后重试')}</p>
       )}
 
       <input

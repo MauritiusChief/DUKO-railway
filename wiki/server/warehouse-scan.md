@@ -1,6 +1,6 @@
 # 仓库扫码
 
-面向 Android Chrome 的仓库条形码点数功能：每次确认录入必须取得一个型号序列号和一个产品序列号；产品序列号全局唯一；数据由服务端 SQLite 持久化（`sku.sqlite`），不依赖浏览器 localStorage。不写入 Odoo，不触碰库存 CSV、库存看板与 auto worker。
+面向 Android Chrome 及 iOS 17+ Safari/Chrome 的仓库条形码点数功能：每次确认录入必须取得一个型号序列号和一个产品序列号；产品序列号全局唯一；数据由服务端 SQLite 持久化（`sku.sqlite`），不依赖浏览器 localStorage。不写入 Odoo，不触碰库存 CSV、库存看板与 auto worker。
 
 实现入口：路由 `server/src/routes/warehouse.ts`，数据层 `server/src/db/warehouse.ts`（DDL 在 `server/src/db/sku.ts` 的 `initSkuDB`），校验 `server/src/validation/warehouse.ts`；前端 `client/src/pages/WarehouseScanPage.tsx` 与 `client/src/pages/WarehouseManagePage.tsx`。
 
@@ -44,7 +44,11 @@
 
 ## 扫码页规则
 
-`WarehouseScanPage` 使用浏览器 `BarcodeDetector`（feature detection，不支持时提示改用 Android Chrome）+ `input[type=file][capture=environment]` 拍照解码，不显示持续摄像头画面，不振动：
+`WarehouseScanPage` 使用 `input[type=file][capture=environment]` 拍照解码，不显示持续摄像头画面，不振动。浏览器提供原生 `BarcodeDetector` 时优先使用；iOS 等不提供时动态加载 `barcode-detector` 的 ZXing WASM ponyfill：
+
+- WASM 随 Vite 作为带哈希的 `client/dist/assets/` 文件输出，并由 Express 与页面同源提供；不从 CDN 下载。现有 CSP 的 `connect-src 'self'` 不需放宽。
+- 照片文件直接在浏览器内解码，不上传、记录或写入 trace；仅通过既有扫码 API 提交解出的型号和产品序列号。
+- iOS 的支持目标为 iOS 17+；Safari 与 Chrome 均使用相同后备实现，使用者无需为扫码安装 Chrome。真机验收须覆盖实际标签和 HEIC/JPEG 照片。
 
 1. 每张图片解码收集全部条码，只接受至多一个型号格式值和一个产品格式值；额外条码、两个同类型有效值或格式外条码使整次扫码无效，不改变本轮状态。
 2. 恰好识别一个有效序列号且本轮两码均已填时，先清空两项及本轮 SKU 状态再填入本次值（开始下一件）。

@@ -50,6 +50,11 @@
   background: #fdecea;
 }
 
+.ws-banner-info {
+  color: #3d5a80;
+  background: #e8f0fe;
+}
+
 .ws-scan-btn {
   width: 100%;
   max-width: 480px;
