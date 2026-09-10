@@ -25,13 +25,18 @@ const wasmBinary = wasmFile.buffer.slice(
   wasmFile.byteOffset + wasmFile.byteLength,
 ) as ArrayBuffer;
 
+// 诊断日志仅含固定字符串与库错误描述，不含图片数据或条码值
 prepareZXingModule({
   overrides: { wasmBinary },
   fireImmediately: true,
-}).catch(() => {
-  // 初始化失败时让 worker 退出，由主线程按异常退出路径重建/熔断
-  process.exitCode = 1;
-});
+})
+  .then(() => {
+    console.error('[barcode-decode] wasm ready');
+  })
+  .catch((err: unknown) => {
+    console.error('[barcode-decode] wasm init failed:', err instanceof Error ? err.message : String(err));
+    process.exitCode = 1;
+  });
 
 interface DecodeRequest {
   id: number;
@@ -60,7 +65,9 @@ parentPort!.on('message', async (msg: DecodeRequest) => {
     const results = await readBarcodes(imageData, { tryHarder: true });
     const reply: WorkerReply = { id: msg.id, ok: true, values: results.map((r) => r.text) };
     port.postMessage(reply);
-  } catch {
+  } catch (err) {
+    // 仅记录库错误描述，便于定位运行环境差异；不含像素或条码内容
+    console.error('[barcode-decode] decode threw:', err instanceof Error ? err.message : String(err));
     const reply: WorkerReply = { id: msg.id, ok: false, error: 'decode-failed' };
     port.postMessage(reply);
   }

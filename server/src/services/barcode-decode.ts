@@ -280,6 +280,8 @@ function onTaskTimeout(slot: WorkerSlot): void {
   if (task && !task.settled) {
     task.settle(new WorkerDecodeError());
   }
+  // 诊断：超时路径默认静默，此处仅计固定字符串
+  console.warn('[barcode-decode] task timeout, worker restarted');
   slots[slot.index] = createSlot(slot.index);
   pump();
 }
@@ -300,12 +302,10 @@ async function runTask(slot: WorkerSlot, task: DecodeTask): Promise<void> {
     });
     if (slot.replaced || task.settled) return; // 已由超时/异常路径处理
 
-    // sharp 输出的底层 ArrayBuffer 为原生外部内存，Node 不允许 transfer；
-    // 复制出普通可转移副本投递 worker，原始像素立即清零释放
-    const rgba = data.buffer.slice(
-      data.byteOffset,
-      data.byteOffset + data.byteLength,
-    );
+    // sharp 输出的底层内存形态随环境不同（如 PM2 下不可 transfer，slice 副本仍继承
+    // 其类型）；自行分配普通 ArrayBuffer 复制像素，保证可转移。原始像素随后清零。
+    const rgba = new ArrayBuffer(data.byteLength);
+    new Uint8Array(rgba).set(data);
     data.fill(0);
 
     slot.worker!.postMessage(
@@ -322,6 +322,8 @@ async function runTask(slot: WorkerSlot, task: DecodeTask): Promise<void> {
         if (/exceeds pixel limit/i.test(message)) {
           task.settle(new BarcodeImageError(413, '图片像素超出限制'));
         } else {
+          // 诊断：catch 同时覆盖 sharp 与 postMessage；错误消息为库固定描述，不含图片内容
+          console.error('[barcode-decode] pixel pipeline error:', message || String(err));
           task.settle(new ImageProcessError('图片处理失败'));
         }
       }
