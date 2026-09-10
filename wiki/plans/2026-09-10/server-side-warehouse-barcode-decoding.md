@@ -2,7 +2,7 @@
 
 ## 状态
 
-提议中，尚未实施。
+已实施（2026-09-10 同日完成）。构建与既有测试通过；人工真机验收通过（PC Chrome、Android、iPad Safari，同 Wi-Fi 环境）。稳定结论已回写 [仓库扫码](../../server/warehouse-scan.md)、[Windows 局域网手机测试](../../windows-lan-mobile-testing.md) 与 `.agent/context/data-safety.md`。实施偏差见文末。
 
 ## 目标
 
@@ -109,3 +109,16 @@ npm --prefix server run build
 - `wiki/server/warehouse-scan.md`：扫码数据流、解码 API、权限、限流和无持久化图片边界。
 - `wiki/windows-lan-mobile-testing.md`：同 Wi-Fi 手动验收改为服务端解码流程。
 - `.agent/context/data-safety.md`：仓库照片短暂进入服务端内存但不进入持久化、日志或外部服务的边界。
+
+## 实施结果与偏差
+
+已按方案实施，参数经确认定版：前端压缩最长边 1600px / JPEG 质量 0.85；服务端输入上限 8MB / 24MP；解码硬超时 8s；服务端等待队列 4；前端在途上限 4。
+
+与原方案的偏差：
+
+1. **transfer 修复（关键）**：PM2 子进程环境下 sharp 输出 Buffer 的底层内存不可 `postMessage` transfer，`.buffer.slice()` 副本同样不可转移（`Found invalid value in transferList`，所有请求 200 + `decode-failed`）。实际实现把 RGBA 像素复制到**自行分配的 `ArrayBuffer`**（`new ArrayBuffer(n)` + `Uint8Array.set`）后再 transfer，多一次内存复制。独立 node 进程无此问题，属环境差异，已记录在 wiki 以防回退。
+2. **诊断日志保留**：worker 启动健康信号（每 worker 一条 `wasm ready`）与异常分支固定字符串日志（`wasm init failed` / `decode threw` / `pixel pipeline error` / `task timeout`）保留为运维信号；均不含图片数据与条码值，正常解码零日志输出。
+3. **队列排队超时具体化**：任务在等待队列中超过 15 秒按 503 拒绝（对应方案中"worker 无法在时限内接手任务时返回 503"）。
+4. **worker 熔断**：worker 连续异常重建超过 5 次熔断该槽位（超时不计入），防止 WASM 加载失败时无限重建；计划未提及，为实施中补充的稳定性措施。
+5. **分类实现**：`invalid` 涵盖格式外条码、同类型重复与额外条码（未细分），`decode-failed` 覆盖图片损坏与 worker 失败/超时——均为无敏感候选值的结果类别，符合方案意图。
+6. 前端移除 `barcode-detector` 依赖及其传递依赖 `zxing-wasm`，删除 `client/src/types/barcode-detector.d.ts`；服务端新增 `multer`、`sharp`、`zxing-wasm@3.1.3`（精确锁定）与 `@types/multer`。

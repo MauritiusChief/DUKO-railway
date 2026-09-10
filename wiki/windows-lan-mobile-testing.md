@@ -48,8 +48,8 @@ Get-NetIPAddress -AddressFamily IPv4
 http://<电脑局域网 IPv4>:3023
 ```
 
-4. 点击扫码后通过系统照片选择器拍照或选图。Android Chrome 与 iOS 浏览器均应能完成此流程；iPhone 不要求安装 Chrome。
-5. iOS 验收至少覆盖 Safari、实际仓库标签、拍照及照片库中的 HEIC/JPEG 图片。Chrome on iOS 仅作为可选的额外回归浏览器，因为它不能替代 WASM 后备实现。
+4. 点击扫码后通过系统照片选择器拍照或选图。Android Chrome 与 iOS 浏览器均应能完成此流程；iPhone 不要求安装 Chrome。条码解码在服务端完成，手机只上传压缩后的照片。
+5. iOS 验收至少覆盖 Safari、实际仓库标签、拍照及照片库中的 HEIC/JPEG 图片。Chrome on iOS 可作为可选的额外回归浏览器。
 
 ## Windows 网络和防火墙
 
@@ -98,7 +98,9 @@ Remove-NetFirewallRule -DisplayName "DUKO local phone test"
 | 手机显示无法连接 | IPv4 是否正确、同一 Wi-Fi、VPN/移动数据、Windows 专用网络防火墙规则、客户端隔离 |
 | 手机能打开页面但登录/API 失败 | 手机访问的是 `3023` 而不是 Vite `5273`；检查 PM2 日志和测试账号 |
 | 手机能登录但无法拍照或选图 | 系统照片/相机权限、浏览器是否为当前版本、重新打开扫码页 |
-| iPhone 显示条码识别器加载失败 | 检查页面请求的同源 `assets/*.wasm` 是否为 200；不得将 CSP 改为允许 CDN |
+| 手机登录后扫码一直显示“图片处理失败，请重试” | `pm2 logs duko-advance` 查 `[barcode-decode]` 行定位：`wasm init failed`/`decode threw` 为解码 worker 问题，`pixel pipeline error` 为像素转换或投递问题，`task timeout` 为解码超时；同时确认 `server/dist` 已重新构建且 `pm2 restart duko-advance` 已执行（新旧前后端必须同时更新，旧服务端没有解码端点，前端会统一显示该文案） |
+| 日志出现 `pixel pipeline error: Found invalid value in transferList` | PM2 下 sharp 输出内存不可 transfer，像素必须复制到自行分配的 `ArrayBuffer` 后再投递 worker（当前实现已处理；回退旧的直接 transfer/slice 写法会在 PM2 下复现），见 [仓库扫码](./server/warehouse-scan.md) |
+| 解码慢或提示“解码繁忙” | 单张通常应在数秒内返回；持续繁忙检查是否多人同时扫码、PM2 进程内存与 CPU，必要时重启服务 |
 | 页面报 `crypto.randomUUID is not a function` | 纯 HTTP 局域网访问不是安全上下文，`crypto.randomUUID` 不可用（localhost/HTTPS 才有）；涉及该 API 的代码需准备降级路径后才能做局域网验收 |
 | 端口规则已添加仍不可达 | 路由器客户端隔离、第三方安全软件、防火墙规则是否限于错误的网络配置文件 |
 

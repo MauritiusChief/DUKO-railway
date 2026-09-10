@@ -1,14 +1,14 @@
 # 仓库扫码
 
-面向 Android Chrome 及 iOS 17+ Safari/Chrome 的仓库条形码点数功能：每次确认录入必须取得一个型号序列号和一个产品序列号；产品序列号全局唯一；数据由服务端 SQLite 持久化（`sku.sqlite`），不依赖浏览器 localStorage。不写入 Odoo，不触碰库存 CSV、库存看板与 auto worker。
+面向 Android Chrome 及 iOS 17+ Safari/Chrome 的仓库条形码点数功能：条码解码在服务端完成（浏览器只负责拍照/选图、压缩与上传，不做任何解码）；每次确认录入必须取得一个型号序列号和一个产品序列号；产品序列号全局唯一；数据由服务端 SQLite 持久化（`sku.sqlite`），不依赖浏览器 localStorage。不写入 Odoo，不触碰库存 CSV、库存看板与 auto worker。
 
-实现入口：路由 `server/src/routes/warehouse.ts`，数据层 `server/src/db/warehouse.ts`（DDL 在 `server/src/db/sku.ts` 的 `initSkuDB`），校验 `server/src/validation/warehouse.ts`；前端 `client/src/pages/WarehouseScanPage.tsx` 与 `client/src/pages/WarehouseManagePage.tsx`。
+实现入口：路由 `server/src/routes/warehouse.ts` 与解码路由 `server/src/routes/warehouse-decode.ts`，解码服务 `server/src/services/barcode-decode.ts`（worker `barcode-decode-worker.ts`），数据层 `server/src/db/warehouse.ts`（DDL 在 `server/src/db/sku.ts` 的 `initSkuDB`），校验 `server/src/validation/warehouse.ts`；前端 `client/src/pages/WarehouseScanPage.tsx` 与 `client/src/pages/WarehouseManagePage.tsx`。
 
 ## 角色与权限
 
 - 角色为 `admin | manager | warehouse | user`（`server/src/db/users.ts`，迁移 `0003_users_warehouse_role`）。`warehouse` 只能使用扫码页与扫码录入 API；管理端点仅 manager/admin。
 - 服务端每个请求都从 `users.sqlite` 读取当前用户与角色（见 [认证与持久化](./auth-and-persistence.md)），角色降级或删号立即生效。
-- 限流：`POST /api/warehouse/scans` 使用专用 `warehouseScanLimiter`（2000 次/15 分钟每 IP，现场单次盘点约 1,000 条，高于通用 apiLimiter 的 500），挂载在 `index.ts` 全局 `/api` fallback 之前（照 llmLimiter 先注册模式）；其余仓库端点走 apiLimiter。
+- 限流：`POST /api/warehouse/scans` 与 `POST /api/warehouse/barcode-decode` 各自使用专用 limiter（均 2400 次/15 分钟每 IP，独立计数，现场约每秒两张持续 15 分钟为 1,800 次、留约三分之一突发余量，高于通用 apiLimiter 的 500），挂载在 `index.ts` 全局 `/api` fallback 之前（照 llmLimiter 先注册模式）；其余仓库端点走 apiLimiter。解码高频不消耗确认写入配额，反之亦然。
 
 ## 数据模型
 
@@ -32,6 +32,7 @@
 
 | 端点 | 权限 | 语义 |
 | --- | --- | --- |
+| `POST /api/warehouse/barcode-decode` | warehouse/manager/admin | multipart 单 `photo` 文件（内存存储，不落盘）；服务端解码，详见下文「服务端解码服务」；绝不写数据层 |
 | `POST /api/warehouse/scans` | warehouse/manager/admin | body `{ modelSeriNum, productSeriNum }`；必要时建占位映射；`201` 返回 `{ record: { product_seri_num, model_seri_num, sku, scanned_at } }`；产品重复返回 `409 { existing }`（含原记录 SKU/型号/时间），不改变数据 |
 | `GET /api/warehouse/mappings` | manager/admin | 全量映射，含 `is_placeholder` 与 `record_count` |
 | `PATCH /api/warehouse/mappings/:modelSeriNum` | manager/admin | body `sku` 或 `newModelSeriNum` **严格二选一**；重命名返回 `affected_records`；目标型号已存在或 SKU 被占用返回 `409` |
@@ -44,17 +45,35 @@
 
 ## 扫码页规则
 
-`WarehouseScanPage` 使用 `input[type=file][capture=environment]` 拍照解码，不显示持续摄像头画面，不振动。浏览器提供原生 `BarcodeDetector` 时优先使用；iOS 等不提供时动态加载 `barcode-detector` 的 ZXing WASM ponyfill：
+`WarehouseScanPage` 使用 `input[type=file][capture=environment]` 拍照或选图，不显示持续摄像头画面，不振动。浏览器**不做任何条码解码**（不使用原生 BarcodeDetector，也没有 WASM 后备），扫码按钮始终可用：
 
-- WASM 随 Vite 作为带哈希的 `client/dist/assets/` 文件输出，并由 Express 与页面同源提供；不从 CDN 下载。现有 CSP 的 `connect-src 'self'` 不需放宽。
-- 照片文件直接在浏览器内解码，不上传、记录或写入 trace；仅通过既有扫码 API 提交解出的型号和产品序列号。
-- iOS 的支持目标为 iOS 17+；Safari 与 Chrome 均使用相同后备实现，使用者无需为扫码安装 Chrome。真机验收须覆盖实际标签和 HEIC/JPEG 照片。
+- 照片在前端压缩为受控 JPEG：`createImageBitmap`（按 EXIF 方向，不支持该选项时回退）→ canvas 按最长边 1600px 缩小 → `toBlob('image/jpeg', 0.85)`，随后以 `FormData`（字段 `photo`，固定文件名 `photo.jpg`，不手动设置 multipart Content-Type）经 `fetchWithAuth` 上传至同源 `POST /api/warehouse/barcode-decode`。CSP 的 `connect-src 'self'` 不需放宽。
+- 在途图片（压缩 + 上传 + 等待结果）上限 4 张；结果按**拍照顺序**应用（序号匹配），防止并发响应乱序造成型号/产品错配；队列饱和提示稍后重试，503 同样提示。
+- 照片仅在上传期间经 HTTPS 传输，不写入浏览器持久存储；仅解码结果（型号/产品/结果类别）参与页面状态。
+- iOS 的支持目标为 iOS 17+；Safari 与 Chrome 行为一致，使用者无需为扫码安装 Chrome。真机验收须覆盖实际标签和 HEIC/JPEG 照片。
 
-1. 每张图片解码收集全部条码，只接受至多一个型号格式值和一个产品格式值；额外条码、两个同类型有效值或格式外条码使整次扫码无效，不改变本轮状态。
-2. 恰好识别一个有效序列号且本轮两码均已填时，先清空两项及本轮 SKU 状态再填入本次值（开始下一件）。
+服务端对每张图只返回至多一个型号格式值和一个产品格式值，或固定结果类别。前端轮次合并规则：
+
+1. 服务端返回 `no-barcode`（无条码）、`invalid`（额外条码、同类型重复或格式外条码）或 `decode-failed` 时显示对应错误，不改变本轮状态；分类判定由服务端完成，前端不再本地过滤格式。
+2. 恰好一个有效序列号且本轮两码均已填时，先清空两项及本轮 SKU 状态再填入本次值（开始下一件）。
 3. 合法结果与任一已填槽位同类型但值不同时，丢弃本轮型号、产品及 SKU 状态，并用当前图片中的全部合法结果重建本轮；因此一张含一个新码的图片只填对应槽位，含型号和产品两个新码的图片同时填入两个槽位。
 4. 两种序列号可一次拍到或分两次拍到；两者齐后由用户点「确认录入」提交，服务端成功写入后清空本轮。`409` 时显示原记录摘要，本轮保留，由用户手动清空。
 5. manager/admin 在扫码页可见管理入口；warehouse 角色只见录入结果与待确认提示。
+
+## 服务端解码服务
+
+`server/src/routes/warehouse-decode.ts`（路由）+ `server/src/services/barcode-decode.ts` / `barcode-decode-worker.ts`（服务与 worker）。`POST /api/warehouse/barcode-decode` 只接受 multipart 的一个 `photo` 文件，输入边界与响应契约：
+
+- 输入校验：multer 内存存储、单文件 ≤8MB、声明 MIME 白名单（JPEG/PNG/HEIC/HEIF）、魔数识别 + MIME 一致性检验、sharp 像素上限 24MP。失败按 400/413/415 返回固定文案；`fields: 0` 拒绝额外表单字段。
+- 响应：`200 { ok: true, model?, product? }`（至多各一个，规范化为大写）；`200 { ok: false, reason: 'no-barcode' | 'invalid' | 'decode-failed' }`；`503` 为解码容量饱和。不返回无界的候选条码值。
+- 解码管线：sharp（限像素、EXIF 自动方向、RGBA 原始像素）→ 复制到自行分配的 `ArrayBuffer` → transfer 给 worker → `zxing-wasm/reader` 的 `readBarcodes(tryHarder)` 全格式解码，不设条码数量上限；文件大小、像素数、超时、并发与队列才是资源边界。
+- worker 池：2 个 Node worker thread，各自从本地依赖包加载 `zxing-wasm@3.1.3`（精确锁定，WASM 二进制与 npm 版本一致，不经网络）；等待队列 4（饱和或排队超时 15 秒按 503 拒绝）；单任务硬超时 8 秒（覆盖像素转换 + 解码），超时 worker 终止重建；worker 连续异常 5 次熔断该槽位，防止无限重建。
+- 结果分类复用 `server/src/validation/warehouse.ts` 的固定正则与 `normalizeSerial`，与扫码页轮次规则一致。
+- **绝不调用 `createScanRecord` 或任何数据层写入**；用户确认后仍走既有 `POST /api/warehouse/scans`。
+
+数据与日志边界：图片缓冲（multer Buffer、sharp 像素、worker 像素）仅存在于请求生命周期内，响应前清零；不落盘、不入 SQLite/trace/chat log、不发送任何外部服务或模型。日志仅含启动健康信号（每个 worker 一条 `wasm ready`）与异常分支的固定字符串/库错误描述（`wasm init failed` / `decode threw` / `pixel pipeline error` / `task timeout`），不含图片数据、文件名或条码值；正常解码请求零日志输出。
+
+已知环境差异（勿回退）：PM2 子进程环境下 sharp 输出 Buffer 的底层内存不可 `postMessage` transfer，`.buffer.slice()` 副本同样不可转移（报 `Found invalid value in transferList`）。因此像素必须复制到**自行分配的 `ArrayBuffer`**（`new ArrayBuffer(n)` + `Uint8Array.set`）后再 transfer；直接 transfer 或 slice 副本都会让所有解码请求 200 + `decode-failed`。
 
 ## 管理页规则
 
