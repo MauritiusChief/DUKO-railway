@@ -18,6 +18,7 @@
 - `sku.sqlite` 保存结构化 SKU/引用表、库存识别历史（`inventory_results`，最近 20 次）和 SKU 刷新元数据（`sku_refresh_metadata`）。与 `sku.lance/` 一起应与其生成源 CSV 版本一致。
 - `TRACE_LOG` 和 `CHAT_LOG` 会扩大数据留存；启用前确认必要性、访问权限和清理策略；当前为了开发方便已全部启用。
 - 图片允许经 API 处理，清单图片和 layout 原始图片会发送给 OpenRouter；不得把 base64 图片放入 Issue、文档或持久 trace。
+- 仓库扫码照片（`POST /api/warehouse/barcode-decode`）只进入本服务请求内存（multer 内存存储、sharp 像素缓冲、解码 worker 像素缓冲），响应前清零；不落盘、不入 SQLite/trace/chat log、不发送 OpenRouter 或任何外部服务，条码值不写日志。解码日志仅限启动健康信号与异常分支固定字符串。
 - Access Token 和多项业务缓存保存在浏览器 `localStorage`，不是 HttpOnly 数据。共享浏览器切换账号时，笔记、报价草稿、库存结果、当前清单和 layout 可能残留；登出不能视为已清除这些业务数据。
 
 ## 安全操作清单

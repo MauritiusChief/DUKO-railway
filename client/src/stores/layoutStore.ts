@@ -22,8 +22,8 @@ import type { SSEEvent } from '../lib/sse';
 // ==================================================================
 
 function uuid(): string {
-  return crypto.randomUUID();
   // return Math.random().toString().slice(2) // ← 同 wifi 网络下测试时，http 无法使用 crypto 包
+  return crypto.randomUUID();
 }
 
 function nowISO(): string {
