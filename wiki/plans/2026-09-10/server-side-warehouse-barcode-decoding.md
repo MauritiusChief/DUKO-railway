@@ -109,4 +109,3 @@ npm --prefix server run build
 - `wiki/server/warehouse-scan.md`：扫码数据流、解码 API、权限、限流和无持久化图片边界。
 - `wiki/windows-lan-mobile-testing.md`：同 Wi-Fi 手动验收改为服务端解码流程。
 - `.agent/context/data-safety.md`：仓库照片短暂进入服务端内存但不进入持久化、日志或外部服务的边界。
-- 旧计划 `wiki/plans/2026-09-08/warehouse-barcode-counting.md`：实施时注明其 iOS 前端 WASM 后备决定已被本计划替代。
