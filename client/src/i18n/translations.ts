@@ -648,6 +648,14 @@ export const messages = {
     zh: '正在识别条码...',
     en: 'Recognizing barcode...',
   },
+  '正在识别条码（{n}）...': {
+    zh: '正在识别条码（{n}）...',
+    en: 'Recognizing barcode ({n})...',
+  },
+  '图片解码任务较多，请稍候再试': {
+    zh: '图片解码任务较多，请稍候再试',
+    en: 'Too many photos in progress. Please wait a moment and try again.',
+  },
   '保存中...': {
     zh: '保存中...',
     en: 'Saving...',
