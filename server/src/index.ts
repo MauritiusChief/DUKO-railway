@@ -35,8 +35,14 @@ import { quotationRouter } from './routes/quotation.js';
 import { inventoryRouter } from './routes/inventory.js';
 import { autoWorkerRouter } from './routes/auto-worker.js';
 import { warehouseScanRouter, warehouseRouter } from './routes/warehouse.js';
+import { warehouseDecodeRouter } from './routes/warehouse-decode.js';
 import { authenticateToken } from './middleware/auth.js';
-import { apiLimiter, llmLimiter, warehouseScanLimiter } from './middleware/rateLimit.js';
+import {
+  apiLimiter,
+  llmLimiter,
+  warehouseScanLimiter,
+  warehouseDecodeLimiter,
+} from './middleware/rateLimit.js';
 import { config, validateSecrets } from './config/env.js';
 import { initDB } from './db/lance.js';
 import { initSkuDB, getRecordCount } from './db/sku.js';
@@ -104,6 +110,9 @@ app.use('/api/trace', apiLimiter, authenticateToken, traceRouter);              
 app.use('/api/admin', apiLimiter, authenticateToken, adminHistoryRouter);                    // GET /api/admin/history[/:id]
 
 // ---- 仓库扫码（先注册避免被后续 /api 前缀的 apiLimiter 捕获）----
+// 服务端条码解码：multipart 图片上传，双 worker 内存解码，不落盘、不写入数据层。
+// 与确认写入使用相同额度但独立计数（详见 middleware/rateLimit.ts）。
+app.use('/api/warehouse/barcode-decode', warehouseDecodeLimiter, authenticateToken, warehouseDecodeRouter); // POST /api/warehouse/barcode-decode
 // 提交扫码走专用限流：现场单次盘点约 1,000 条，通用 500/15 分钟会阻断正常作业
 app.use('/api/warehouse/scans', warehouseScanLimiter, authenticateToken, warehouseScanRouter); // POST /api/warehouse/scans
 app.use('/api/warehouse', apiLimiter, authenticateToken, warehouseRouter);                     // 管理端点（manager/admin）
