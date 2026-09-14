@@ -7,7 +7,7 @@
 ## 目标
 
 1. 建立 server 端库存调动历史数据库（ATL/Stock 库位的 `stock.move.line` 记录），替代"每个低库存项逐个打开 Odoo 页面查 move history"的流程。
-2. 每次库存清点前自动补齐从数据库水位线到当前时刻的差异；首次运行在第一次清点任务内完成全量导入（约 125+ 页，无需人工干预）。
+2. 每次库存清点前自动补齐从数据库最新记录到当前时刻的差异；首次运行在第一次清点任务内完成全量导入（约 125+ 页，无需人工干预）。
 3. 趋势分类（warning / reminder / info 分桶）逻辑与 SSE 事件形状保持不变，前端零改动。
 4. 顺带修复现流程的截断问题：旧 `extractMoves` 只读第一页（80 行），窗口内移动超过一页时会漏读；新方案完整翻页。
 
@@ -42,7 +42,7 @@
    - 删除 `inventory-trend` kind、`inventory-trend-result` 消息、`TrendItemResult`/`TrendMove` 类型。
    - `PROTOCOL_VERSION` `'3'` → `'4'`。
 2. `server/src/db/sku.ts` 新增 `stock_moves` 表：
-   - 列：`id`、`date_ts`（epoch ms，worker 按浏览器 profile 本地时区解析，与现 `parseOdooDate` 一致）、`date_text`（Odoo 原始显示文本）、`reference`、`product`、`lot`、`location_from`、`location_to`、`qty REAL`、`uom`、`state`。
+   - 列：`id`、`date_ts`（epoch ms，worker 按浏览器 profile 本地时区解析，与现 `parseOdooDate` 一致）、`date_text`（Odoo 原始显示文本）、`reference`、`product`、`location_from`、`location_to`、`qty REAL`。
    - `UNIQUE(date_ts, reference, product, qty, location_from, location_to)`，写入用 `INSERT OR IGNORE`；索引 `(product, date_ts)`、`(date_ts)`。
    - 函数：`insertStockMoves(rows) → {inserted, ignored}`、`getMovesWatermark() → number | null`（MAX(date_ts)）、`queryItemMoves(product, windowStartTs) → {inbound, outbound}`（仅统计 `state='Done'`？——见风险 5，默认与旧行为一致不过滤，聚合时 location_to='ATL/Stock' 计入 inbound、location_from='ATL/Stock' 计入 outbound）。
 
