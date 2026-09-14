@@ -42,7 +42,7 @@
    - 删除 `inventory-trend` kind、`inventory-trend-result` 消息、`TrendItemResult`/`TrendMove` 类型。
    - `PROTOCOL_VERSION` `'3'` → `'4'`。
 2. `server/src/db/sku.ts` 新增 `stock_moves` 表：
-   - 列：`id`、`date_ts`（epoch ms，worker 按浏览器 profile 本地时区解析，与现 `parseOdooDate` 一致）、`date_text`（Odoo 原始显示文本）、`reference`、`product`、`location_from`、`location_to`、`qty REAL`。
+   - 列：`id`、`date_ts`（epoch ms，worker 按浏览器 profile 本地时区解析，与现 `parseOdooDate` 一致）、`date_text`（Odoo 原始显示文本）、`reference`、`product`、`location_from`、`location_to`、`qty`。
    - `UNIQUE(date_ts, reference, product, qty, location_from, location_to)`，写入用 `INSERT OR IGNORE`；索引 `(product, date_ts)`、`(date_ts)`。
    - 函数：`insertStockMoves(rows) → {inserted, ignored}`、`getMovesWatermark() → number | null`（MAX(date_ts)）、`queryItemMoves(product, windowStartTs) → {inbound, outbound}`（仅统计 `state='Done'`？——见风险 5，默认与旧行为一致不过滤，聚合时 location_to='ATL/Stock' 计入 inbound、location_from='ATL/Stock' 计入 outbound）。
 
