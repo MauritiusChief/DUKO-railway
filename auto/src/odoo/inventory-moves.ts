@@ -7,8 +7,9 @@
  * 流程：
  *   1. 搜索 "ATL/Stock" → 选 autocomplete "Search Location for:"（同时覆盖 From 与 To），
  *      与默认 Done facet 叠加为 Done + ATL/Stock
- *   2. Date 列降序排序（最多点两次，以页面首尾行日期校验为准，不依赖 caret class）
- *   3. 逐页提取 → onBatch 回调；整页早于 cutoffTs 且确为降序时停止，
+ *   2. Date 表头固定点击两次，强制显式日期降序（跨翻页持久；默认排序偶有乱序条目，
+ *      不做数据校验，正确性由 server 端 INSERT OR IGNORE 去重兜底）
+ *   3. 逐页提取 → onBatch 回调；整页早于 cutoffTs 且首尾行呈降序时停止，
  *      否则翻页；末页（next 不可点）停止
  *
  * 等待策略：不盲点，等待 pager 值变化 + 数据行稳定（沿用 trend 流程约定）。
@@ -109,36 +110,22 @@ function parseOdooDate(text: string): Date | null {
   return new Date(+m[3], +m[1] - 1, +m[2], +m[4], +m[5], +m[6])
 }
 
-/** 提取当前页各行的日期时间戳（仅可解析的行） */
-async function extractPageDates(page: Page): Promise<number[]> {
-  const texts = await page.evaluate((dateSel) => {
-    const cells = Array.from(document.querySelectorAll(`${dateSel}`))
-    return cells.map((el) => (el.textContent ?? '').trim())
-  }, STOCK_MOVE_DATE_CELL)
-  return texts
-    .map((t) => parseOdooDate(t)?.getTime())
-    .filter((ts): ts is number => ts !== null)
-}
-
-/** 当前页是否按日期降序（首行 >= 尾行；不足两行视为有序） */
-async function isSortedDesc(page: Page): Promise<boolean> {
-  const list = await extractPageDates(page)
-  if (list.length < 2) return true
-  return list[0] >= list[list.length - 1]
-}
-
-/** 确保 Date 列为降序：先检查，再点击表头重试（最多两次点击） */
-async function ensureDescendingSort(page: Page): Promise<void> {
+/**
+ * 固定点击 Date 表头两次，强制显式日期降序（实测默认排序大致降序但偶有乱序条目，
+ * 端点检测不可靠；显式排序跨翻页持久，全程仅需这一次操作）。
+ * 不做数据校验：排序只是尽量确保偶发乱序条目不被漏读，正确性由 INSERT OR IGNORE 去重兜底。
+ */
+async function forceDescendingSort(
+  page: Page,
+  onProgress: (m: string) => Promise<void>,
+): Promise<void> {
   const header = page.locator(MOVES_DATE_HEADER).first()
   await header.waitFor({ state: 'visible', timeout: TIMEOUT })
-
-  for (let click = 0; click <= 2; click++) {
-    if (await isSortedDesc(page)) return
-    if (click === 2) break
+  for (let click = 0; click < 2; click++) {
     await header.click()
     await waitForRowsStable(page)
   }
-  throw new Error('日期列未能切换为降序排序')
+  await onProgress('MOVES: 已强制日期降序（表头点击两次）')
 }
 
 /** evaluate 用：从当前页 DOM 提取全部行原始值 */
@@ -229,7 +216,7 @@ export async function syncInventoryMoves(
 
   await applyWarehouseFilter(page)
   await waitForRowsStable(page)
-  await ensureDescendingSort(page)
+  await forceDescendingSort(page, onProgress)
 
   let pageNo = 0
   while (true) {
@@ -240,7 +227,8 @@ export async function syncInventoryMoves(
       await onBatch(rows, pageNo)
     }
 
-    // 停止条件：整页均早于截止时间，且当前页确为降序（防排序异常导致提前停）
+    // 停止条件：整页均早于截止时间，且首尾行呈降序（轻量守卫；
+    // 守卫不通过只会多翻几页，重复行由去重吸收，不会漏数据）
     const sortedDesc =
       dateTsList.length < 2 || dateTsList[0] >= dateTsList[dateTsList.length - 1]
     const allBeforeCutoff =

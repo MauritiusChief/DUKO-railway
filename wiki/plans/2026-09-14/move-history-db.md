@@ -66,7 +66,7 @@
 1. 新文件 `auto/src/odoo/inventory-moves.ts`：
    - 导航到 `${ODOO_BASE_URL}/action-809/197381/action-393`（直达可用性已由维护者验证，无需回退路径）。
    - 不清理任何 facet：每次运行都是全新 `page.goto`，facet 只会是动作默认的 "Status: Done"（数据语义的一部分，只同步已完成调动）→ 搜索框填 `ATL/Stock` → 等 autocomplete → 点 "Search Location for:" 菜单项 → 等 facet 出现且值为 ATL/Stock，最终视图 = Done + ATL/Stock。
-   - 排序：点 `th[data-name="date"]` 至多两次，用 caret 方向（`fa-angle-down`）加首行/尾行日期比较双重校验为降序。
+   - 排序：Date 表头 `th[data-name="date"]` **固定点击两次**强制显式降序（实测默认排序大致降序但偶有乱序条目，端点预检不可靠；显式排序跨翻页持久，全程仅需这一次操作）。不做数据校验——排序只是尽量确保偶发乱序条目不被漏读，正确性由 `INSERT OR IGNORE` 去重兜底；每页停止条件保留首尾行端点守卫，守卫不通过只会多翻几页。
    - 翻页循环：`page.evaluate` 按选择器提取当前页全部行（含 `data-tooltip` 原始值与 state 徽章文本）→ 解析 date → 发 `inventory-moves-batch` → 若整页 `date_ts` 均早于 `cutoffTs` 则停止，否则点 `.o_pager_next` 并等 `.o_pager_value` 变化；末页以 next 按钮禁用为准。
    - 等待策略沿用现约定：不盲点，等待目标元素与数据行稳定（参考 `waitForRowsStable`）。
 2. `auto/src/browser-inventory.ts`：新增 `runInventoryMovesSyncTask(cutoffTs, mode, callbacks, abortSignal)`，复用 `prepare()`；进度回调按页报告并携带 mode 文案。
@@ -117,7 +117,7 @@
 - 静态构建：`npm --prefix server run build`、`npm --prefix auto run build`、`npm --prefix client run build`（auto 与 client 无测试脚本，以 build 为准）。
 - 授权环境人工验证：
   1. 首次导入：挂在一次真实清点任务内完成，抽查若干产品的 in/out 汇总与 Odoo 页面人工比对；记录页数/耗时基线；抽查同步行 `state` 均为 Done、筛选后视图为 Done + ATL/Stock。
-  2. 快速补齐：第二次清点应只读少量页即停，停点位于分界线已入库一侧；核对边界日期行不重不漏。
+  2. 快速补齐：第二次清点应只读少量页即停，停点位于分界线已入库一侧；核对边界日期行不重不漏；日志可见 "MOVES: 已强制日期降序（表头点击两次）"。
   3. 全量检查：在窗口截止处（`now − recentMonths − 48h`）停止；构造/模拟一次中断后运行全量检查，确认缺口被补齐且 `inserted + ignored` 对账成立。
 - 数据命令与浏览器自动化有副作用，不为"验证"而运行；人工验证前取得明确授权。
 
