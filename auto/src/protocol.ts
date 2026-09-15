@@ -29,7 +29,6 @@ export const HEARTBEAT_MAX_MISSED = 3;
 export type TaskKind =
   | 'quotation'
   | 'inventory-download'
-  | 'inventory-trend'
   | 'inventory-moves-sync';
 
 /** 报价快照行（读取用） */
@@ -66,17 +65,6 @@ export interface LineResult {
   error?: string;
 }
 
-// inventory 趋势任务的库存移动数据
-export interface TrendMove {
-  date: string;
-  qty: number;
-  dir: 'in' | 'out';
-}
-export interface TrendItemResult {
-  name: string;
-  moves: TrendMove[];
-}
-
 // inventory-moves-sync 任务：Odoo move 列表原始行（worker 每页提取一批）
 export interface MoveRow {
   /** Odoo 原始日期文本（"MM/DD/YYYY HH:mm:ss"） */
@@ -105,7 +93,7 @@ export type MovesSyncMode = 'fast' | 'full';
 export const taskAssignedSchema = z.object({
   type: z.literal('task-assigned'),
   taskId: z.number().int(),
-  kind: z.enum(['quotation', 'inventory-download', 'inventory-trend']),
+  kind: z.enum(['quotation', 'inventory-download', 'inventory-moves-sync']),
   quotationNumber: z.string().optional(),
   odooUrl: z.string().optional(),
   writeMode: z.enum(['overwrite', 'append']).optional(),
@@ -180,13 +168,6 @@ export interface InventoryDownloadTaskAssignedMessage {
   taskId: number;
   kind: 'inventory-download';
 }
-export interface InventoryTrendTaskAssignedMessage {
-  type: 'task-assigned';
-  taskId: number;
-  kind: 'inventory-trend';
-  items: string[];
-  recentMonths: number;
-}
 export interface InventoryMovesSyncTaskAssignedMessage {
   type: 'task-assigned';
   taskId: number;
@@ -198,7 +179,6 @@ export interface InventoryMovesSyncTaskAssignedMessage {
 export type TaskAssignedMessage =
   | QuotationTaskAssignedMessage
   | InventoryDownloadTaskAssignedMessage
-  | InventoryTrendTaskAssignedMessage
   | InventoryMovesSyncTaskAssignedMessage;
 export type AckMessage = z.infer<typeof ackSchema>;
 export type HeartbeatAckMessage = z.infer<typeof heartbeatAckSchema>;
@@ -254,15 +234,6 @@ export interface InventoryDownloadTaskCompletedMessage {
   attempt: number;
 }
 
-export interface InventoryTrendTaskCompletedMessage {
-  type: 'task-completed';
-  taskId: number;
-  kind: 'inventory-trend';
-  status: 'completed' | 'partial_failed';
-  result: { items: TrendItemResult[] };
-  attempt: number;
-}
-
 export interface InventoryMovesSyncTaskCompletedMessage {
   type: 'task-completed';
   taskId: number;
@@ -275,7 +246,6 @@ export interface InventoryMovesSyncTaskCompletedMessage {
 export type TaskCompletedMessage =
   | QuotationTaskCompletedMessage
   | InventoryDownloadTaskCompletedMessage
-  | InventoryTrendTaskCompletedMessage
   | InventoryMovesSyncTaskCompletedMessage;
 
 export interface TaskFailedMessage {
@@ -306,13 +276,6 @@ export interface ProgressMessage {
   attempt: number;
 }
 
-export interface InventoryTrendResultMessage {
-  type: 'inventory-trend-result';
-  taskId: number;
-  result: TrendItemResult;
-  attempt: number;
-}
-
 export interface InventoryMovesBatchMessage {
   type: 'inventory-moves-batch';
   taskId: number;
@@ -330,5 +293,4 @@ export type OutboundMessage =
   | HeartbeatMessage
   | ConfirmRequestMessage
   | ProgressMessage
-  | InventoryTrendResultMessage
   | InventoryMovesBatchMessage;

@@ -59,8 +59,8 @@ export const taskCompletedMessageSchema = z.object({
   taskId: z.number().int(),
   status: z.enum(['completed', 'partial_failed']),
   attempt: z.number().int().positive(),
-  // 任务种类（区分 quotation / inventory-download / inventory-trend / inventory-moves-sync）
-  kind: z.enum(['quotation', 'inventory-download', 'inventory-trend', 'inventory-moves-sync']).optional(),
+  // 任务种类（区分 quotation / inventory-download / inventory-moves-sync）
+  kind: z.enum(['quotation', 'inventory-download', 'inventory-moves-sync']).optional(),
   lines: z
     .array(
       z.object({
@@ -82,7 +82,7 @@ export const taskCompletedMessageSchema = z.object({
       }),
     )
     .optional(),
-  // inventory 任务的 kind 专属产出（download→{csv}; trend→{items:[...]}; moves-sync→{}）
+  // inventory 任务的 kind 专属产出（download→{csv}; moves-sync→{}）
   result: z.unknown().optional(),
 });
 
@@ -126,22 +126,6 @@ export const progressMessageSchema = z.object({
   attempt: z.number().int().positive(),
 });
 
-export const inventoryTrendResultMessageSchema = z.object({
-  type: z.literal('inventory-trend-result'),
-  taskId: z.number().int(),
-  result: z.object({
-    name: z.string().min(1),
-    moves: z.array(
-      z.object({
-        date: z.string(),
-        qty: z.number(),
-        dir: z.enum(['in', 'out']),
-      }),
-    ),
-  }),
-  attempt: z.number().int().positive(),
-});
-
 export const inventoryMovesBatchMessageSchema = z.object({
   type: z.literal('inventory-moves-batch'),
   taskId: z.number().int(),
@@ -173,7 +157,6 @@ export const inboundMessageSchema = z.discriminatedUnion('type', [
   heartbeatMessageSchema,
   confirmRequestMessageSchema,
   progressMessageSchema,
-  inventoryTrendResultMessageSchema,
   inventoryMovesBatchMessageSchema,
 ]);
 
@@ -190,7 +173,6 @@ export type TaskFailedMessage = z.infer<typeof taskFailedMessageSchema>;
 export type HeartbeatMessage = z.infer<typeof heartbeatMessageSchema>;
 export type ConfirmRequestMessage = z.infer<typeof confirmRequestMessageSchema>;
 export type ProgressMessage = z.infer<typeof progressMessageSchema>;
-export type InventoryTrendResultMessage = z.infer<typeof inventoryTrendResultMessageSchema>;
 export type InventoryMovesBatchRow = z.infer<typeof inventoryMovesBatchMessageSchema>['rows'][number];
 export type InventoryMovesBatchMessage = z.infer<typeof inventoryMovesBatchMessageSchema>;
 
@@ -204,7 +186,6 @@ export type InboundMessage = z.infer<typeof inboundMessageSchema>;
 export type TaskKind =
   | 'quotation'
   | 'inventory-download'
-  | 'inventory-trend'
   | 'inventory-moves-sync';
 
 export interface TaskAssignedLine {
@@ -231,14 +212,6 @@ export interface InventoryDownloadTaskAssignedMessage {
   kind: 'inventory-download';
 }
 
-export interface InventoryTrendTaskAssignedMessage {
-  type: 'task-assigned';
-  taskId: number;
-  kind: 'inventory-trend';
-  items: string[];
-  recentMonths: number;
-}
-
 export interface InventoryMovesSyncTaskAssignedMessage {
   type: 'task-assigned';
   taskId: number;
@@ -251,7 +224,6 @@ export interface InventoryMovesSyncTaskAssignedMessage {
 export type TaskAssignedMessage =
   | QuotationTaskAssignedMessage
   | InventoryDownloadTaskAssignedMessage
-  | InventoryTrendTaskAssignedMessage
   | InventoryMovesSyncTaskAssignedMessage;
 
 export interface AckMessage {

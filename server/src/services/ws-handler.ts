@@ -25,6 +25,7 @@ import {
   type InboundMessage,
   type OutboundMessage,
   type TaskAssignedMessage,
+  type InventoryMovesBatchRow,
 } from './ws-protocol.js';
 import {
   getNextQueuedTask,
@@ -82,23 +83,23 @@ const HEARTBEAT_TIMEOUT = HEARTBEAT_TIMEOUT_MS;
 export interface InventoryTaskHandlers {
   onAccepted?: () => void;
   onProgress?: (message: string) => void;
-  onTrendResult?: (result: InventoryTrendResult) => void;
+  /** moves-sync 任务的每页批量落库回调 */
+  onMovesBatch?: (rows: InventoryMovesBatchRow[]) => void;
   onComplete?: (result: unknown) => void;
   onFailed?: (error: string) => void;
 }
 
-export type InventoryTrendResult = Extract<
-  InboundMessage,
-  { type: 'inventory-trend-result' }
->['result'];
+/** moves-sync 任务派发参数 */
+export interface InventoryMovesSyncPayload {
+  cutoffTs: number;
+  mode: 'fast' | 'full';
+}
 
 interface InventoryTaskEntry {
   taskId: number;
-  kind: 'inventory-download' | 'inventory-trend';
-  /** trend 任务的项目名列表（download 无） */
-  items?: string[];
-  /** trend 任务的回溯月数（download 无） */
-  recentMonths?: number;
+  kind: 'inventory-download' | 'inventory-moves-sync';
+  /** moves-sync 任务的派发参数（download 无） */
+  movesSync?: InventoryMovesSyncPayload;
   handlers: InventoryTaskHandlers;
   /** 内存幂等：已处理的最大 attempt */
   lastAttempt: number;
@@ -128,13 +129,12 @@ function isInventoryTaskId(taskId: number): boolean {
  * 返回分配的（负数）taskId。
  */
 export function enqueueInventoryTask(
-  kind: 'inventory-download' | 'inventory-trend',
+  kind: 'inventory-download' | 'inventory-moves-sync',
   handlers: InventoryTaskHandlers,
-  items?: string[],
-  recentMonths?: number,
+  movesSync?: InventoryMovesSyncPayload,
 ): number {
   const taskId = nextInventoryTaskId();
-  const entry: InventoryTaskEntry = { taskId, kind, handlers, lastAttempt: 0, items, recentMonths };
+  const entry: InventoryTaskEntry = { taskId, kind, handlers, lastAttempt: 0, movesSync };
   // 若已有 pending 任务，先拒绝旧的（inventory 一次一个查询）
   if (pendingInventoryTask) {
     pendingInventoryTask.handlers.onFailed?.('被更新的 inventory 任务取代');
@@ -179,9 +179,9 @@ function dispatchInventoryIfIdle(): void {
     assigned = {
       type: 'task-assigned',
       taskId: entry.taskId,
-      kind: 'inventory-trend',
-      items: entry.items ?? [],
-      recentMonths: entry.recentMonths ?? 3,
+      kind: 'inventory-moves-sync',
+      cutoffTs: entry.movesSync?.cutoffTs ?? 0,
+      mode: entry.movesSync?.mode ?? 'full',
     };
   }
   sendMessage(worker.ws, assigned);
@@ -531,17 +531,17 @@ function handleProgress(ws: WebSocket, msg: Extract<InboundMessage, { type: 'pro
   });
 }
 
-function handleInventoryTrendResult(
+function handleInventoryMovesBatch(
   ws: WebSocket,
-  msg: Extract<InboundMessage, { type: 'inventory-trend-result' }>,
+  msg: Extract<InboundMessage, { type: 'inventory-moves-batch' }>,
 ): void {
   if (!worker?.authenticated) return;
-  const { taskId, result, attempt } = msg;
+  const { taskId, rows, attempt } = msg;
   const entry = inventoryTaskMap.get(taskId);
 
-  if (entry?.kind === 'inventory-trend' && attempt > entry.lastAttempt) {
+  if (entry?.kind === 'inventory-moves-sync' && attempt > entry.lastAttempt) {
     entry.lastAttempt = attempt;
-    entry.handlers.onTrendResult?.(result);
+    entry.handlers.onMovesBatch?.(rows);
   }
   sendAck(ws, taskId, attempt);
 }
@@ -604,8 +604,8 @@ function handleMessage(conn: WorkerConnection, ws: WebSocket, raw: string): void
     case 'progress':
       handleProgress(ws, msg);
       break;
-    case 'inventory-trend-result':
-      handleInventoryTrendResult(ws, msg);
+    case 'inventory-moves-batch':
+      handleInventoryMovesBatch(ws, msg);
       break;
   }
 }

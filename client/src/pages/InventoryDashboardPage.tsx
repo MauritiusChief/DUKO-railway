@@ -98,6 +98,8 @@ export default function InventoryDashboardPage() {
   const [threshold, setThreshold] = useState(5);
   const [trendThreshold, setTrendThreshold] = useState(10);
   const [recentMonths, setRecentMonths] = useState(3);
+  // 勾选 = 快速补齐（增量）；不勾选 = 全量检查（重读近期窗口，修复中断缺口）
+  const [fastMode, setFastMode] = useState(true);
   const [warningSort, setWarningSort] = useState<SortMode>('outbound');
   const [reminderSort, setReminderSort] = useState<SortMode>('outbound');
   const [infoPage, setInfoPage] = useState(1);
@@ -325,7 +327,7 @@ export default function InventoryDashboardPage() {
       const res = await fetchWithAuth('/api/inventory/jobs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ threshold, trendThreshold, recentMonths }),
+        body: JSON.stringify({ threshold, trendThreshold, recentMonths, fastMode }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -353,7 +355,7 @@ export default function InventoryDashboardPage() {
       const res = await fetchWithAuth('/api/inventory/upload', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ csv, threshold, trendThreshold, recentMonths }),
+        body: JSON.stringify({ csv, threshold, trendThreshold, recentMonths, fastMode }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -422,7 +424,7 @@ export default function InventoryDashboardPage() {
     download: '下载中',
     cleaning: '清洗中',
     filtering: '筛选中',
-    trend: '趋势查验中',
+    'moves-sync': '调动同步中',
     classifying: '分类中',
     completed: '已完成',
     failed: '失败',
@@ -538,6 +540,15 @@ export default function InventoryDashboardPage() {
             step={1}
             value={recentMonths}
             onChange={(e) => setRecentMonths(Math.max(1, Math.floor(Number(e.target.value) || 1)))}
+            disabled={busy}
+          />
+        </div>
+        <div className="iv-field" title="勾选：从数据库最新记录增量补齐；不勾选：全量检查，重读近期月数窗口（用于修复中断缺口）">
+          快速模式
+          <input
+            type="checkbox"
+            checked={fastMode}
+            onChange={(e) => setFastMode(e.target.checked)}
             disabled={busy}
           />
         </div>

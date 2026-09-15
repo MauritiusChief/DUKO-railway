@@ -37,6 +37,8 @@ const downloadJobSchema = z.object({
   threshold: z.number().min(0).default(5),
   trendThreshold: z.number().default(10),
   recentMonths: z.number().int().min(1).default(3),
+  // false = 全量检查（无视水位线重读 recentMonths 窗口）
+  fastMode: z.boolean().default(true),
 });
 
 const uploadJobSchema = z.object({
@@ -44,6 +46,7 @@ const uploadJobSchema = z.object({
   threshold: z.number().min(0).default(5),
   trendThreshold: z.number().default(10),
   recentMonths: z.number().int().min(1).default(3),
+  fastMode: z.boolean().default(true),
 });
 
 // ==================================================================
@@ -52,12 +55,13 @@ const uploadJobSchema = z.object({
 
 inventoryRouter.post('/inventory/jobs', validate(downloadJobSchema), (req, res) => {
   const { userId, username } = req.user!;
-  const { threshold, trendThreshold, recentMonths } = req.body as {
+  const { threshold, trendThreshold, recentMonths, fastMode } = req.body as {
     threshold: number;
     trendThreshold: number;
     recentMonths: number;
+    fastMode: boolean;
   };
-  const jobId = createDownloadJob(userId, username, threshold, trendThreshold, recentMonths);
+  const jobId = createDownloadJob(userId, username, threshold, trendThreshold, recentMonths, fastMode);
   res.status(201).json({ jobId });
 });
 
@@ -67,13 +71,14 @@ inventoryRouter.post('/inventory/jobs', validate(downloadJobSchema), (req, res) 
 
 inventoryRouter.post('/inventory/upload', validate(uploadJobSchema), (req, res) => {
   const { userId, username } = req.user!;
-  const { csv, threshold, trendThreshold, recentMonths } = req.body as {
+  const { csv, threshold, trendThreshold, recentMonths, fastMode } = req.body as {
     csv: string;
     threshold: number;
     trendThreshold: number;
     recentMonths: number;
+    fastMode: boolean;
   };
-  const jobId = createUploadJob(userId, username, csv, threshold, trendThreshold, recentMonths);
+  const jobId = createUploadJob(userId, username, csv, threshold, trendThreshold, recentMonths, fastMode);
   res.status(201).json({ jobId });
 });
 
