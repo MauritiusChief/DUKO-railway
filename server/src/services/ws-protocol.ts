@@ -14,7 +14,7 @@ import { z } from 'zod';
 // ==================================================================
 
 /** 当前协议版本 */
-export const PROTOCOL_VERSION = '3';
+export const PROTOCOL_VERSION = '4';
 
 /** 心跳超时阈值（毫秒）：超过此时间未收到 heartbeat 视为断线 */
 export const HEARTBEAT_TIMEOUT_MS = 90_000;
@@ -59,8 +59,8 @@ export const taskCompletedMessageSchema = z.object({
   taskId: z.number().int(),
   status: z.enum(['completed', 'partial_failed']),
   attempt: z.number().int().positive(),
-  // 任务种类（区分 quotation / inventory-download / inventory-trend）
-  kind: z.enum(['quotation', 'inventory-download', 'inventory-trend']).optional(),
+  // 任务种类（区分 quotation / inventory-download / inventory-trend / inventory-moves-sync）
+  kind: z.enum(['quotation', 'inventory-download', 'inventory-trend', 'inventory-moves-sync']).optional(),
   lines: z
     .array(
       z.object({
@@ -82,7 +82,7 @@ export const taskCompletedMessageSchema = z.object({
       }),
     )
     .optional(),
-  // inventory 任务的 kind 专属产出（download→{csv}; trend→{items:[...]})
+  // inventory 任务的 kind 专属产出（download→{csv}; trend→{items:[...]}; moves-sync→{}）
   result: z.unknown().optional(),
 });
 
@@ -142,6 +142,26 @@ export const inventoryTrendResultMessageSchema = z.object({
   attempt: z.number().int().positive(),
 });
 
+export const inventoryMovesBatchMessageSchema = z.object({
+  type: z.literal('inventory-moves-batch'),
+  taskId: z.number().int(),
+  attempt: z.number().int().positive(),
+  rows: z.array(
+    z.object({
+      dateText: z.string(),
+      dateTs: z.number().int(),
+      reference: z.string(),
+      product: z.string(),
+      lot: z.string(),
+      locationFrom: z.string(),
+      locationTo: z.string(),
+      qty: z.number(),
+      uom: z.string(),
+      state: z.string(),
+    }),
+  ),
+});
+
 /** auto → Server 入站消息的联合校验 schema */
 export const inboundMessageSchema = z.discriminatedUnion('type', [
   helloMessageSchema,
@@ -154,6 +174,7 @@ export const inboundMessageSchema = z.discriminatedUnion('type', [
   confirmRequestMessageSchema,
   progressMessageSchema,
   inventoryTrendResultMessageSchema,
+  inventoryMovesBatchMessageSchema,
 ]);
 
 // ==================================================================
@@ -170,6 +191,8 @@ export type HeartbeatMessage = z.infer<typeof heartbeatMessageSchema>;
 export type ConfirmRequestMessage = z.infer<typeof confirmRequestMessageSchema>;
 export type ProgressMessage = z.infer<typeof progressMessageSchema>;
 export type InventoryTrendResultMessage = z.infer<typeof inventoryTrendResultMessageSchema>;
+export type InventoryMovesBatchRow = z.infer<typeof inventoryMovesBatchMessageSchema>['rows'][number];
+export type InventoryMovesBatchMessage = z.infer<typeof inventoryMovesBatchMessageSchema>;
 
 export type InboundMessage = z.infer<typeof inboundMessageSchema>;
 
@@ -178,7 +201,11 @@ export type InboundMessage = z.infer<typeof inboundMessageSchema>;
 // ==================================================================
 
 /** 任务种类 */
-export type TaskKind = 'quotation' | 'inventory-download' | 'inventory-trend';
+export type TaskKind =
+  | 'quotation'
+  | 'inventory-download'
+  | 'inventory-trend'
+  | 'inventory-moves-sync';
 
 export interface TaskAssignedLine {
   lineNo: number;
@@ -212,10 +239,20 @@ export interface InventoryTrendTaskAssignedMessage {
   recentMonths: number;
 }
 
+export interface InventoryMovesSyncTaskAssignedMessage {
+  type: 'task-assigned';
+  taskId: number;
+  kind: 'inventory-moves-sync';
+  /** 截止时间（epoch ms）：整页行 dateTs 均早于该值即停止翻页 */
+  cutoffTs: number;
+  mode: 'fast' | 'full';
+}
+
 export type TaskAssignedMessage =
   | QuotationTaskAssignedMessage
   | InventoryDownloadTaskAssignedMessage
-  | InventoryTrendTaskAssignedMessage;
+  | InventoryTrendTaskAssignedMessage
+  | InventoryMovesSyncTaskAssignedMessage;
 
 export interface AckMessage {
   type: 'ack';

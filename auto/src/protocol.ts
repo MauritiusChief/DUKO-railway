@@ -14,7 +14,7 @@ import { z } from 'zod';
 // ==================================================================
 
 /** 当前协议版本（必须与 server 一致） */
-export const PROTOCOL_VERSION = '3';
+export const PROTOCOL_VERSION = '4';
 
 /** 应用层心跳间隔（毫秒） */
 export const HEARTBEAT_INTERVAL_MS = 30_000;
@@ -26,7 +26,11 @@ export const HEARTBEAT_MAX_MISSED = 3;
 //  任务种类
 // ==================================================================
 
-export type TaskKind = 'quotation' | 'inventory-download' | 'inventory-trend';
+export type TaskKind =
+  | 'quotation'
+  | 'inventory-download'
+  | 'inventory-trend'
+  | 'inventory-moves-sync';
 
 /** 报价快照行（读取用） */
 export interface QuotationSnapshotLine {
@@ -73,6 +77,24 @@ export interface TrendItemResult {
   moves: TrendMove[];
 }
 
+// inventory-moves-sync 任务：Odoo move 列表原始行（worker 每页提取一批）
+export interface MoveRow {
+  /** Odoo 原始日期文本（"MM/DD/YYYY HH:mm:ss"） */
+  dateText: string;
+  /** worker 按本地时区解析后的 epoch 毫秒 */
+  dateTs: number;
+  reference: string;
+  product: string;
+  lot: string;
+  locationFrom: string;
+  locationTo: string;
+  qty: number;
+  uom: string;
+  state: string;
+}
+
+export type MovesSyncMode = 'fast' | 'full';
+
 // ==================================================================
 //  入站消息（Server → Auto）Zod 校验
 // ==================================================================
@@ -99,6 +121,9 @@ export const taskAssignedSchema = z.object({
     .optional(),
   items: z.array(z.string()).optional(),
   recentMonths: z.number().int().min(1).optional(),
+  // inventory-moves-sync 专属字段
+  cutoffTs: z.number().int().optional(),
+  mode: z.enum(['fast', 'full']).optional(),
 });
 
 export const ackSchema = z.object({
@@ -162,10 +187,19 @@ export interface InventoryTrendTaskAssignedMessage {
   items: string[];
   recentMonths: number;
 }
+export interface InventoryMovesSyncTaskAssignedMessage {
+  type: 'task-assigned';
+  taskId: number;
+  kind: 'inventory-moves-sync';
+  /** 截止时间（epoch ms）：整页行 dateTs 均早于该值即停止翻页 */
+  cutoffTs: number;
+  mode: MovesSyncMode;
+}
 export type TaskAssignedMessage =
   | QuotationTaskAssignedMessage
   | InventoryDownloadTaskAssignedMessage
-  | InventoryTrendTaskAssignedMessage;
+  | InventoryTrendTaskAssignedMessage
+  | InventoryMovesSyncTaskAssignedMessage;
 export type AckMessage = z.infer<typeof ackSchema>;
 export type HeartbeatAckMessage = z.infer<typeof heartbeatAckSchema>;
 export type ServerErrorMessage = z.infer<typeof serverErrorSchema>;
@@ -229,10 +263,20 @@ export interface InventoryTrendTaskCompletedMessage {
   attempt: number;
 }
 
+export interface InventoryMovesSyncTaskCompletedMessage {
+  type: 'task-completed';
+  taskId: number;
+  kind: 'inventory-moves-sync';
+  status: 'completed' | 'partial_failed';
+  result: Record<string, never>;
+  attempt: number;
+}
+
 export type TaskCompletedMessage =
   | QuotationTaskCompletedMessage
   | InventoryDownloadTaskCompletedMessage
-  | InventoryTrendTaskCompletedMessage;
+  | InventoryTrendTaskCompletedMessage
+  | InventoryMovesSyncTaskCompletedMessage;
 
 export interface TaskFailedMessage {
   type: 'task-failed';
@@ -269,6 +313,13 @@ export interface InventoryTrendResultMessage {
   attempt: number;
 }
 
+export interface InventoryMovesBatchMessage {
+  type: 'inventory-moves-batch';
+  taskId: number;
+  attempt: number;
+  rows: MoveRow[];
+}
+
 export type OutboundMessage =
   | HelloMessage
   | ReadyMessage
@@ -279,4 +330,5 @@ export type OutboundMessage =
   | HeartbeatMessage
   | ConfirmRequestMessage
   | ProgressMessage
-  | InventoryTrendResultMessage;
+  | InventoryTrendResultMessage
+  | InventoryMovesBatchMessage;
