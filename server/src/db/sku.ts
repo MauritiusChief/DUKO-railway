@@ -15,6 +15,9 @@
  * 另含仓库扫码两张业务表（DDL 见文件末尾，CRUD 在 db/warehouse.ts）：
  *   model_seri_num_mappings / product_seri_num_records，
  * 依赖本文件启用 PRAGMA foreign_keys = ON 实现外键级联。
+ *
+ * 另含 ATL/Stock 调动历史本地库 stock_moves（DDL 见文件末尾）：
+ * 由库存 moves-sync 流程写入，仅 INSERT OR IGNORE，任何路径不 UPDATE/DELETE。
  */
 
 import Database from 'better-sqlite3';
@@ -116,6 +119,26 @@ export function initSkuDB(dbDir: string): void {
     );
     CREATE INDEX IF NOT EXISTS idx_inventory_results_completed
       ON inventory_results(completed_at DESC, id DESC);
+
+    -- ATL/Stock 库位调动历史（stock.move.line 本地库）。
+    -- worker 每页批量同步，UNIQUE 冲突静默跳过（补齐中断缺口依赖这一点）；
+    -- 全列 NOT NULL 保证 UNIQUE 去重键不含 NULL（SQLite 中 NULL 彼此不等）。
+    CREATE TABLE IF NOT EXISTS stock_moves (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      date_ts       INTEGER NOT NULL,
+      date_text     TEXT NOT NULL DEFAULT '',
+      reference     TEXT NOT NULL DEFAULT '',
+      product       TEXT NOT NULL,
+      lot           TEXT NOT NULL DEFAULT '',
+      location_from TEXT NOT NULL DEFAULT '',
+      location_to   TEXT NOT NULL DEFAULT '',
+      qty           REAL NOT NULL DEFAULT 0,
+      uom           TEXT NOT NULL DEFAULT '',
+      state         TEXT NOT NULL DEFAULT '',
+      UNIQUE(date_ts, reference, product, qty, location_from, location_to)
+    );
+    CREATE INDEX IF NOT EXISTS idx_stock_moves_product_date ON stock_moves(product, date_ts);
+    CREATE INDEX IF NOT EXISTS idx_stock_moves_date ON stock_moves(date_ts);
 
     -- SKU 数据刷新元数据（单例，id 恒为 1）
     CREATE TABLE IF NOT EXISTS sku_refresh_metadata (
@@ -730,6 +753,89 @@ export function getSkuRefreshMetadata(): SkuRefreshMetadata | undefined {
     FROM sku_refresh_metadata
     WHERE id = 1
   `).get() as SkuRefreshMetadata | undefined;
+}
+
+// ==================================================================
+// #region 库存调动历史 (stock_moves)
+// ==================================================================
+
+/** worker 从 Odoo move 列表提取的原始行 */
+export interface StockMoveRow {
+  /** Odoo 原始日期文本 */
+  dateText: string;
+  /** worker 按本地时区解析后的 epoch 毫秒 */
+  dateTs: number;
+  reference: string;
+  product: string;
+  lot: string;
+  locationFrom: string;
+  locationTo: string;
+  qty: number;
+  uom: string;
+  state: string;
+}
+
+/** 批量插入结果：inserted + ignored = rows.length */
+export interface StockMoveInsertStats {
+  inserted: number;
+  ignored: number;
+}
+
+/** 主仓库（与 auto 侧 inventory 流程一致） */
+const MOVES_WAREHOUSE = 'ATL/Stock';
+
+/** 批量插入调动行（单事务）。UNIQUE 冲突静默跳过，不 UPDATE/DELETE 已有行 */
+export function insertStockMoves(rows: StockMoveRow[]): StockMoveInsertStats {
+  if (rows.length === 0) return { inserted: 0, ignored: 0 };
+  const insert = db.prepare(`
+    INSERT OR IGNORE INTO stock_moves
+      (date_ts, date_text, reference, product, lot,
+       location_from, location_to, qty, uom, state)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  let inserted = 0;
+  db.transaction(() => {
+    for (const r of rows) {
+      const info = insert.run(
+        r.dateTs, r.dateText, r.reference, r.product, r.lot,
+        r.locationFrom, r.locationTo, r.qty, r.uom, r.state,
+      );
+      if (info.changes > 0) inserted += 1;
+    }
+  })();
+  return { inserted, ignored: rows.length - inserted };
+}
+
+/** 库中最新一条调动的时间戳（epoch ms）；空表返回 null */
+export function getMovesWatermark(): number | null {
+  const row = db.prepare('SELECT MAX(date_ts) AS maxTs FROM stock_moves').get() as {
+    maxTs: number | null;
+  };
+  return row.maxTs ?? null;
+}
+
+/**
+ * 单个物品在 [windowStartTs, ∞) 内的出入库数量汇总（|qty| 求和）。
+ * 方向语义与旧逐项 trend 流程一致：dest = 主仓库计入入库；
+ * location = 主仓库且 dest 不是主仓库计入出库（主仓库内部移动只计一次入库）。
+ */
+export function queryItemMoves(
+  product: string,
+  windowStartTs: number,
+): { inbound: number; outbound: number } {
+  const row = db.prepare(`
+    SELECT
+      COALESCE(SUM(CASE WHEN location_to = ?
+                        THEN ABS(qty) ELSE 0 END), 0) AS inbound,
+      COALESCE(SUM(CASE WHEN location_from = ? AND location_to != ?
+                        THEN ABS(qty) ELSE 0 END), 0) AS outbound
+    FROM stock_moves
+    WHERE product = ? AND date_ts >= ?
+  `).get(
+    MOVES_WAREHOUSE, MOVES_WAREHOUSE, MOVES_WAREHOUSE,
+    product, windowStartTs,
+  ) as { inbound: number; outbound: number };
+  return { inbound: row.inbound, outbound: row.outbound };
 }
 
 /**

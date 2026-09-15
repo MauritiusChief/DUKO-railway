@@ -1,9 +1,13 @@
 /**
- * Inventory 查询编排器 —— 纯内存，不落库
+ * Inventory 查询编排器 —— 内存 job 状态 + 调动历史本地库（stock_moves）
  *
  * 流程：
- *   auto 模式：download 任务（worker 下载 CSV）→ cleanCSVFromString → 筛选低库存 → 自动 startTrend → classify
- *   upload 模式：cleanCSVFromString → 筛选低库存 → startTrend → classify
+ *   auto 模式：download 任务（worker 下载 CSV）→ cleanCSVFromString → 筛选低库存 → 自动 startMovesSync → classify
+ *   upload 模式：cleanCSVFromString → 筛选低库存 → startMovesSync → classify
+ *
+ * 调动数据不再逐项查 Odoo：worker 执行一次 inventory-moves-sync 把 ATL/Stock
+ * 调动批量写入 stock_moves（INSERT OR IGNORE），完成后 server 直接查本地库
+ * 聚合每个低库存项的近期出入库并分类。SSE 事件形状与旧逐项 trend 流程一致。
  *
  * 每个 job 的状态保存在内存 Map 中；分类结果由前端存入 localStorage。
  * 通过 inventory-sse 向订阅者推送 phase/progress/low-stock/trend-result/complete/error 事件。
@@ -21,7 +25,8 @@ import {
   isWorkerConnected,
 } from './ws-handler.js';
 import { broadcastInventory } from './inventory-sse.js';
-import { insertInventoryResult } from '../db/sku.js';
+import { getMovesWatermark, insertInventoryResult, insertStockMoves, queryItemMoves } from '../db/sku.js';
+import { computeMovesSyncCutoff, monthsAgoTs } from './moves-sync-cutoff.js';
 import { stageProductRawCsv } from './product-raw-stage.js';
 import { config } from '../config/env.js';
 
@@ -48,18 +53,14 @@ export interface Classification {
   noAttentionCount: number;
 }
 
-/** worker 回传的趋势数据 */
-interface TrendMoveDTO {
-  date: string;
-  qty: number;
-  dir: 'in' | 'out';
-}
-interface TrendResultDTO {
-  name: string;
-  moves: TrendMoveDTO[];
-}
-
-type Phase = 'download' | 'cleaning' | 'filtering' | 'trend' | 'classifying' | 'completed' | 'failed';
+type Phase =
+  | 'download'
+  | 'cleaning'
+  | 'filtering'
+  | 'moves-sync'
+  | 'classifying'
+  | 'completed'
+  | 'failed';
 type JobStatus = 'running' | 'completed' | 'failed';
 type ClassificationBucket = 'warning' | 'reminder' | 'info';
 
@@ -71,17 +72,18 @@ interface InventoryJob {
   threshold: number;
   trendThreshold: number;
   recentMonths: number;
+  /** 快速模式（增量补齐）；false = 全量检查（重读 recentMonths 窗口） */
+  fastMode: boolean;
   phase: Phase;
   status: JobStatus;
   rawCsv?: string;
   totalCleaned?: number;
   lowStockItems?: LowStockItem[];
-  trendResults?: TrendResultDTO[];
   classification?: Classification;
   error?: string;
   lastProgress?: string;
   downloadTaskId?: number;
-  trendTaskId?: number;
+  syncTaskId?: number;
   createdAt: number;
 }
 
@@ -118,8 +120,9 @@ function setPhase(job: InventoryJob, phase: Phase): void {
   emit(job.jobId, 'phase', { phase });
 }
 
-/** 标记失败并广播 */
+/** 标记失败并广播（仅首次生效，避免重复 error 事件） */
 function failJob(job: InventoryJob, error: string): void {
+  if (job.status !== 'running') return;
   job.status = 'failed';
   job.phase = 'failed';
   job.error = error;
@@ -177,7 +180,7 @@ function cleanAndFilter(job: InventoryJob, csv: string): void {
 }
 
 // ==================================================================
-//  趋势查验
+//  调动历史同步 + 分类
 // ==================================================================
 
 function emptyClassification(job: InventoryJob): Classification {
@@ -192,25 +195,16 @@ function emptyClassification(job: InventoryJob): Classification {
   };
 }
 
-function classifyTrendItem(
-  job: InventoryJob,
-  item: LowStockItem,
-  trend: TrendResultDTO,
-): { bucket: ClassificationBucket; item: ClassifiedItem } {
-  let inbound = 0;
-  let outbound = 0;
-  for (const move of trend.moves) {
-    if (move.dir === 'in') inbound += Math.abs(move.qty);
-    else outbound += Math.abs(move.qty);
-  }
+/** 快速补齐的安全重叠窗口：读到水位线 − 48h 为止（覆盖同秒时间戳碰撞） */
+export { MOVES_SYNC_OVERLAP_MS, computeMovesSyncCutoff, monthsAgoTs } from './moves-sync-cutoff.js';
 
-  const classifiedItem: ClassifiedItem = { ...item, inbound, outbound };
-  const bucket = outbound > 0 && outbound >= job.trendThreshold
+/** 出库量分桶：达到警告阈值 → warning；有出库 → reminder；否则 info */
+function classifyBucket(job: InventoryJob, outbound: number): ClassificationBucket {
+  return outbound > 0 && outbound >= job.trendThreshold
     ? 'warning'
     : outbound > 0
       ? 'reminder'
       : 'info';
-  return { bucket, item: classifiedItem };
 }
 
 function upsertClassification(
@@ -224,33 +218,42 @@ function upsertClassification(
   classification[bucket].push(item);
 }
 
-function recordTrendResult(job: InventoryJob, trend: TrendResultDTO): void {
+/**
+ * 同步完成后：从本地库聚合每个低库存项的近期出入库，逐项分类并发
+ * trend-result 事件（形状与旧逐项 trend 流程一致）。
+ */
+function completeMovesSync(job: InventoryJob): void {
   if (job.status !== 'running') return;
-  const item = (job.lowStockItems ?? []).find((candidate) => candidate.name === trend.name);
-  if (!item) return;
 
-  job.trendResults ??= [];
-  const existingIndex = job.trendResults.findIndex((entry) => entry.name === trend.name);
-  if (existingIndex >= 0) job.trendResults[existingIndex] = trend;
-  else job.trendResults.push(trend);
+  const items = job.lowStockItems ?? [];
+  const windowStartTs = monthsAgoTs(job.recentMonths);
+  const classification = emptyClassification(job);
 
-  job.classification ??= emptyClassification(job);
-  const classified = classifyTrendItem(job, item, trend);
-  upsertClassification(job.classification, classified.bucket, classified.item);
+  let processed = 0;
+  for (const item of items) {
+    processed += 1;
+    const { inbound, outbound } = queryItemMoves(item.name, windowStartTs);
+    const classifiedItem: ClassifiedItem = { ...item, inbound, outbound };
+    const bucket = classifyBucket(job, outbound);
+    upsertClassification(classification, bucket, classifiedItem);
 
-  emit(job.jobId, 'trend-result', {
-    ...classified,
-    processed: job.trendResults.length,
-    total: (job.lowStockItems ?? []).length,
-    noAttentionCount: job.classification.noAttentionCount,
-  });
+    emit(job.jobId, 'trend-result', {
+      bucket,
+      item: classifiedItem,
+      processed,
+      total: items.length,
+      noAttentionCount: classification.noAttentionCount,
+    });
+  }
+
+  job.classification = classification;
+  classifyAndComplete(job);
 }
 
-/** 启动趋势任务（借用 worker） */
-function startTrend(job: InventoryJob): void {
+/** 启动调动历史同步（借用 worker；批量落库由本服务完成） */
+function startMovesSync(job: InventoryJob): void {
   if (job.status !== 'running') return;
   const items = (job.lowStockItems ?? []).map((i) => i.name);
-  job.trendResults = [];
   job.classification = emptyClassification(job);
   if (items.length === 0) {
     // 无低库存项 → 直接分类完成
@@ -258,55 +261,57 @@ function startTrend(job: InventoryJob): void {
     return;
   }
 
-  setPhase(job, 'trend');
-  if (!isWorkerConnected()) {
-    progress(job, '等待 auto worker 上线后开始趋势查验…');
-  } else {
-    progress(job, `开始趋势查验（共 ${items.length} 项）`);
-  }
-
-  const taskId = enqueueInventoryTask(
-    'inventory-trend',
-    {
-      onProgress: (message) => progress(job, message),
-      onTrendResult: (result) => recordTrendResult(job, result),
-      onComplete: (result) => {
-        try {
-          const r = (result ?? {}) as { items?: TrendResultDTO[] };
-          job.trendResults = r.items ?? [];
-          classifyAndComplete(job);
-        } catch (err) {
-          failJob(job, `趋势结果解析失败：${err instanceof Error ? err.message : String(err)}`);
-        }
-      },
-      onFailed: (error) => failJob(job, `趋势查验失败：${error}`),
-    },
-    items,
+  setPhase(job, 'moves-sync');
+  const { cutoffTs, mode } = computeMovesSyncCutoff(
+    job.fastMode,
+    getMovesWatermark(),
     job.recentMonths,
   );
-  job.trendTaskId = taskId;
+  const label = mode === 'fast' ? '快速补齐' : '全量检查';
+  if (!isWorkerConnected()) {
+    progress(job, `等待 auto worker 上线后开始调动同步（${label}）…`);
+  } else {
+    progress(job, `开始调动历史同步（${label}）`);
+  }
+
+  let insertedTotal = 0;
+  const taskId = enqueueInventoryTask(
+    'inventory-moves-sync',
+    {
+      onProgress: (message) => progress(job, message),
+      onMovesBatch: (rows) => {
+        try {
+          const stats = insertStockMoves(rows);
+          insertedTotal += stats.inserted;
+          progress(job, `已入库 ${stats.inserted} 条，本次累计新增 ${insertedTotal} 条`);
+        } catch (err) {
+          failJob(job, `调动数据落库失败：${err instanceof Error ? err.message : String(err)}`);
+        }
+      },
+      onComplete: () => {
+        try {
+          completeMovesSync(job);
+        } catch (err) {
+          failJob(job, `调动同步结果处理失败：${err instanceof Error ? err.message : String(err)}`);
+        }
+      },
+      onFailed: (error) => failJob(job, `调动同步失败：${error}`),
+    },
+    { cutoffTs, mode },
+  );
+  job.syncTaskId = taskId;
 }
 
 // ==================================================================
 //  分类
 // ==================================================================
 
-/** 汇总近期出入库并按出库量分桶，标记完成 */
+/** 持久化分类结果并标记完成 */
 function classifyAndComplete(job: InventoryJob): void {
   if (job.status !== 'running') return;
   setPhase(job, 'classifying');
 
-  const trendByName = new Map<string, TrendResultDTO>();
-  for (const t of job.trendResults ?? []) trendByName.set(t.name, t);
-
-  const classification = emptyClassification(job);
-
-  for (const item of job.lowStockItems ?? []) {
-    const trend = trendByName.get(item.name) ?? { name: item.name, moves: [] };
-    const classified = classifyTrendItem(job, item, trend);
-    upsertClassification(classification, classified.bucket, classified.item);
-  }
-
+  const classification = job.classification ?? emptyClassification(job);
   job.classification = classification;
 
   // 持久化到全局库存历史（最近 20 条）。写入失败则整个 job 视为失败，
@@ -351,6 +356,7 @@ export function createDownloadJob(
   threshold: number,
   trendThreshold: number,
   recentMonths: number,
+  fastMode: boolean,
 ): string {
   const job: InventoryJob = {
     jobId: randomUUID(),
@@ -360,6 +366,7 @@ export function createDownloadJob(
     threshold,
     trendThreshold,
     recentMonths,
+    fastMode,
     phase: 'download',
     status: 'running',
     createdAt: Date.now(),
@@ -393,8 +400,8 @@ export function createDownloadJob(
           console.error(`[inventory] job ${job.jobId} 暂存 Product-raw 失败: ${stageErr instanceof Error ? stageErr.message : String(stageErr)}`);
         }
         cleanAndFilter(job, csv);
-        // 自动衔接趋势查验
-        startTrend(job);
+        // 自动衔接调动历史同步
+        startMovesSync(job);
       } catch (err) {
         failJob(job, `下载后处理失败：${err instanceof Error ? err.message : String(err)}`);
       }
@@ -414,6 +421,7 @@ export function createUploadJob(
   threshold: number,
   trendThreshold: number,
   recentMonths: number,
+  fastMode: boolean,
 ): string {
   const job: InventoryJob = {
     jobId: randomUUID(),
@@ -423,6 +431,7 @@ export function createUploadJob(
     threshold,
     trendThreshold,
     recentMonths,
+    fastMode,
     phase: 'cleaning',
     status: 'running',
     rawCsv: csv,
@@ -438,8 +447,8 @@ export function createUploadJob(
     return job.jobId;
   }
 
-  // 自动衔接趋势查验
-  startTrend(job);
+  // 自动衔接调动历史同步
+  startMovesSync(job);
   return job.jobId;
 }
 
@@ -481,8 +490,8 @@ export function cancelJob(jobId: string, userId: number): boolean {
   if (job.userId !== userId) return false;
   if (job.status !== 'running') return false;
 
-  // 中止在途任务（download 或 trend）
-  if (job.trendTaskId) abortInventoryTask(job.trendTaskId);
+  // 中止在途任务（download 或 moves-sync）
+  if (job.syncTaskId) abortInventoryTask(job.syncTaskId);
   if (job.downloadTaskId) abortInventoryTask(job.downloadTaskId);
 
   job.status = 'failed';

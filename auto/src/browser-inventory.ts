@@ -1,5 +1,5 @@
 /**
- * Inventory 浏览器任务 —— 下载 CSV 与 趋势查验
+ * Inventory 浏览器任务 —— 下载 CSV 与 调动历史同步
  *
  * 与 browser.ts 的 runQuotationTask 结构一致：
  *   - 每任务启动 launchPersistentContext（复用 AUTO_PROFILE_DIR 登录态）
@@ -12,12 +12,11 @@ import { chromium, type BrowserContext } from 'playwright'
 import { appConfig } from './config.js'
 import { checkOdooLogin } from './browser.js'
 import { downloadProductsCsv } from './odoo/inventory-download.js'
-import { extractTrendForItem } from './odoo/inventory-trend.js'
-import type { TrendItemResult } from './protocol.js'
+import { syncInventoryMoves } from './odoo/inventory-moves.js'
+import type { MoveRow } from './protocol.js'
 
 export interface InventoryCallbacks {
   onProgress: (message: string) => Promise<void>
-  onTrendResult?: (result: TrendItemResult) => Promise<void>
 }
 
 export interface InventoryDownloadOutcome {
@@ -26,9 +25,13 @@ export interface InventoryDownloadOutcome {
   error?: string
 }
 
-export interface InventoryTrendOutcome {
+export interface InventoryMovesSyncCallbacks {
+  onProgress: (message: string) => Promise<void>
+  onMovesBatch: (rows: MoveRow[]) => Promise<void>
+}
+
+export interface InventoryMovesSyncOutcome {
   status: 'completed' | 'failed'
-  items?: TrendItemResult[]
   error?: string
 }
 
@@ -101,39 +104,30 @@ export async function runInventoryDownloadTask(
 }
 
 /**
- * 执行 inventory-trend 任务：逐项在 /odoo/action-809 查验趋势。
- * 单项失败不影响整体（记录空 moves 继续）；中止时返回已收集的部分结果。
+ * 执行 inventory-moves-sync 任务：同步 ATL/Stock 调动历史到截止时间为止。
+ * 每页通过 callbacks.onMovesBatch 上报一批行。
  */
-export async function runInventoryTrendTask(
-  items: string[],
-  recentMonths: number,
-  callbacks: InventoryCallbacks,
+export async function runInventoryMovesSyncTask(
+  cutoffTs: number,
+  callbacks: InventoryMovesSyncCallbacks,
   abortSignal?: AbortSignal,
-): Promise<InventoryTrendOutcome> {
+): Promise<InventoryMovesSyncOutcome> {
   const prep = await prepare(abortSignal)
   if ('error' in prep) {
     return { status: 'failed', error: prep.error }
   }
   const { page, cleanup } = prep
-
-  const results: TrendItemResult[] = []
   try {
-    for (let i = 0; i < items.length; i++) {
-      const name = items[i]
-      await callbacks.onProgress(`TREND: (${i + 1}/${items.length}) 开始查验 ${name}`)
-      let result: TrendItemResult
-      try {
-        const moves = await extractTrendForItem(page, name, recentMonths, callbacks.onProgress)
-        result = { name, moves }
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err)
-        await callbacks.onProgress(`TREND: ${name} 查验异常：${msg}`)
-        result = { name, moves: [] }
-      }
-      results.push(result)
-      await callbacks.onTrendResult?.(result)
-    }
-    return { status: 'completed', items: results }
+    await syncInventoryMoves(
+      page,
+      cutoffTs,
+      async (rows) => callbacks.onMovesBatch(rows),
+      callbacks.onProgress,
+    )
+    return { status: 'completed' }
+  } catch (err) {
+    const message = `调动同步失败：${err instanceof Error ? err.message : String(err)}`
+    return { status: 'failed', error: message }
   } finally {
     await cleanup()
   }

@@ -14,6 +14,13 @@
 - 颜色 `29` 的部分配件映射到 `02`，颜色 `32` 的部分配件映射到 `12`；只对代码列出的 shape type 生效，不能概括为整色替换。
 - `02`、`04` 被代码归为 UNIPACK；这会影响 layout 侧板生成。`Exposed-Items` 对 UNIPACK 描述的解析仍有代码注释标记为非最终形态。
 
+## 库存分类
+
+- 库存识别只对 `freeToUse < threshold` 的低库存型号做近期出入库分类；数据源是 ATL/Stock 库位 `stock.move.line` 历史（本地库 `stock_moves`），默认只含 Done 状态调动。
+- 方向判定：`location_dest_id = ATL/Stock` 计入入库；`location_id = ATL/Stock` 且 `location_dest_id ≠ ATL/Stock` 计入出库（主仓库内部移动只计一次入库）。出入库均为窗口内数量绝对值求和，非条数。
+- 分桶：近期出库 ≥ 趋势阈值 → warning；有出库未达阈值 → reminder；无出库 → info。"近期"窗口为查询时刻往前 `recentMonths` 个月的本地时间。
+- 全量检查只补缺失行，不修复 Odoo 端历史行被编辑/取消造成的值级漂移（已确认接受）；产品名按清洗名与 Odoo 显示名精确匹配。
+
 ## Layout 双轨
 
 - 每面墙有独立的 `airBlocks` 和 `groundBlocks`。块按数组顺序从左向右累积宽度，不单独存绝对坐标。

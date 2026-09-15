@@ -16,8 +16,8 @@
 库存：
 
 - 从 Odoo 下载产品库存 CSV 并回传。
-- 针对 server 给出的低库存产品查询近期库存移动趋势。
-- 流式回传单项趋势和进度，支持 server 发出的中止指令。
+- 执行 `inventory-moves-sync`：打开 stock.move.line 全局列表直达页（动作默认自带 "Status: Done" facet，必须保留），搜索并以 "Search Location for: ATL/Stock" 过滤（同时覆盖 From/To），Date 表头固定点击两次强制显式降序后逐页提取调动行，整页早于 server 下发的截止时间或到末页即停止，每页以 `inventory-moves-batch` 批量回传。
+- 支持快速补齐与全量检查两档（区别仅在 server 计算的截止时间），支持 server 发出的中止指令。
 
 通信层已实现协议版本校验、共享 token 鉴权、ready/busy 单任务约束、30 秒心跳、连续丢失确认后的重连、带 jitter 的指数退避，以及未 ack 消息重放。
 

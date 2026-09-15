@@ -184,3 +184,19 @@ export const STOCK_MOVE_DEST_CELL = 'td[name="location_dest_id"]'
 
 /** 库存移动行的数量 cell */
 export const STOCK_MOVE_QTY_CELL = 'td[name="quantity"]'
+
+// ==================================================================
+//  库存调动列表页（直达 action-809/…/action-393）—— moves-sync 流程
+// ==================================================================
+
+/** 搜索 autocomplete 中的菜单项（按 "Search Location for:" 文本定位） */
+export const MOVES_AUTOCOMPLETE_ITEM = 'ul.o_searchview_autocomplete li.o_menu_item'
+
+/** Date 列排序表头 */
+export const MOVES_DATE_HEADER = 'th[data-name="date"]'
+
+/** 翻页器当前页范围（如 "1-80"） */
+export const MOVES_PAGER_VALUE = '.o_pager_value'
+
+/** 翻页器"下一页"按钮（末页时 disabled） */
+export const MOVES_PAGER_NEXT = '.o_pager_next'

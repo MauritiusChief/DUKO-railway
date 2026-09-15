@@ -14,7 +14,7 @@ SSE 订阅只存在内存中。断线重连后，报价和库存订阅会先发�
 
 ### Auto WebSocket
 
-worker 主动连接 `/api/auto/connect`，以协议版本和 `AUTO_WORKER_TOKEN` 完成 `hello` 鉴权，然后发送 `ready`。当前只支持一个全局 worker 连接和单任务执行。协议当前版本为 `3`：报价任务行与快照携带可选 `discount`（百分数，缺省表示不指定）；server 与 worker 必须同步升级，否则旧 worker 会因版本不匹配被拒绝连接。
+worker 主动连接 `/api/auto/connect`，以协议版本和 `AUTO_WORKER_TOKEN` 完成 `hello` 鉴权，然后发送 `ready`。当前只支持一个全局 worker 连接和单任务执行。协议当前版本为 `4`：报价任务行与快照携带可选 `discount`（百分数，缺省表示不指定）；库存调动同步任务携带绝对截止时间 `cutoffTs` 与 `mode`（fast/full），worker 每页回传 `inventory-moves-batch`；server 与 worker 必须同步升级，否则旧 worker 会因版本不匹配被拒绝连接。
 
 应用层每 30 秒心跳。worker 连续三次没有收到确认会断开并指数退避重连；server 也定期检测心跳超时。需要确认的重要上报带递增 `attempt`，server 回复 `ack`，worker 重连后重放未确认消息。
 
@@ -36,11 +36,20 @@ worker 断线时浏览器任务会被中止，server 将符合条件的 running 
 worker 已实现两类库存任务：
 
 - `inventory-download`：在 Odoo 导出产品 CSV 并回传 server。
-- `inventory-trend`：逐项读取指定月份范围内的库存移动并流式上报结果。
+- `inventory-moves-sync`：打开 stock.move.line 全局列表直达页（动作默认 "Status: Done" facet 保留），按 "Search Location for: ATL/Stock" 过滤，按日期降序逐页提取，每页批量回传；整页早于 server 计算的 `cutoffTs` 或到末页即停。
+
+调动历史持久化在 `sku.sqlite` 的 `stock_moves` 表（UNIQUE 组合键去重，只 `INSERT OR IGNORE`，任何路径不 UPDATE/DELETE）。分类所需数据不再逐项查 Odoo：同步完成后 server 直接查本地库聚合每个低库存项的近期出入库。
+
+截止时间矩阵（`server/src/services/moves-sync-cutoff.ts`）：
+
+- 快速模式（默认）且库中有水位线：`cutoffTs = 水位线 − 48h`——从最新页读到分界线已入库一侧为止，重叠与同秒时间戳碰撞由去重吸收。
+- 全量检查（UI 取消"快速模式"）或首次导入（水位线为空）：`cutoffTs = now − recentMonths − 48h`——无视水位线重读整个窗口，用于修复同步中断留下的缺口；修复深度也限于该窗口。
+
+创建端点（`POST /api/inventory/jobs`、`/api/inventory/upload`）接受可选 `fastMode`（默认 true）。批次落库失败会使 job 失败；worker 断线由 inventory 内存任务直接拒绝。SSE 事件类型与形状不变（`trend-result` 名称保留），但逐项结果在同步完成后一次性连续发出，不再随查询进度流式出现。
 
 库存任务使用负数内存 task ID，与报价数据库正数 ID 隔离。报价队列为空时才派发库存任务。当前 pending inventory 是单槽，新任务可能取代尚未派发的旧 pending 任务；库存流程不适合作为可靠持久队列。
 
-server 支持用户直接上传 CSV，跳过下载步骤，但趋势查验仍需要在线 worker。运行中的 job 与趋势中间结果只在内存中，服务重启后不可恢复；成功完成的最终分类会持久化到 `sku.sqlite` 的 `inventory_results`（全局共享最近 20 条）。
+server 支持用户直接上传 CSV，跳过下载步骤，但调动同步仍需要在线 worker。运行中的 job 只在内存中，服务重启后不可恢复；`stock_moves` 的已落库数据跨重启保留，重跑即续传。成功完成的最终分类会持久化到 `sku.sqlite` 的 `inventory_results`（全局共享最近 20 条）。
 
 ## 安全与部署边界
 

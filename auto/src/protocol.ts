@@ -14,7 +14,7 @@ import { z } from 'zod';
 // ==================================================================
 
 /** 当前协议版本（必须与 server 一致） */
-export const PROTOCOL_VERSION = '3';
+export const PROTOCOL_VERSION = '4';
 
 /** 应用层心跳间隔（毫秒） */
 export const HEARTBEAT_INTERVAL_MS = 30_000;
@@ -26,7 +26,10 @@ export const HEARTBEAT_MAX_MISSED = 3;
 //  任务种类
 // ==================================================================
 
-export type TaskKind = 'quotation' | 'inventory-download' | 'inventory-trend';
+export type TaskKind =
+  | 'quotation'
+  | 'inventory-download'
+  | 'inventory-moves-sync';
 
 /** 报价快照行（读取用） */
 export interface QuotationSnapshotLine {
@@ -62,16 +65,23 @@ export interface LineResult {
   error?: string;
 }
 
-// inventory 趋势任务的库存移动数据
-export interface TrendMove {
-  date: string;
+// inventory-moves-sync 任务：Odoo move 列表原始行（worker 每页提取一批）
+export interface MoveRow {
+  /** Odoo 原始日期文本（"MM/DD/YYYY HH:mm:ss"） */
+  dateText: string;
+  /** worker 按本地时区解析后的 epoch 毫秒 */
+  dateTs: number;
+  reference: string;
+  product: string;
+  lot: string;
+  locationFrom: string;
+  locationTo: string;
   qty: number;
-  dir: 'in' | 'out';
+  uom: string;
+  state: string;
 }
-export interface TrendItemResult {
-  name: string;
-  moves: TrendMove[];
-}
+
+export type MovesSyncMode = 'fast' | 'full';
 
 // ==================================================================
 //  入站消息（Server → Auto）Zod 校验
@@ -83,7 +93,7 @@ export interface TrendItemResult {
 export const taskAssignedSchema = z.object({
   type: z.literal('task-assigned'),
   taskId: z.number().int(),
-  kind: z.enum(['quotation', 'inventory-download', 'inventory-trend']),
+  kind: z.enum(['quotation', 'inventory-download', 'inventory-moves-sync']),
   quotationNumber: z.string().optional(),
   odooUrl: z.string().optional(),
   writeMode: z.enum(['overwrite', 'append']).optional(),
@@ -99,6 +109,9 @@ export const taskAssignedSchema = z.object({
     .optional(),
   items: z.array(z.string()).optional(),
   recentMonths: z.number().int().min(1).optional(),
+  // inventory-moves-sync 专属字段
+  cutoffTs: z.number().int().optional(),
+  mode: z.enum(['fast', 'full']).optional(),
 });
 
 export const ackSchema = z.object({
@@ -155,17 +168,18 @@ export interface InventoryDownloadTaskAssignedMessage {
   taskId: number;
   kind: 'inventory-download';
 }
-export interface InventoryTrendTaskAssignedMessage {
+export interface InventoryMovesSyncTaskAssignedMessage {
   type: 'task-assigned';
   taskId: number;
-  kind: 'inventory-trend';
-  items: string[];
-  recentMonths: number;
+  kind: 'inventory-moves-sync';
+  /** 截止时间（epoch ms）：整页行 dateTs 均早于该值即停止翻页 */
+  cutoffTs: number;
+  mode: MovesSyncMode;
 }
 export type TaskAssignedMessage =
   | QuotationTaskAssignedMessage
   | InventoryDownloadTaskAssignedMessage
-  | InventoryTrendTaskAssignedMessage;
+  | InventoryMovesSyncTaskAssignedMessage;
 export type AckMessage = z.infer<typeof ackSchema>;
 export type HeartbeatAckMessage = z.infer<typeof heartbeatAckSchema>;
 export type ServerErrorMessage = z.infer<typeof serverErrorSchema>;
@@ -220,19 +234,19 @@ export interface InventoryDownloadTaskCompletedMessage {
   attempt: number;
 }
 
-export interface InventoryTrendTaskCompletedMessage {
+export interface InventoryMovesSyncTaskCompletedMessage {
   type: 'task-completed';
   taskId: number;
-  kind: 'inventory-trend';
+  kind: 'inventory-moves-sync';
   status: 'completed' | 'partial_failed';
-  result: { items: TrendItemResult[] };
+  result: Record<string, never>;
   attempt: number;
 }
 
 export type TaskCompletedMessage =
   | QuotationTaskCompletedMessage
   | InventoryDownloadTaskCompletedMessage
-  | InventoryTrendTaskCompletedMessage;
+  | InventoryMovesSyncTaskCompletedMessage;
 
 export interface TaskFailedMessage {
   type: 'task-failed';
@@ -262,11 +276,11 @@ export interface ProgressMessage {
   attempt: number;
 }
 
-export interface InventoryTrendResultMessage {
-  type: 'inventory-trend-result';
+export interface InventoryMovesBatchMessage {
+  type: 'inventory-moves-batch';
   taskId: number;
-  result: TrendItemResult;
   attempt: number;
+  rows: MoveRow[];
 }
 
 export type OutboundMessage =
@@ -279,4 +293,4 @@ export type OutboundMessage =
   | HeartbeatMessage
   | ConfirmRequestMessage
   | ProgressMessage
-  | InventoryTrendResultMessage;
+  | InventoryMovesBatchMessage;
