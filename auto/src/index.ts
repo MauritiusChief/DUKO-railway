@@ -38,7 +38,7 @@ import {
 } from './browser.js';
 import {
   runInventoryDownloadTask,
-  runInventoryTrendTask,
+  runInventoryMovesSyncTask,
   type InventoryCallbacks,
 } from './browser-inventory.js';
 
@@ -241,7 +241,7 @@ class AutoClient {
           m.type === 'task-failed' ||
           m.type === 'confirm-request' ||
           m.type === 'progress' ||
-          m.type === 'inventory-trend-result') &&
+          m.type === 'inventory-moves-batch') &&
         m.taskId === msg.taskId &&
         m.attempt === msg.attempt,
     );
@@ -306,8 +306,8 @@ class AutoClient {
         case 'inventory-download':
           await this.runInventoryDownloadFlow(taskId);
           break;
-        case 'inventory-trend':
-          await this.runInventoryTrendFlow(taskId, msg.items, msg.recentMonths);
+        case 'inventory-moves-sync':
+          await this.runInventoryMovesSyncFlow(taskId, msg.cutoffTs, msg.mode);
           break;
       }
     } finally {
@@ -328,21 +328,12 @@ class AutoClient {
     }
   }
 
-  /** Inventory 回调工厂（download / trend 共用） */
+  /** Inventory 回调工厂（download 共用） */
   private makeInventoryCallbacks(taskId: number): InventoryCallbacks {
     return {
       onProgress: async (message: string) => {
         const progressAttempt = ++this.currentTaskAttempt;
         this.sendTracked({ type: 'progress', taskId, message, attempt: progressAttempt });
-      },
-      onTrendResult: async (result) => {
-        const resultAttempt = ++this.currentTaskAttempt;
-        this.sendTracked({
-          type: 'inventory-trend-result',
-          taskId,
-          result,
-          attempt: resultAttempt,
-        });
       },
     };
   }
@@ -475,14 +466,27 @@ class AutoClient {
     }
   }
 
-  // ---------- inventory-trend 流程 ----------
+  // ---------- inventory-moves-sync 流程 ----------
 
-  private async runInventoryTrendFlow(taskId: number, items: string[], recentMonths: number): Promise<void> {
-    console.log(`[auto] 开始 inventory-trend 任务 #${taskId} (${items.length} 项)`);
-    const outcome = await runInventoryTrendTask(
-      items,
-      recentMonths,
-      this.makeInventoryCallbacks(taskId),
+  private async runInventoryMovesSyncFlow(
+    taskId: number,
+    cutoffTs: number,
+    mode: 'fast' | 'full',
+  ): Promise<void> {
+    const label = mode === 'fast' ? '快速补齐' : '全量检查';
+    console.log(`[auto] 开始 inventory-moves-sync 任务 #${taskId} (${label})`);
+    const outcome = await runInventoryMovesSyncTask(
+      cutoffTs,
+      {
+        onProgress: async (message) => {
+          const progressAttempt = ++this.currentTaskAttempt;
+          this.sendTracked({ type: 'progress', taskId, message, attempt: progressAttempt });
+        },
+        onMovesBatch: async (rows) => {
+          const batchAttempt = ++this.currentTaskAttempt;
+          this.sendTracked({ type: 'inventory-moves-batch', taskId, attempt: batchAttempt, rows });
+        },
+      },
       this.currentAbort!.signal,
     );
 
@@ -491,20 +495,20 @@ class AutoClient {
       this.sendTracked({
         type: 'task-failed',
         taskId,
-        error: outcome.error ?? '趋势查验失败',
+        error: outcome.error ?? '调动历史同步失败',
         attempt: finalAttempt,
       });
-      console.error(`[auto] inventory-trend #${taskId} 失败: ${outcome.error}`);
+      console.error(`[auto] inventory-moves-sync #${taskId} 失败: ${outcome.error}`);
     } else {
       this.sendTracked({
         type: 'task-completed',
         taskId,
-        kind: 'inventory-trend',
+        kind: 'inventory-moves-sync',
         status: 'completed',
-        result: { items: outcome.items ?? [] },
+        result: {},
         attempt: finalAttempt,
       });
-      console.log(`[auto] inventory-trend #${taskId} 完成`);
+      console.log(`[auto] inventory-moves-sync #${taskId} 完成`);
     }
   }
 

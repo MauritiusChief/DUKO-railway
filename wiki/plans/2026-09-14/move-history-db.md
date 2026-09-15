@@ -40,7 +40,7 @@
   - `odoo-content.html`：`stock.move.line` 列表行，列均可按 `td[name="date|reference|product_id|lot_id|location_id|location_dest_id|quantity|product_uom_id|state"]` 定位，`data-tooltip` 携带原始值；Date 表头为 `th[data-name="date"].o_column_sortable`，点一次升序、两次降序；Date 字段 help 注明 quantity 增加、picked 状态更新、move 完成都会改写 date（即历史行可变）。
   - `odoo-control-panel-raw.html`：搜索框 `input.o_searchview_input`；翻页 `.o_pager_value` / `.o_pager_next` / `.o_pager_previous`；样本显示 `1-80 / 10000+`。
   - `odoo-control-panel-text-input.html`：输入文本后的 autocomplete `ul.o_searchview_autocomplete` 含 `li.o_menu_item`，按 `Search <b>Location</b> for:` 文本选中 Location 项。
-- 已确认的外部事实：直达 URL 为 `https://dukouserp.com/odoo/action-809/197381/action-393`；"Search Location for: ATL/Stock" facet 同时匹配 From 与 To（维护者已实测）。
+- 已确认的外部事实：直达 URL 为 `https://dukouserp.com/odoo/action-809/197381/action-393`（维护者已用 init session 实测可直达）；该页面**默认自带 "Status: Done" facet**（动作内置过滤，须保留，不得清理）；"Search Location for: ATL/Stock" facet 同时匹配 From 与 To（维护者已实测）。
 - 现有常量：目标库位 `ATL/Stock`（inventory-trend.ts:33 `WAREHOUSE`）；方向判定 dest===库位→in、location===库位→out（inventory-trend.ts:179-181），查询时沿用。
 - 设计约束：降序翻页逐页落库时，中断后水位线 = 最新已插入行的日期，而缺失尾部（中断页之后各页）日期早于水位线；快速补齐从最新页读到水位线附近即停，永远够不到缺失段。此类缺口只能靠全量检查修复。
 
@@ -62,8 +62,8 @@
 ### 阶段 2 —— worker 新流程
 
 1. 新文件 `auto/src/odoo/inventory-moves.ts`：
-   - 导航到 `${ODOO_BASE_URL}/odoo/action-809/197381/action-393`；实施第一步先人工验证直达 URL 在 persistent profile 下能直接渲染 move line 列表（URL 含 record id `197381`，可能依赖面包屑上下文）。若失败，回退点击路径：action-809 → ATL/Stock 行 History → 跳转后读取最终 URL 固化。
-   - 清残留 facet（循环点 `.o_facet_remove` 至无）→ 搜索框填 `ATL/Stock` → 等 autocomplete → 点 "Search Location for:" 菜单项 → 等 facet 出现且值为 ATL/Stock。
+   - 导航到 `${ODOO_BASE_URL}/action-809/197381/action-393`（直达可用性已由维护者验证，无需回退路径）。
+   - 不清理任何 facet：每次运行都是全新 `page.goto`，facet 只会是动作默认的 "Status: Done"（数据语义的一部分，只同步已完成调动）→ 搜索框填 `ATL/Stock` → 等 autocomplete → 点 "Search Location for:" 菜单项 → 等 facet 出现且值为 ATL/Stock，最终视图 = Done + ATL/Stock。
    - 排序：点 `th[data-name="date"]` 至多两次，用 caret 方向（`fa-angle-down`）加首行/尾行日期比较双重校验为降序。
    - 翻页循环：`page.evaluate` 按选择器提取当前页全部行（含 `data-tooltip` 原始值与 state 徽章文本）→ 解析 date → 发 `inventory-moves-batch` → 若整页 `date_ts` 均早于 `cutoffTs` 则停止，否则点 `.o_pager_next` 并等 `.o_pager_value` 变化；末页以 next 按钮禁用为准。
    - 等待策略沿用现约定：不盲点，等待目标元素与数据行稳定（参考 `waitForRowsStable`）。
@@ -97,11 +97,11 @@
 
 ## 风险
 
-1. **直达 URL 有效性未验证**：`/odoo/action-809/197381/action-393` 含 record id，直接 goto 可能依赖会话内的面包屑上下文。实施第一步在授权环境用 persistent profile 验证；失败则回退点击路径并固化实际 URL。
+1. **直达 URL 已验证，默认 Done facet 须保留**：维护者已用 init session 实测直达；页面动作默认自带 "Status: Done" facet，流程不清理任何 facet（见方案阶段 2）。若 Odoo 端将来改动动作默认过滤导致非 Done 行混入，同一 move 后续变 Done 时会被 UNIQUE 静默 IGNORE（state 列留存旧值）——validation 阶段抽查同步行 state 均为 Done 即可确认语义未漂移。
 2. **历史 move 可变导致漂移**：Odoo 端编辑/取消历史行后本地库不会自动纠正（已确认接受）。全量检查只补缺失行、不更新已有行，值级漂移不在修复范围。48h 重叠窗口只覆盖"新增/补写"。漂移对分类的影响集中在 recentMonths 窗口内，窗口本身随每次清点重新补齐，实际暴露有限。
 3. **产品名精确匹配**：分类查询按 `product = 清洗后的物品名` 精确相等聚合；旧流程靠搜索框容错。若 Odoo 显示名与 CSV 清洗名存在差异，对应项会被聚合为 0 移动。验证阶段需抽查比对；必要时在查询侧加规范化映射（不动 CSV 清洗逻辑）。
 4. **首导与全量耗时**：页数取决于调拨密度（80 行/页），范围已被 recentMonths 窗口约束，实施首导时实测并记录页数/耗时基线。中断缺口修复深度限于 recentMonths 窗口；更深的缺口超出分类消费范围，明确不修复。翻页需防乱序（以 `.o_pager_value` 变化为准）。
-5. **state 过滤语义**：旧 `extractMoves` 不过滤 state（History 视图可能含未 Done 的预留行）。新方案存 `state` 列，聚合阶段默认沿用旧行为（不过滤）以保持结果可比；若验证发现明显不合理再改为仅 `Done`，并在 Wiki 记录语义变化。
+5. **state 过滤语义**：数据源视图由直达 URL 的默认 Done facet 决定，只含已完成调动；`state` 列预期恒为 "Done"，聚合阶段不做额外 state 过滤。旧流程 History 视图是否同样 Done-only 未验证——人工比对时若发现差异（旧视图含未 Done 预留行），新库更严格（少计预留行），属语义改善，需在 Wiki 记录。
 6. **时区**：`date_ts` 由 worker 所在机器时区解析（与现状一致）。窗口比较均在同一时钟域内完成（截止时间由 server 计算绝对时间戳下发）；worker 机器时区不应中途变更。
 7. **协议版本升级窗口**：版本 4 上线后旧 worker 会被拒绝连接，报价自动化同时短暂不可用。worker 与 server 需同窗口发布（见"发布/回滚"）。
 8. **数据安全**：调动记录含单号（reference）、产品、数量等敏感业务数据，仅落 server 端 `DB_DIR`（Railway Volume）；不得写入日志、trace、Issue 或测试夹具原文。同步 `.agent/context/data-safety.md`。
@@ -114,10 +114,9 @@
   - inventory 服务：cutoff 计算矩阵（fast+水位线 / fast+首次导入 / 全量）、sync 完成后分类结果与 SSE 事件形状回归（可用内存 SQLite）。
 - 静态构建：`npm --prefix server run build`、`npm --prefix auto run build`、`npm --prefix client run build`（auto 与 client 无测试脚本，以 build 为准）。
 - 授权环境人工验证：
-  1. 直达 URL 可用性（阶段 2 第一步）。
-  2. 首次导入：挂在一次真实清点任务内完成，抽查若干产品的 in/out 汇总与 Odoo 页面人工比对；记录页数/耗时基线。
-  3. 快速补齐：第二次清点应只读少量页即停，停点位于分界线已入库一侧；核对边界日期行不重不漏。
-  4. 全量检查：在窗口截止处（`now − recentMonths − 48h`）停止；构造/模拟一次中断后运行全量检查，确认缺口被补齐且 `inserted + ignored` 对账成立。
+  1. 首次导入：挂在一次真实清点任务内完成，抽查若干产品的 in/out 汇总与 Odoo 页面人工比对；记录页数/耗时基线；抽查同步行 `state` 均为 Done、筛选后视图为 Done + ATL/Stock。
+  2. 快速补齐：第二次清点应只读少量页即停，停点位于分界线已入库一侧；核对边界日期行不重不漏。
+  3. 全量检查：在窗口截止处（`now − recentMonths − 48h`）停止；构造/模拟一次中断后运行全量检查，确认缺口被补齐且 `inserted + ignored` 对账成立。
 - 数据命令与浏览器自动化有副作用，不为"验证"而运行；人工验证前取得明确授权。
 
 ## 发布 / 回滚
