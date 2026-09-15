@@ -15,7 +15,7 @@
 
 - `DB_DIR` 优先决定 SQLite、LanceDB 和 CSV 目录；开发默认 `dev_data/`，生产式运行默认 `simvolume_data/`，部署可指向 Railway Volume。
 - `users.sqlite` 不只保存用户，还保存解析历史、笔记、trace 和报价任务；删除或替换前必须确认影响范围。
-- `sku.sqlite` 保存结构化 SKU/引用表、库存识别历史（`inventory_results`，最近 20 次）和 SKU 刷新元数据（`sku_refresh_metadata`）。与 `sku.lance/` 一起应与其生成源 CSV 版本一致。
+- `sku.sqlite` 保存结构化 SKU/引用表、库存识别历史（`inventory_results`，最近 20 次）、ATL/Stock 调动历史（`stock_moves`，含单号/产品/数量的敏感业务数据；只 INSERT OR IGNORE，任何代码路径不 UPDATE/DELETE）和 SKU 刷新元数据（`sku_refresh_metadata`）。与 `sku.lance/` 一起应与其生成源 CSV 版本一致。
 - `TRACE_LOG` 和 `CHAT_LOG` 会扩大数据留存；启用前确认必要性、访问权限和清理策略；当前为了开发方便已全部启用。
 - 图片允许经 API 处理，清单图片和 layout 原始图片会发送给 OpenRouter；不得把 base64 图片放入 Issue、文档或持久 trace。
 - 仓库扫码照片（`POST /api/warehouse/barcode-decode`）只进入本服务请求内存（multer 内存存储、sharp 像素缓冲、解码 worker 像素缓冲），响应前清零；不落盘、不入 SQLite/trace/chat log、不发送 OpenRouter 或任何外部服务，条码值不写日志。解码日志仅限启动健康信号与异常分支固定字符串。

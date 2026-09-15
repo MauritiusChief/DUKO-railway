@@ -2,15 +2,17 @@
 
 ## 状态
 
-已确认方案（2026-09-14 创建），未开始实施。关键决策已由维护者确认：
+**已实施（2026-09-15），待授权环境人工验证。** 验证项见"验证"一节的授权环境清单（首次导入、快速补齐停点、全量检查修复中断、state/facet 抽查）。
 
-- "Search Location for: ATL/Stock" facet 同时覆盖 From（location_id）与 To（location_dest_id）——维护者已实测。
-- 调动历史库存放 server 端 SQLite（`DB_DIR/sku.sqlite` 新表）。
-- 旧逐项 `inventory-trend` 流程直接替换，不保留回退。
-- 同步分"快速模式"（默认）与"全量检查"两档：全量检查按 recentMonths 窗口重读 Odoo，仅补缺失行，不删除、不更新已有记录。
-- 直达 URL：`https://dukouserp.com/odoo/action-809/197381/action-393`。
-- 首次导入挂在第一次清点任务内自动完成（范围即 recentMonths 窗口）。
-- 快速/全量停止条件均带 48h 重叠安全兜底。
+关键决策（实施前由维护者确认）：Location facet 双向覆盖已实测、库存放 server 端 SQLite、旧 `inventory-trend` 流程直接替换、同步分快速/全量两档（全量按 recentMonths 窗口补缺失行，不删除不更新已有记录）、直达 URL 已实测可直达且默认 "Status: Done" facet 保留、48h 重叠安全兜底、首次导入挂在第一次清点任务内自动完成。
+
+### 实施偏差（与原方案的差异）
+
+1. 旧 trend 协议类型删除从阶段 1 推迟到阶段 3：阶段 1 时 server 编排与 worker 流程仍在消费，先删会破坏构建；阶段 3 换编排时随消费代码一并删除。
+2. cutoff 计算矩阵抽出为独立模块 `server/src/services/moves-sync-cutoff.ts`（`computeMovesSyncCutoff`/`monthsAgoTs`/`MOVES_SYNC_OVERLAP_MS`），inventory.ts re-export——纯函数可测，避免测试传递引入 ws-handler/DB 依赖。
+3. ws-handler 路由未写单元测试（socket/DB mock 成本与收益不成比例），由构建、cutoff/DB 纯函数测试与人工验证覆盖。
+4. `failJob` 增加 running 守卫：batch 落库失败后 worker 可能继续上报，防止重复 error 事件。
+5. 客户端"快速模式"复选框位于 auto/upload 共用的控制区（单控件行服务两种模式），未在两个表单各放一份。
 
 ## 目标
 
@@ -125,15 +127,15 @@
 - 回滚：两侧 git revert 到版本 3 并重启；`stock_moves` 表留存无害（无消费方）。`inventory_results` 语义不变，历史记录不受影响。
 - 首次导入发生在升级后第一次清点任务中（范围为 recentMonths 窗口），不需要单独的数据迁移步骤；`CREATE TABLE IF NOT EXISTS` 保证旧库平滑升级。
 
-## 文档影响（实施时同步）
+## 文档影响（已同步，2026-09-15）
 
-- `wiki/auto/README.md`（已实现能力/运行边界：新任务、移除逐项趋势）。
-- `wiki/server/realtime-and-automation.md`（库存自动化一节：moves-sync 流程、快速/全量两档、协议版本 4）。
-- `wiki/client/quotation-and-inventory.md`（前端可见行为差异：快速模式复选框、进度文案、trend-result 时序）。
-- `.agent/context/external-systems.md`（Odoo 交互变化：直达 URL、全局 move 列表抓取）。
-- `.agent/context/data-safety.md`（stock_moves 落库的数据分类与防护）。
-- `.agent/context/domain.md`（如涉及 ATL/Stock 趋势语义的稳定结论）。
-- 实施完成后更新本计划状态与偏差，稳定结论回写上述页面。
+- `wiki/auto/README.md`（已实现能力/运行边界：moves-sync 任务、移除逐项趋势）。
+- `wiki/server/realtime-and-automation.md`（库存自动化一节：moves-sync 流程、快速/全量两档、cutoff 矩阵、协议版本 4）。
+- `wiki/client/quotation-and-inventory.md`（快速模式复选框、moves-sync 阶段、trend-result 时序、注意点更新）。
+- `.agent/context/external-systems.md`（Odoo 交互：直达 URL、默认 Done facet、全局 move 列表抓取）。
+- `.agent/context/data-safety.md`（`stock_moves` 数据分类与只增不改的防护约束）。
+- `.agent/context/domain.md`（库存分类方向判定/分桶/窗口语义）。
+- 本计划状态与偏差已更新。
 
 ## 关联 Issue
 
