@@ -22,6 +22,7 @@
 - 仓库扫码照片（`POST /api/warehouse/barcode-decode`）只进入本服务请求内存（multer 内存存储、sharp 像素缓冲、解码 worker 像素缓冲），响应前清零；不落盘、不入 SQLite/trace/chat log、不发送 OpenRouter 或任何外部服务，条码值不写日志。解码日志仅限启动健康信号与异常分支固定字符串。
 - Access Token 和多项业务缓存保存在浏览器 `localStorage`，不是 HttpOnly 数据。共享浏览器切换账号时，笔记、报价草稿、库存结果、当前清单和 layout 可能残留；登出不能视为已清除这些业务数据。
 - Google Places key 只允许从服务端环境变量进入固定出站请求头，不得出现在 URL、错误响应、日志或测试快照。商家搜索响应中的电话、官网和地址不得写入服务端日志；自动化测试使用合成记录。
+- `/merchant-collection` 当前只在 React 内存中保存 Google 商家候选，刷新或离开即丢失，不得提前把临时结果写入 `localStorage` 或 IndexedDB。Google 返回的官网和 Maps URL 仍按不可信输入处理，只允许渲染 `http:`/`https:` 外链。
 
 ## 安全操作清单
 

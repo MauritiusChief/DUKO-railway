@@ -14,11 +14,12 @@
 | `/warehouse-scan` | `WarehouseScanPage` | admin / manager / warehouse | 仓库条形码点数录入（见 [仓库扫码](../server/warehouse-scan.md)） |
 | `/warehouse-manage` | `WarehouseManagePage` | admin / manager | 扫码记录/映射维护、汇总与 JSON 导入 |
 | `/inventory` | `InventoryDashboardPage` | 管理员 / 经理 | 库存下载/上传、趋势查验和分类 |
+| `/merchant-collection` | `MerchantCollectionPage` | 管理员 / 经理 | Google Places 商家搜索和临时候选展示 |
 | `/debug` | `DebugPage` | 管理员 | 直接测试 SKU 搜索工具 |
 | `/trace` | `TracePage` | 管理员 | 查看最近 30 天 LLM trace |
 | `/all-history` | `AllHistoryPage` | 管理员 | 浏览全部用户解析历史 |
 
-路由由 `RoleGuard` 按角色列表统一保护：未登录跳 `/login` 并保留 redirect；`warehouse` 角色访问无权页面时被引导到 `/warehouse-scan`，其余角色不匹配跳 `/login`。仓库角色登录后默认进入扫码页。当前主页提供报价、库存、仓库扫码（仅 manager/admin 可见）、个人历史和用户脚本下载入口；布局及管理员页面虽然有路由，但不应假设所有页面都在主页有导航按钮，必要时可直接访问路径。
+路由由 `RoleGuard` 按角色列表统一保护：未登录跳 `/login` 并保留 redirect；`warehouse` 角色访问无权页面时被引导到 `/warehouse-scan`，其余角色不匹配跳 `/login`。仓库角色登录后默认进入扫码页。当前主页提供报价、库存、商家采集、仓库扫码（后三者仅 manager/admin 可见）、个人历史和用户脚本下载入口；布局及管理员页面虽然有路由，但不应假设所有页面都在主页有导航按钮，必要时可直接访问路径。
 
 ## 状态分层
 
@@ -26,7 +27,7 @@
 - `client/src/stores/tableParseStore.ts`：输入、颜色、解析 items、产品、图片模式和解析事件桥接。
 - `client/src/stores/layoutStore.ts`：单个当前布局及全部墙/块编辑算法。
 - `client/src/stores/quotationStore.ts`：任务列表、选中详情、两路 SSE、确认和草稿。
-- 页面局部 state：库存 job UI、历史详情选择、图片临时数据、布局物料输出等。
+- 页面局部 state：库存 job UI、历史详情选择、图片临时数据、布局物料输出和商家临时搜索结果等。
 
 浏览器持久化不是统一数据库：解析 items、当前布局、报价草稿和 access token 使用不同 `localStorage` key；用户历史、笔记、报价任务和成功的库存识别结果则由服务端 SQLite 保存。清除浏览器数据不会删除服务端记录，服务端重启也不会删除 SQLite，但会丢失运行中的库存 job、SSE 订阅等内存状态。
 
@@ -45,3 +46,4 @@
 - [报价与库存](quotation-and-inventory.md)
 - [管理、历史与追踪](admin-history-and-trace.md)
 - [仓库扫码](../server/warehouse-scan.md)（扫码页/管理页交互规则见 Server 专题页）
+- [商家信息采集](merchant-collection.md)

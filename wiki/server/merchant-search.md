@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-阶段 1 已实现服务端 Google Places Text Search (New) 接口；前端搜索页面、官网提取和浏览器本地名录尚未实现。服务端不持久化搜索请求或结果。
+阶段 1 已实现服务端 Google Places Text Search (New) 接口，阶段 2 已实现 `/merchant-collection` 临时搜索页面。官网提取和浏览器本地名录尚未实现。服务端不持久化搜索请求或结果，当前前端结果也只保存在页面内存中。
 
 ## API
 
@@ -64,6 +64,8 @@ places.id,places.displayName,places.formattedAddress,places.location,places.inte
 
 生产项目应把 key 限制到 Places API (New)，并配置项目 quota 和预算告警。普通自动化测试全部使用合成响应，不调用真实 Google API；授权试运行前需确认目标 Google Cloud 项目、费用上限和查询范围。
 
-## 后续阶段
+## 客户端
 
-阶段 2 才会增加 `/merchant-collection` 页面、入口、搜索表单、Google attribution 和截断提示。搜索结果在该阶段仍只保存在页面内存，不写入 IndexedDB。
+`/merchant-collection` 仅对 admin/manager 开放，提供查询词、中心坐标和矩形半宽表单，并展示结果数、页数、截断/部分结果提示和 Google Maps attribution。搜索结果不写入浏览器持久存储。交互细节见 [客户端商家信息采集](../client/merchant-collection.md)。
+
+阶段 3 才会增加官网首页提取；阶段 4 才会建立 IndexedDB 本地名录。

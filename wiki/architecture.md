@@ -57,7 +57,7 @@ Odoo 页面 ---- script 用户脚本（直接操作当前页面 DOM）
 
 REST 用于短请求、查询和命令；SSE 用于 LLM 流式结果、报价全局/单任务更新和库存 job 更新。SSE 连接是 server 到浏览器的单向事件流，确认、取消等反向操作仍走 REST。
 
-商家搜索由浏览器向 `POST /api/merchants/search` 提交类别查询、连续 48 州范围内的中心坐标和矩形半宽。server 使用环境变量中的 key 调用固定 Google Places Text Search endpoint，最多读取三页并映射为专用 DTO；当前没有对应前端页面，也不持久化搜索结果。详见 [商家搜索](./server/merchant-search.md)。
+商家搜索页面 `/merchant-collection` 向 `POST /api/merchants/search` 提交类别查询、连续 48 州范围内的中心坐标和矩形半宽。server 使用环境变量中的 key 调用固定 Google Places Text Search endpoint，最多读取三页并映射为专用 DTO；客户端结果只保存在页面内存，服务端也不持久化搜索结果。详见 [服务端商家搜索](./server/merchant-search.md)和[客户端商家信息采集](./client/merchant-collection.md)。
 
 ## Auto 与 WebSocket
 
