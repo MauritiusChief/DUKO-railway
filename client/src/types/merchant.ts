@@ -23,3 +23,21 @@ export interface MerchantSearchResponse {
   partial: boolean;
   warning?: string;
 }
+
+export interface MerchantWebsiteExtraction {
+  placeId: string;
+  sourceUrl: string;
+  emails: string[];
+  phones: string[];
+  pageTitle: string | null;
+  pageDescription: string | null;
+  canonicalUrl: string | null;
+  cleanedWebsiteText: string;
+  textTruncated: boolean;
+}
+
+export interface MerchantWebsiteExtractionState {
+  status: 'pending' | 'loading' | 'success' | 'failed';
+  data?: MerchantWebsiteExtraction;
+  error?: string;
+}

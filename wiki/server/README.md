@@ -26,6 +26,7 @@
 - 库存 CSV 上传或由 worker 下载，随后清洗、低库存筛选、近期移动趋势查验和分级。
 - LLM 步进、报价状态、全局队列和库存进度通过 SSE 推送；worker 使用 WebSocket 双向通信。
 - Google Places Text Search 商家搜索 API，仅允许 admin/manager；最多读取三页，结果不写入服务端数据库。
+- 受 SSRF、重定向、超时、Content-Type 和响应大小约束的商家官网首页静态提取；原始 HTML 不落盘，解析结果不持久化。
 
 ## 文档导航
 

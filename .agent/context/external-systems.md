@@ -17,7 +17,7 @@
 - server 固定调用 Places API (New) Text Search endpoint `POST https://places.googleapis.com/v1/places:searchText`；浏览器不能提供 host，API key 只来自 `GOOGLE_PLACES_API_KEY` 并通过 `X-Goog-Api-Key` 请求头发送。
 - 商家搜索最多读取三页、每页 20 条，按 Place ID 去重。电话和官网字段触发 Text Search Enterprise SKU；固定 Field Mask、专用限流、Google quota 和预算告警共同构成费用边界。
 - 搜索中心当前只接受连续 48 州近似包围框内坐标，矩形半宽最大 50 km。Google 结果按相关性返回且不保证穷尽，60 条或第三页后仍有 token 表示可能截断。
-- Google 原始响应在请求内存中完成 schema 校验和 DTO 映射，不写入服务端数据库、文件、trace 或日志。浏览器已有临时搜索页面，但结果只保存在 React 内存中；尚无官网提取或浏览器本地名录。
+- Google 原始响应在请求内存中完成 schema 校验和 DTO 映射，不写入服务端数据库、文件、trace 或日志。浏览器搜索结果只保存在 React 内存中。
 
 ## Odoo 与 Auto Worker
 

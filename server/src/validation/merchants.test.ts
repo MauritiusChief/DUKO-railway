@@ -3,6 +3,7 @@ import {
   CONTIGUOUS_US_BOUNDS,
   MAX_MERCHANT_RANGE_KM,
   merchantSearchSchema,
+  merchantWebsiteExtractionSchema,
 } from './merchants.js';
 
 const validRequest = {
@@ -71,5 +72,27 @@ describe('merchantSearchSchema', () => {
       ...validRequest,
       rangeKm: MAX_MERCHANT_RANGE_KM + 0.01,
     }).success).toBe(false);
+  });
+});
+
+describe('merchantWebsiteExtractionSchema', () => {
+  it('accepts HTTP(S) URLs and trims identifiers', () => {
+    expect(merchantWebsiteExtractionSchema.parse({
+      placeId: ' place-1 ',
+      websiteUrl: ' https://example.com/contact ',
+    })).toEqual({
+      placeId: 'place-1',
+      websiteUrl: 'https://example.com/contact',
+    });
+  });
+
+  it.each([
+    'file:///etc/passwd',
+    'data:text/html,test',
+    'ftp://example.com/file',
+    'https://user:password@example.com/',
+    'not a url',
+  ])('rejects unsafe website URL input: %s', (websiteUrl) => {
+    expect(merchantWebsiteExtractionSchema.safeParse({ placeId: 'place-1', websiteUrl }).success).toBe(false);
   });
 });

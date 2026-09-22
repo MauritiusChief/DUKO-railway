@@ -36,14 +36,13 @@ import { inventoryRouter } from './routes/inventory.js';
 import { autoWorkerRouter } from './routes/auto-worker.js';
 import { warehouseScanRouter, warehouseRouter } from './routes/warehouse.js';
 import { warehouseDecodeRouter } from './routes/warehouse-decode.js';
-import { merchantsRouter } from './routes/merchants.js';
+import { merchantsRouter, merchantWebsiteRouter } from './routes/merchants.js';
 import { authenticateToken } from './middleware/auth.js';
 import {
   apiLimiter,
   llmLimiter,
   warehouseScanLimiter,
   warehouseDecodeLimiter,
-  merchantSearchLimiter,
 } from './middleware/rateLimit.js';
 import { config, validateSecrets } from './config/env.js';
 import { initDB } from './db/lance.js';
@@ -67,7 +66,6 @@ app.set('trust proxy', 1);
 
 // ---- 全局中间件 ----
 app.use(cors());          // 允许跨域（开发时前端 :5273 请求后端 :3022
-app.use(express.json({ limit: '20mb' }));  // 自动解析请求体中的 JSON
 
 // 安全响应头（CSP、HSTS、X-Frame-Options 等）
 app.use(helmet({
@@ -91,6 +89,12 @@ app.use(helmet({
   frameguard: { action: 'deny' },
 }));
 
+// 官网抓取先认证、授权和限流，再使用路由内独立的 8 KiB JSON parser。
+// 必须位于全局 20 MiB parser 之前，避免未授权大请求体绕过资源保护。
+app.use('/api/merchant-websites', authenticateToken, merchantWebsiteRouter); // POST /api/merchant-websites/extract
+
+app.use(express.json({ limit: '20mb' }));  // 其他 JSON API（图片 base64 等）沿用现有上限
+
 // ---- API 路由 ----
 
 // 认证路由：不施加 authenticateToken（自身有独立限流与校验）
@@ -106,7 +110,7 @@ app.use('/api/image-parse', llmLimiter, authenticateToken, imageParseRouter);   
 app.use('/api/layout/parse-image', llmLimiter, authenticateToken, layoutParseImageRouter); // POST /api/layout/parse-image
 
 // ---- 商家搜索（最多三页，每页至多一次重试；认证失败不消耗商家搜索额度）----
-app.use('/api/merchants', authenticateToken, merchantSearchLimiter, merchantsRouter); // POST /api/merchants/search
+app.use('/api/merchants', authenticateToken, merchantsRouter); // POST /api/merchants/search
 
 // ---- Trace 路由（管理员只读，使用 apiLimiter）----
 app.use('/api/trace', apiLimiter, authenticateToken, traceRouter);                          // GET /api/trace[/:conversationId]

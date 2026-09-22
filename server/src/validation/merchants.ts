@@ -57,3 +57,22 @@ export const merchantSearchSchema = z.object({
 });
 
 export type MerchantSearchInput = z.infer<typeof merchantSearchSchema>;
+
+export const merchantWebsiteExtractionSchema = z.object({
+  placeId: z.string().trim().min(1, 'Place ID 不能为空').max(256, 'Place ID 过长'),
+  websiteUrl: z.string().trim().min(1, '官网 URL 不能为空').max(2_048, '官网 URL 过长').superRefine((value, ctx) => {
+    try {
+      const url = new URL(value);
+      if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: '官网 URL 只允许 http 或 https' });
+      }
+      if (url.username || url.password) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: '官网 URL 不允许包含用户名或密码' });
+      }
+    } catch {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: '官网 URL 格式无效' });
+    }
+  }),
+});
+
+export type MerchantWebsiteExtractionInput = z.infer<typeof merchantWebsiteExtractionSchema>;

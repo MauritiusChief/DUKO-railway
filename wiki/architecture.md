@@ -12,7 +12,7 @@ Express server ---- SQLite / LanceDB / 进程内状态
   |       \
   |        \ HTTPS（受限商家文本搜索）
   |         v
-  |       Google Places API (New)
+  |       Google Places API (New) / 公开商家官网
   |
   | WebSocket（单 worker、双向任务协议）
   v
@@ -57,7 +57,7 @@ Odoo 页面 ---- script 用户脚本（直接操作当前页面 DOM）
 
 REST 用于短请求、查询和命令；SSE 用于 LLM 流式结果、报价全局/单任务更新和库存 job 更新。SSE 连接是 server 到浏览器的单向事件流，确认、取消等反向操作仍走 REST。
 
-商家搜索页面 `/merchant-collection` 向 `POST /api/merchants/search` 提交类别查询、连续 48 州范围内的中心坐标和矩形半宽。server 使用环境变量中的 key 调用固定 Google Places Text Search endpoint，最多读取三页并映射为专用 DTO；客户端结果只保存在页面内存，服务端也不持久化搜索结果。详见 [服务端商家搜索](./server/merchant-search.md)和[客户端商家信息采集](./client/merchant-collection.md)。
+商家搜索页面 `/merchant-collection` 向 `POST /api/merchants/search` 提交类别查询、连续 48 州范围内的中心坐标和矩形半宽。server 使用环境变量中的 key 调用固定 Google Places Text Search endpoint，最多读取三页并映射为专用 DTO。用户可另行选择商家，通过 `POST /api/merchant-websites/extract` 安全抓取静态官网首页；该路径不复用 auto worker 或其 Odoo 登录态。搜索结果和提取草稿只保存在页面内存，服务端不持久化。详见 [服务端商家搜索](./server/merchant-search.md)和[客户端商家信息采集](./client/merchant-collection.md)。
 
 ## Auto 与 WebSocket
 

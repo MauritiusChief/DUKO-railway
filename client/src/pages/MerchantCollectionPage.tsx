@@ -1,7 +1,12 @@
-import { type FormEvent, useEffect, useRef, useState } from 'react';
+import { Fragment, type FormEvent, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchWithAuth } from '../lib/fetchWithAuth';
-import type { MerchantSearchResponse, MerchantSearchResult } from '../types/merchant';
+import type {
+  MerchantSearchResponse,
+  MerchantSearchResult,
+  MerchantWebsiteExtraction,
+  MerchantWebsiteExtractionState,
+} from '../types/merchant';
 import './MerchantCollectionPage.css';
 
 const CONTIGUOUS_US_BOUNDS = {
@@ -79,50 +84,140 @@ function businessStatusLabel(status: string | null): string {
   }
 }
 
-function ResultRow({ merchant }: { merchant: MerchantSearchResult }) {
+interface ResultRowProps {
+  merchant: MerchantSearchResult;
+  selected: boolean;
+  extraction?: MerchantWebsiteExtractionState;
+  extracting: boolean;
+  onToggle: () => void;
+  onRetry: () => void;
+}
+
+function ResultRow({ merchant, selected, extraction, extracting, onToggle, onRetry }: ResultRowProps) {
   const websiteUrl = safeExternalUrl(merchant.websiteUrl);
   const googleMapsUrl = safeExternalUrl(merchant.googleMapsUrl);
   const phone = merchant.internationalPhoneNumber ?? merchant.nationalPhoneNumber;
+  const status = extraction?.status ?? (selected ? 'pending' : null);
 
   return (
-    <tr>
-      <td data-label="商家">
-        <div className="mc-business-name">{merchant.businessName ?? '未提供名称'}</div>
-        <div className="mc-place-id">{merchant.placeId}</div>
-      </td>
-      <td data-label="地址">
-        <div>{merchant.formattedAddress ?? '未提供地址'}</div>
-        {merchant.location && (
-          <div className="mc-coordinate">
-            {merchant.location.latitude.toFixed(5)}, {merchant.location.longitude.toFixed(5)}
+    <Fragment>
+      <tr>
+        <td className="mc-select-cell">
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={onToggle}
+            disabled={!websiteUrl || extracting}
+            aria-label={`选择 ${merchant.businessName ?? merchant.placeId} 进行官网提取`}
+          />
+        </td>
+        <td>
+          <div className="mc-business-name">{merchant.businessName ?? '未提供名称'}</div>
+          <div className="mc-place-id">{merchant.placeId}</div>
+        </td>
+        <td>
+          <div>{merchant.formattedAddress ?? '未提供地址'}</div>
+          {merchant.location && (
+            <div className="mc-coordinate">
+              {merchant.location.latitude.toFixed(5)}, {merchant.location.longitude.toFixed(5)}
+            </div>
+          )}
+        </td>
+        <td>{phone ?? '未提供'}</td>
+        <td>
+          {websiteUrl ? (
+            <a href={websiteUrl} target="_blank" rel="noreferrer">
+              {websiteLabel(websiteUrl)}
+            </a>
+          ) : '未提供'}
+        </td>
+        <td>
+          <span className={`mc-status mc-status-${merchant.businessStatus?.toLowerCase() ?? 'unknown'}`}>
+            {businessStatusLabel(merchant.businessStatus)}
+          </span>
+        </td>
+        <td>
+          {googleMapsUrl ? (
+            <a href={googleMapsUrl} target="_blank" rel="noreferrer">在 Google Maps 查看</a>
+          ) : '未提供'}
+        </td>
+        <td className="mc-extraction-cell">
+          {!websiteUrl && <span className="mc-extract-state mc-extract-state-none">无官网</span>}
+          {status && (
+            <span className={`mc-extract-state mc-extract-state-${status}`}>
+              {status === 'pending' && '等待抓取'}
+              {status === 'loading' && '抓取中'}
+              {status === 'success' && '已提取'}
+              {status === 'failed' && '失败'}
+            </span>
+          )}
+          {extraction?.status === 'failed' && (
+            <button className="mc-inline-button" type="button" onClick={onRetry} disabled={extracting}>
+              重试
+            </button>
+          )}
+          {extraction?.error && <div className="mc-row-error">{extraction.error}</div>}
+        </td>
+      </tr>
+      {extraction?.status === 'success' && extraction.data && (
+        <tr className="mc-detail-row">
+          <td colSpan={8}>
+            <ExtractionDetails extraction={extraction.data} />
+          </td>
+        </tr>
+      )}
+    </Fragment>
+  );
+}
+
+function ExtractionDetails({ extraction }: { extraction: MerchantWebsiteExtraction }) {
+  const canonicalUrl = safeExternalUrl(extraction.canonicalUrl);
+  return (
+    <details className="mc-extraction-details">
+      <summary>
+        查看官网提取草稿
+        <span>{extraction.emails.length} 邮箱 · {extraction.phones.length} 电话</span>
+      </summary>
+      <div className="mc-extraction-grid">
+        <div>
+          <span className="mc-detail-label">邮箱</span>
+          <div>{extraction.emails.length > 0 ? extraction.emails.join(', ') : '静态首页未发现'}</div>
+        </div>
+        <div>
+          <span className="mc-detail-label">电话</span>
+          <div>{extraction.phones.length > 0 ? extraction.phones.join(', ') : '静态首页未发现'}</div>
+        </div>
+        <div>
+          <span className="mc-detail-label">页面标题</span>
+          <div>{extraction.pageTitle ?? '未提供'}</div>
+        </div>
+        <div>
+          <span className="mc-detail-label">Meta description</span>
+          <div>{extraction.pageDescription ?? '未提供'}</div>
+        </div>
+        <div>
+          <span className="mc-detail-label">Canonical</span>
+          <div>
+            {canonicalUrl ? <a href={canonicalUrl} target="_blank" rel="noreferrer">{canonicalUrl}</a> : '未提供'}
           </div>
-        )}
-      </td>
-      <td data-label="电话">{phone ?? '未提供'}</td>
-      <td data-label="官网">
-        {websiteUrl ? (
-          <a href={websiteUrl} target="_blank" rel="noreferrer">
-            {websiteLabel(websiteUrl)}
-          </a>
-        ) : '未提供'}
-      </td>
-      <td data-label="状态">
-        <span className={`mc-status mc-status-${merchant.businessStatus?.toLowerCase() ?? 'unknown'}`}>
-          {businessStatusLabel(merchant.businessStatus)}
-        </span>
-      </td>
-      <td data-label="地图">
-        {googleMapsUrl ? (
-          <a href={googleMapsUrl} target="_blank" rel="noreferrer">在 Google Maps 查看</a>
-        ) : '未提供'}
-      </td>
-    </tr>
+        </div>
+      </div>
+      <div className="mc-cleaned-text">
+        <div className="mc-cleaned-text-heading">
+          <span className="mc-detail-label">清洗正文</span>
+          {extraction.textTruncated && <span>已截断到 50 KiB</span>}
+        </div>
+        <p>{extraction.cleanedWebsiteText || '静态首页没有可显示正文。'}</p>
+      </div>
+    </details>
   );
 }
 
 export default function MerchantCollectionPage() {
   const navigate = useNavigate();
   const requestRef = useRef<AbortController | null>(null);
+  const extractionControllersRef = useRef(new Map<string, AbortController>());
+  const extractionGenerationRef = useRef(0);
   const [form, setForm] = useState<SearchForm>({
     textQuery: '',
     centerCoordinates: '',
@@ -131,8 +226,23 @@ export default function MerchantCollectionPage() {
   const [searchResult, setSearchResult] = useState<MerchantSearchResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [selectedPlaceIds, setSelectedPlaceIds] = useState<Set<string>>(new Set());
+  const [extractions, setExtractions] = useState<Record<string, MerchantWebsiteExtractionState>>({});
+  const [extracting, setExtracting] = useState(false);
 
-  useEffect(() => () => requestRef.current?.abort(), []);
+  useEffect(() => () => {
+    requestRef.current?.abort();
+    extractionControllersRef.current.forEach((controller) => controller.abort());
+  }, []);
+
+  function resetExtractions() {
+    extractionGenerationRef.current += 1;
+    extractionControllersRef.current.forEach((controller) => controller.abort());
+    extractionControllersRef.current.clear();
+    setSelectedPlaceIds(new Set());
+    setExtractions({});
+    setExtracting(false);
+  }
 
   function updateForm(field: keyof SearchForm, value: string) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -142,12 +252,14 @@ export default function MerchantCollectionPage() {
     event.preventDefault();
     const validationError = validateForm(form);
     if (validationError) {
+      resetExtractions();
       setError(validationError);
       setSearchResult(null);
       return;
     }
 
     requestRef.current?.abort();
+    resetExtractions();
     const controller = new AbortController();
     requestRef.current = controller;
     setLoading(true);
@@ -188,6 +300,121 @@ export default function MerchantCollectionPage() {
         setLoading(false);
       }
     }
+  }
+
+  function toggleMerchant(placeId: string) {
+    setSelectedPlaceIds((current) => {
+      const next = new Set(current);
+      if (next.has(placeId)) next.delete(placeId);
+      else next.add(placeId);
+      return next;
+    });
+  }
+
+  function selectAllWebsites() {
+    const placeIds = searchResult?.results
+      .filter((merchant) => safeExternalUrl(merchant.websiteUrl))
+      .map((merchant) => merchant.placeId) ?? [];
+    setSelectedPlaceIds(new Set(placeIds));
+  }
+
+  async function extractOneWebsite(merchant: MerchantSearchResult, generation: number) {
+    const websiteUrl = safeExternalUrl(merchant.websiteUrl);
+    if (!websiteUrl || extractionGenerationRef.current !== generation) return;
+
+    const controller = new AbortController();
+    extractionControllersRef.current.set(merchant.placeId, controller);
+    setExtractions((current) => ({
+      ...current,
+      [merchant.placeId]: { status: 'loading' },
+    }));
+
+    try {
+      const response = await fetchWithAuth('/api/merchant-websites/extract', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ placeId: merchant.placeId, websiteUrl }),
+        signal: controller.signal,
+      });
+      const data = await response.json().catch(() => null) as (MerchantWebsiteExtraction & {
+        error?: string;
+      }) | null;
+      if (extractionGenerationRef.current !== generation) return;
+      if (!response.ok || !data || !Array.isArray(data.emails) || !Array.isArray(data.phones)) {
+        setExtractions((current) => ({
+          ...current,
+          [merchant.placeId]: {
+            status: 'failed',
+            error: data?.error ?? '官网首页提取失败',
+          },
+        }));
+        return;
+      }
+      setExtractions((current) => ({
+        ...current,
+        [merchant.placeId]: { status: 'success', data },
+      }));
+    } catch (requestError) {
+      if (extractionGenerationRef.current !== generation) return;
+      const cancelled = requestError instanceof DOMException && requestError.name === 'AbortError';
+      setExtractions((current) => ({
+        ...current,
+        [merchant.placeId]: {
+          status: 'failed',
+          error: cancelled ? '已取消' : '网络连接失败',
+        },
+      }));
+    } finally {
+      if (extractionControllersRef.current.get(merchant.placeId) === controller) {
+        extractionControllersRef.current.delete(merchant.placeId);
+      }
+    }
+  }
+
+  async function runExtraction(merchants: MerchantSearchResult[]) {
+    if (extracting || merchants.length === 0) return;
+    const generation = extractionGenerationRef.current;
+    setExtracting(true);
+    setExtractions((current) => {
+      const next = { ...current };
+      for (const merchant of merchants) next[merchant.placeId] = { status: 'pending' };
+      return next;
+    });
+
+    let cursor = 0;
+    const worker = async () => {
+      while (cursor < merchants.length && extractionGenerationRef.current === generation) {
+        const merchant = merchants[cursor];
+        cursor += 1;
+        await extractOneWebsite(merchant, generation);
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(3, merchants.length) }, () => worker()));
+    if (extractionGenerationRef.current === generation) setExtracting(false);
+  }
+
+  function extractSelectedWebsites() {
+    const merchants = searchResult?.results.filter((merchant) => selectedPlaceIds.has(merchant.placeId)) ?? [];
+    void runExtraction(merchants);
+  }
+
+  function cancelExtractions() {
+    extractionGenerationRef.current += 1;
+    extractionControllersRef.current.forEach((controller) => controller.abort());
+    extractionControllersRef.current.clear();
+    setExtracting(false);
+    setExtractions((current) => Object.fromEntries(
+      Object.entries(current).map(([placeId, state]) => [
+        placeId,
+        state.status === 'pending' || state.status === 'loading'
+          ? { status: 'failed' as const, error: '已取消' }
+          : state,
+      ]),
+    ));
+  }
+
+  function retryExtraction(merchant: MerchantSearchResult) {
+    void runExtraction([merchant]);
   }
 
   return (
@@ -322,25 +549,70 @@ export default function MerchantCollectionPage() {
         )}
 
         {searchResult && searchResult.results.length > 0 && (
-          <div className="mc-table-shell">
-            <table className="mc-table">
+          <>
+            <div className="mc-extract-toolbar">
+              <div>
+                <strong>{selectedPlaceIds.size}</strong> 条已选择
+                <span>仅抓取官网首页，最多同时处理 3 条</span>
+              </div>
+              <div className="mc-extract-actions">
+                <button className="mc-button mc-button-secondary" type="button" onClick={selectAllWebsites} disabled={extracting}>
+                  选择全部有官网商家
+                </button>
+                <button
+                  className="mc-button mc-button-secondary"
+                  type="button"
+                  onClick={() => setSelectedPlaceIds(new Set())}
+                  disabled={extracting || selectedPlaceIds.size === 0}
+                >
+                  清除选择
+                </button>
+                {extracting ? (
+                  <button className="mc-button mc-button-danger" type="button" onClick={cancelExtractions}>
+                    取消抓取
+                  </button>
+                ) : (
+                  <button
+                    className="mc-button mc-button-primary mc-extract-button"
+                    type="button"
+                    onClick={extractSelectedWebsites}
+                    disabled={selectedPlaceIds.size === 0}
+                  >
+                    抓取所选官网首页
+                  </button>
+                )}
+              </div>
+            </div>
+            <div className="mc-table-shell">
+              <table className="mc-table">
               <thead>
                 <tr>
+                  <th aria-label="选择" />
                   <th>商家</th>
                   <th>地址</th>
                   <th>电话</th>
                   <th>官网</th>
                   <th>状态</th>
                   <th>地图</th>
+                  <th>官网提取</th>
                 </tr>
               </thead>
               <tbody>
                 {searchResult.results.map((merchant) => (
-                  <ResultRow key={merchant.placeId} merchant={merchant} />
+                  <ResultRow
+                    key={merchant.placeId}
+                    merchant={merchant}
+                    selected={selectedPlaceIds.has(merchant.placeId)}
+                    extraction={extractions[merchant.placeId]}
+                    extracting={extracting}
+                    onToggle={() => toggleMerchant(merchant.placeId)}
+                    onRetry={() => retryExtraction(merchant)}
+                  />
                 ))}
               </tbody>
-            </table>
-          </div>
+              </table>
+            </div>
+          </>
         )}
 
         <footer className="mc-attribution">

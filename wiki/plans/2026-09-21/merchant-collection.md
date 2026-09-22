@@ -2,7 +2,7 @@
 
 ## 状态
 
-**阶段 1、2 已完成；阶段 3～5 待实施。**
+**阶段 1、2、3 已完成；阶段 4～5 待实施。**
 
 阶段 1 于 2026-09-22 完成，实际实现包括：
 
@@ -24,6 +24,16 @@
 - 桌面使用表格，窄屏保留原生表格语义并横向滚动；官网和 Maps 外链只接受 `http:`/`https:`。
 
 阶段 2 静态验证：`npm --prefix client run build` 通过；当前仓库没有客户端自动化测试脚本。
+
+阶段 3 于 2026-09-22 完成，实际实现包括：
+
+- 新增 `POST /api/merchant-websites/extract`，仅限 admin/manager，90 次/15 分钟按 IP 限流并限制服务端全局 4 路并发；认证、角色和限流先于独立 8 KiB JSON parser，并发许可在解析后获取。
+- 每跳 DNS/IP 校验、固定已验证 IP 连接、Host/TLS SNI 保留、最多 3 次重定向和整链 10 秒 deadline。
+- 压缩响应 2 MiB、解压响应 5 MiB，只接受 HTML/XHTML，支持 gzip/deflate/br；不转发任何浏览器、Google 或 Odoo 凭据。
+- Cheerio 在可终止 worker 中提取邮箱、电话、title、meta description、canonical URL 和可见正文；正文最多 50 KiB，不提取社交链接。
+- 前端支持选择、最多 3 路并发、整批取消、逐行 pending/loading/success/failed 和失败重试；结果仍是页面内存草稿。
+
+阶段 3 自动化验证：服务端 9 个测试文件、187 个测试全部通过，服务端和客户端构建通过；官网测试只使用合成 HTML 和本地临时 HTTP server，未访问真实商家网站。
 
 已确认的产品决策：
 
@@ -331,7 +341,7 @@ UI 最少需要：
 2. 展示临时结果、Google Maps attribution、分页统计和截断警告。
 3. 保持搜索结果为页面内存状态，不在该阶段写入 IndexedDB。
 
-### 阶段 3：官网首页提取
+### 阶段 3：官网首页提取（已完成）
 
 1. 实现 SSRF 防护、受限 HTTP 获取、Cheerio 解析和响应限长。
 2. 前端增加选择、受控并发、取消、逐行进度和失败重试。

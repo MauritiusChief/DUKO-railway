@@ -6,9 +6,11 @@
  * warehouseScanLimiter    —— 仓库扫码确认写入，2400 次 / 15 分钟
  * warehouseDecodeLimiter  —— 仓库扫码图片解码，2400 次 / 15 分钟（独立计数）
  * merchantSearchLimiter   —— Google Places 商家搜索，30 次 / 15 分钟
+ * merchantWebsiteLimiter  —— 商家官网首页提取，90 次 / 15 分钟
  */
 
 import rateLimit from 'express-rate-limit';
+import type { Request, Response, NextFunction } from 'express';
 
 /** 认证端点限流：防暴力破解，15 分钟内最多 20 次请求 */
 export const authLimiter = rateLimit({
@@ -45,6 +47,46 @@ export const merchantSearchLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: '商家搜索请求过于频繁，请 15 分钟后再试' },
 });
+
+/** 官网首页提取限流：允许一次 60 条搜索结果的人工批量提取，并保留少量失败重试余量。 */
+export const merchantWebsiteLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 90,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: '官网提取请求过于频繁，请 15 分钟后再试' },
+});
+
+export const MAX_CONCURRENT_WEBSITE_EXTRACTIONS = 4;
+let activeWebsiteExtractions = 0;
+
+/** 进程级官网抓取并发上限，防止瞬时请求绕过时间窗口限流并耗尽连接或内存。 */
+export function merchantWebsiteConcurrencyLimiter(
+  _req: Request,
+  res: Response,
+  next: NextFunction,
+): void {
+  if (activeWebsiteExtractions >= MAX_CONCURRENT_WEBSITE_EXTRACTIONS) {
+    res.status(503).json({
+      error: '官网提取任务繁忙，请稍后重试',
+      code: 'website_extraction_busy',
+    });
+    return;
+  }
+
+  activeWebsiteExtractions += 1;
+  let released = false;
+  const release = () => {
+    if (released) return;
+    released = true;
+    activeWebsiteExtractions -= 1;
+    res.removeListener('finish', release);
+    res.removeListener('close', release);
+  };
+  res.once('finish', release);
+  res.once('close', release);
+  next();
+}
 
 /**
  * 仓库扫码确认写入限流：15 分钟内最多 2400 次请求。
