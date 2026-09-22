@@ -9,6 +9,10 @@ DUKO 是由四个 Node.js/TypeScript 子项目组成的单仓库应用：
   | REST + fetch/ReadableStream SSE
   v
 Express server ---- SQLite / LanceDB / 进程内状态
+  |       \
+  |        \ HTTPS（受限商家文本搜索）
+  |         v
+  |       Google Places API (New)
   |
   | WebSocket（单 worker、双向任务协议）
   v
@@ -49,8 +53,11 @@ Odoo 页面 ---- script 用户脚本（直接操作当前页面 DOM）
 - 仓库条形码点数：扫码录入、型号↔SKU 映射、汇总与原型 JSON 导入。
 - 报价/库存任务队列、SSE 广播和 `auto` WebSocket 协议。
 - 客户端构建产物与用户脚本下载文件的提供。
+- 仅限 admin/manager 的 Google Places 商家文本搜索；结果只在请求响应中返回，不写入服务端数据库。
 
 REST 用于短请求、查询和命令；SSE 用于 LLM 流式结果、报价全局/单任务更新和库存 job 更新。SSE 连接是 server 到浏览器的单向事件流，确认、取消等反向操作仍走 REST。
+
+商家搜索由浏览器向 `POST /api/merchants/search` 提交类别查询、连续 48 州范围内的中心坐标和矩形半宽。server 使用环境变量中的 key 调用固定 Google Places Text Search endpoint，最多读取三页并映射为专用 DTO；当前没有对应前端页面，也不持久化搜索结果。详见 [商家搜索](./server/merchant-search.md)。
 
 ## Auto 与 WebSocket
 

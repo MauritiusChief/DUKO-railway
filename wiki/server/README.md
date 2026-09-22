@@ -25,6 +25,7 @@
 - 报价任务持久队列，通过外部 auto worker 在 Odoo 搜索、核验、确认并写入报价行。
 - 库存 CSV 上传或由 worker 下载，随后清洗、低库存筛选、近期移动趋势查验和分级。
 - LLM 步进、报价状态、全局队列和库存进度通过 SSE 推送；worker 使用 WebSocket 双向通信。
+- Google Places Text Search 商家搜索 API，仅允许 admin/manager；最多读取三页，结果不写入服务端数据库。
 
 ## 文档导航
 
@@ -33,6 +34,7 @@
 - [认证与持久化](./auth-and-persistence.md)
 - [实时通信与自动化](./realtime-and-automation.md)
 - [仓库扫码](./warehouse-scan.md)
+- [商家搜索](./merchant-search.md)
 - [Railway 部署](../RAILWAY_SETUP.md)
 
 ## 重要边界
@@ -42,3 +44,4 @@
 - `AgentOrchestrator` 当前只提供注册、查找、消息监听和工具所有权查询，不是实际的持久 workflow 引擎。当前主/子 Agent 委派主要由 Agent 类直接创建子 Agent 完成。
 - server 不直接运行浏览器。所有 Odoo Playwright 行为在外部 `auto/` 进程中执行。
 - 库存任务和部分认证状态是内存态；详细差异见持久化文档。
+- 商家搜索依赖可选的 `GOOGLE_PLACES_API_KEY`。电话和官网字段触发较高计费 SKU，Field Mask、三页上限和专用限流不得绕过。

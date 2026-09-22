@@ -6,7 +6,7 @@
  */
 
 import type { Request, Response, NextFunction } from 'express';
-import type { ZodSchema, ZodError } from 'zod';
+import type { ZodTypeAny, ZodError } from 'zod';
 
 /** 将 ZodError 转为人类可读的字符串 */
 function formatZodError(error: ZodError): string {
@@ -14,7 +14,7 @@ function formatZodError(error: ZodError): string {
 }
 
 /** 创建校验中间件，对 req.body 执行 schema.parse */
-export function validate<T>(schema: ZodSchema<T>) {
+export function validate(schema: ZodTypeAny) {
   return (req: Request, res: Response, next: NextFunction): void => {
     const result = schema.safeParse(req.body);
     if (!result.success) {

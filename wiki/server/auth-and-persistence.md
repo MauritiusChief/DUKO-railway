@@ -20,6 +20,7 @@
 - `AUTO_WORKER_TOKEN` 是独立的 worker 共享密钥，不是用户 JWT。它通过 WebSocket 首条 `hello` 消息验证，必须与外部 auto 配置完全一致。
 - 登录、刷新、LLM、普通 API 与仓库扫码提交使用不同限流器；限流是单进程运行态，不是分布式策略。
 - Inventory 路由整体要求有效 Access Token，且全部端点（创建、上传、快照、SSE、取消、历史查询）额外要求 `manager` 或 `admin` 角色。快照、SSE 与取消共用按 job `userId` 的所有权判断：非创建者（且非该 job 归属用户）无法读取或订阅他人 job；全局库存历史对所有 manager/admin 共享。
+- `POST /api/merchants/search` 要求有效 Access Token 和 `manager` 或 `admin` 角色，并使用独立的 30 次/15 分钟按 IP 限流器。搜索结果只在响应中返回，不写入 SQLite、trace 或服务端文件。
 - 报价全局 SSE 会向所有登录用户发送队列和活跃任务摘要，其中包含报价号和用户名；这属于当前跨用户可见边界，不应在摘要中加入更多客户或报价细节。
 - Access Token 位于 `localStorage`，可被页面 JavaScript 读取；HttpOnly 只保护 Refresh Token。CSP/Helmet 可降低但不能消除 XSS 导致 Access Token 泄露的风险。
 
@@ -54,6 +55,7 @@ worker 断开时，server 会按重试策略回收运行中的报价任务；重
 - 运行中的 Inventory job、负数 ID 的库存 worker 子任务、下载 CSV 和趋势中间结果（成功完成的最终分类会持久化到 `sku.sqlite` 的 `inventory_results`）。
 - 正在执行的 LLM 请求与 Agent manifest/layout 请求上下文。
 - BM25 运行时索引。
+- Google Places 商家搜索结果及分页中间状态。
 - `CHAT_LOG` Markdown 文件写在应用构建目录旁，不属于 `DB_DIR`，在 Railway 上不保证跨部署保留。
 
 服务重启后，前述状态会丢失或重建。不要把“数据库在 Volume 上”理解为所有界面状态都可恢复。

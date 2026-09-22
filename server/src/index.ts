@@ -36,12 +36,14 @@ import { inventoryRouter } from './routes/inventory.js';
 import { autoWorkerRouter } from './routes/auto-worker.js';
 import { warehouseScanRouter, warehouseRouter } from './routes/warehouse.js';
 import { warehouseDecodeRouter } from './routes/warehouse-decode.js';
+import { merchantsRouter } from './routes/merchants.js';
 import { authenticateToken } from './middleware/auth.js';
 import {
   apiLimiter,
   llmLimiter,
   warehouseScanLimiter,
   warehouseDecodeLimiter,
+  merchantSearchLimiter,
 } from './middleware/rateLimit.js';
 import { config, validateSecrets } from './config/env.js';
 import { initDB } from './db/lance.js';
@@ -102,6 +104,9 @@ app.use('/api/chat', llmLimiter, authenticateToken, chatRouter);                
 app.use('/api/table-parse', llmLimiter, authenticateToken, tableParseLlmRouter);           // POST /api/table-parse
 app.use('/api/image-parse', llmLimiter, authenticateToken, imageParseRouter);              // POST /api/image-parse
 app.use('/api/layout/parse-image', llmLimiter, authenticateToken, layoutParseImageRouter); // POST /api/layout/parse-image
+
+// ---- 商家搜索（最多三页，每页至多一次重试；认证失败不消耗商家搜索额度）----
+app.use('/api/merchants', authenticateToken, merchantSearchLimiter, merchantsRouter); // POST /api/merchants/search
 
 // ---- Trace 路由（管理员只读，使用 apiLimiter）----
 app.use('/api/trace', apiLimiter, authenticateToken, traceRouter);                          // GET /api/trace[/:conversationId]

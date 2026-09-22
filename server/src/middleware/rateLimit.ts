@@ -5,6 +5,7 @@
  * apiLimiter              —— 通用 API 端点，500 次 / 15 分钟
  * warehouseScanLimiter    —— 仓库扫码确认写入，2400 次 / 15 分钟
  * warehouseDecodeLimiter  —— 仓库扫码图片解码，2400 次 / 15 分钟（独立计数）
+ * merchantSearchLimiter   —— Google Places 商家搜索，30 次 / 15 分钟
  */
 
 import rateLimit from 'express-rate-limit';
@@ -34,6 +35,15 @@ export const llmLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'LLM 请求过于频繁，请 15 分钟后再试' },
+});
+
+/** 商家搜索限流：单次搜索最多三页，每页至多一次重试（最多六次出站尝试）。 */
+export const merchantSearchLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: '商家搜索请求过于频繁，请 15 分钟后再试' },
 });
 
 /**

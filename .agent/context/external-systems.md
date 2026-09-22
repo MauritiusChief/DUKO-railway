@@ -12,6 +12,13 @@
 - 文本 embedding 由 `@huggingface/transformers` 本地推理生成，模型为 `onnx-community/all-MiniLM-L6-v2-ONNX`；首次使用会从 Hugging Face 下载模型。
 - API key 只通过环境变量提供。模型、provider 或发送内容变化都要检查成本、隐私、输出兼容性和降级行为。
 
+## Google Places
+
+- server 固定调用 Places API (New) Text Search endpoint `POST https://places.googleapis.com/v1/places:searchText`；浏览器不能提供 host，API key 只来自 `GOOGLE_PLACES_API_KEY` 并通过 `X-Goog-Api-Key` 请求头发送。
+- 商家搜索最多读取三页、每页 20 条，按 Place ID 去重。电话和官网字段触发 Text Search Enterprise SKU；固定 Field Mask、专用限流、Google quota 和预算告警共同构成费用边界。
+- 搜索中心当前只接受连续 48 州近似包围框内坐标，矩形半宽最大 50 km。Google 结果按相关性返回且不保证穷尽，60 条或第三页后仍有 token 表示可能截断。
+- Google 原始响应在请求内存中完成 schema 校验和 DTO 映射，不写入服务端数据库、文件、trace 或日志。当前阶段尚无前端页面或浏览器本地名录。
+
 ## Odoo 与 Auto Worker
 
 - Railway 服务端通过 `/api/auto/connect` WebSocket 向本地 `auto/` worker 派发报价、库存下载和库存调动历史同步（`inventory-moves-sync`）任务。
