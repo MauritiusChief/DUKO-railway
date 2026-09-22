@@ -173,9 +173,12 @@ GOOGLE_PLACES_API_KEY=
 
 - `mailto:` 和页面文本中格式合理的邮箱地址。
 - `tel:` 和可保守识别的电话号码候选。
-- 常见社交平台链接。
 - `<title>`、meta description、canonical URL。
 - 去除 `script`、`style`、`noscript`、SVG、模板和重复空白后的可见文本。
+
+此版不提取的内容包括：
+
+- 常见社交平台链接。
 
 限制：
 
@@ -400,6 +403,3 @@ npm --prefix client run build
 
 Wiki 强制影响检查：本计划对应的未来实现会改变系统数据流、API、认证角色范围、配置项、外部系统交互、部署配置和安全边界，因此上述文档同步是实施完成条件。本次仅新增计划文件，没有改变当前运行行为，主题 Wiki 仍描述现状，不提前改写为未实现能力。
 
-## 关联 Issue
-
-实施开始时按 `AGENTS.md` 创建一个可验收的 GitHub Issue，关联本计划并记录范围、非范围、验收标准、Google 授权环境前置条件和安全风险。本计划不作为长期 backlog。
