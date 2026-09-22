@@ -2,7 +2,7 @@
 
 ## 状态
 
-**阶段 1、2、3 已完成；阶段 4～5 待实施。**
+**阶段 1、2、3、4 已完成；阶段 5 待实施。**
 
 阶段 1 于 2026-09-22 完成，实际实现包括：
 
@@ -34,6 +34,16 @@
 - 前端支持选择、最多 3 路并发、整批取消、逐行 pending/loading/success/failed 和失败重试；结果仍是页面内存草稿。
 
 阶段 3 自动化验证：服务端 9 个测试文件、187 个测试全部通过，服务端和客户端构建通过；官网测试只使用合成 HTML 和本地临时 HTTP server，未访问真实商家网站。
+
+阶段 4 于 2026-09-22 完成，实际实现包括：
+
+- 新增独立 IndexedDB `duko-merchant-collection`，包含以 `placeId` 为 keyPath 的 `merchants` store 和 `meta` store；空名录浏览不会持久创建数据库。
+- 新增人工核实编辑、本地表格、删除、Place ID upsert、非空字段合并和 `updatedAt` 并发编辑保护；编辑 UI 是唯一允许显式清空字段的路径。
+- 显示站点存储估算、持久存储请求和共享浏览器/清除站点数据风险提示；本地名录不随登出清除。
+- 使用 Papa Parse 导出固定表头、UTF-8 BOM、JSON 数组及公式防护 CSV；导入限制为 5 MiB/5000 行，先预览新增、更新、无变化和错误，再用单个可回滚 IndexedDB transaction 应用。
+- 所有编辑和导入写入共享字段、URL、数组及 50 KiB UTF-8 正文校验；重复 Place ID 按物理文件行号报告。
+
+阶段 4 自动化验证：客户端 2 个测试文件、12 个测试全部通过，`npm --prefix client run build` 通过。
 
 已确认的产品决策：
 
@@ -347,7 +357,7 @@ UI 最少需要：
 2. 前端增加选择、受控并发、取消、逐行进度和失败重试。
 3. 使用合成 HTML 和本地 mock 测试，不为验证访问真实商家网站。
 
-### 阶段 4：本地名录和 CSV
+### 阶段 4：本地名录和 CSV（已完成）
 
 1. 建立 IndexedDB schema 和本地记录编辑流程。
 2. 实现人工确认后纳入、Place ID upsert、存储估算和共享浏览器提示。
@@ -405,6 +415,7 @@ UI 最少需要：
 ```bash
 npm --prefix server test
 npm --prefix server run build
+npm --prefix client test
 npm --prefix client run build
 ```
 

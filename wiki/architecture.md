@@ -38,6 +38,7 @@ Odoo 页面 ---- script 用户脚本（直接操作当前页面 DOM）
 
 - Zustand 内存状态：当前表单、加载状态、SSE 日志和选中项。
 - `localStorage`：access token、当前解析表、当前布局、报价草稿、库存最近结果、语言等可恢复数据。
+- IndexedDB：人工确认后的商家本地名录，以 Place ID 为唯一键；只存在于当前 origin/profile，通过 CSV 手动备份和迁移。
 - 下载文件：表格 JSON 存档和布局 JSON，可由用户重新导入。
 
 ## Server
@@ -57,7 +58,7 @@ Odoo 页面 ---- script 用户脚本（直接操作当前页面 DOM）
 
 REST 用于短请求、查询和命令；SSE 用于 LLM 流式结果、报价全局/单任务更新和库存 job 更新。SSE 连接是 server 到浏览器的单向事件流，确认、取消等反向操作仍走 REST。
 
-商家搜索页面 `/merchant-collection` 向 `POST /api/merchants/search` 提交类别查询、连续 48 州范围内的中心坐标和矩形半宽。server 使用环境变量中的 key 调用固定 Google Places Text Search endpoint，最多读取三页并映射为专用 DTO。用户可另行选择商家，通过 `POST /api/merchant-websites/extract` 安全抓取静态官网首页；该路径不复用 auto worker 或其 Odoo 登录态。搜索结果和提取草稿只保存在页面内存，服务端不持久化。详见 [服务端商家搜索](./server/merchant-search.md)和[客户端商家信息采集](./client/merchant-collection.md)。
+商家搜索页面 `/merchant-collection` 向 `POST /api/merchants/search` 提交类别查询、连续 48 州范围内的中心坐标和矩形半宽。server 使用环境变量中的 key 调用固定 Google Places Text Search endpoint，最多读取三页并映射为专用 DTO。用户可另行选择商家，通过 `POST /api/merchant-websites/extract` 安全抓取静态官网首页；该路径不复用 auto worker 或其 Odoo 登录态。搜索结果和提取草稿只保存在页面内存，人工确认后才以 Place ID 写入当前浏览器 IndexedDB；服务端不持久化商家名录。CSV 由浏览器直接导入、导出，不经过 server。详见 [服务端商家搜索](./server/merchant-search.md)和[客户端商家信息采集](./client/merchant-collection.md)。
 
 ## Auto 与 WebSocket
 

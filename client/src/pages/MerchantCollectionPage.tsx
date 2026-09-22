@@ -1,7 +1,27 @@
-import { Fragment, type FormEvent, useEffect, useRef, useState } from 'react';
+import { Fragment, type ChangeEvent, type FormEvent, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { fetchWithAuth } from '../lib/fetchWithAuth';
+import {
+  applicableMerchantPatches,
+  exportMerchantCsv,
+  MAX_MERCHANT_CSV_BYTES,
+  previewMerchantCsv,
+  type MerchantCsvPreview,
+} from '../lib/merchantCsv';
+import {
+  applyMerchantPatches,
+  deleteMerchantRecord,
+  estimateMerchantStorage,
+  listMerchantRecords,
+  markMerchantExported,
+  mergeMerchantRecord,
+  MERCHANT_LIMITS,
+  putMerchantRecordIfCurrent,
+  requestPersistentMerchantStorage,
+  type MerchantStorageEstimate,
+} from '../lib/merchantDb';
 import type {
+  MerchantRecord,
   MerchantSearchResponse,
   MerchantSearchResult,
   MerchantWebsiteExtraction,
@@ -87,13 +107,18 @@ function businessStatusLabel(status: string | null): string {
 interface ResultRowProps {
   merchant: MerchantSearchResult;
   selected: boolean;
+  collected: boolean;
   extraction?: MerchantWebsiteExtractionState;
   extracting: boolean;
+  recordSaving: boolean;
   onToggle: () => void;
   onRetry: () => void;
+  onOpenRecord: () => void;
 }
 
-function ResultRow({ merchant, selected, extraction, extracting, onToggle, onRetry }: ResultRowProps) {
+function ResultRow({
+  merchant, selected, collected, extraction, extracting, recordSaving, onToggle, onRetry, onOpenRecord,
+}: ResultRowProps) {
   const websiteUrl = safeExternalUrl(merchant.websiteUrl);
   const googleMapsUrl = safeExternalUrl(merchant.googleMapsUrl);
   const phone = merchant.internationalPhoneNumber ?? merchant.nationalPhoneNumber;
@@ -158,15 +183,137 @@ function ResultRow({ merchant, selected, extraction, extracting, onToggle, onRet
           )}
           {extraction?.error && <div className="mc-row-error">{extraction.error}</div>}
         </td>
+        <td className="mc-directory-cell">
+          {collected && <span className="mc-directory-badge">已收录</span>}
+          <button className="mc-inline-button" type="button" onClick={onOpenRecord} disabled={recordSaving}>
+            {collected ? '核实并合并' : '核实并纳入'}
+          </button>
+        </td>
       </tr>
       {extraction?.status === 'success' && extraction.data && (
         <tr className="mc-detail-row">
-          <td colSpan={8}>
+          <td colSpan={9}>
             <ExtractionDetails extraction={extraction.data} />
           </td>
         </tr>
       )}
     </Fragment>
+  );
+}
+
+function splitList(value: string): string[] {
+  return [...new Set(value.split(/[\n,]+/).map((item) => item.trim()).filter(Boolean))];
+}
+
+function formatBytes(value: number | null): string {
+  if (value === null) return '浏览器未提供';
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KiB`;
+  return `${(value / (1024 * 1024)).toFixed(1)} MiB`;
+}
+
+function createRecordDraft(
+  merchant: MerchantSearchResult,
+  extraction?: MerchantWebsiteExtraction,
+): MerchantRecord {
+  const now = new Date().toISOString();
+  return {
+    placeId: merchant.placeId,
+    businessName: merchant.businessName ?? '',
+    address: merchant.formattedAddress ?? '',
+    phone: extraction?.phones[0] ?? merchant.internationalPhoneNumber ?? merchant.nationalPhoneNumber ?? '',
+    emails: extraction?.emails ?? [],
+    websiteUrl: safeExternalUrl(extraction?.sourceUrl ?? merchant.websiteUrl) ?? '',
+    socialLinks: [],
+    pageTitle: extraction?.pageTitle ?? '',
+    pageDescription: extraction?.pageDescription ?? '',
+    cleanedWebsiteText: extraction?.cleanedWebsiteText ?? '',
+    notes: '',
+    verificationStatus: 'verified',
+    verifiedAt: now,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+interface MerchantEditorProps {
+  record: MerchantRecord;
+  saving: boolean;
+  onChange: (record: MerchantRecord) => void;
+  onCancel: () => void;
+  onSave: () => void;
+}
+
+function MerchantEditor({ record, saving, onChange, onCancel, onSave }: MerchantEditorProps) {
+  const update = <K extends keyof MerchantRecord>(field: K, value: MerchantRecord[K]) => {
+    onChange({ ...record, [field]: value });
+  };
+  return (
+    <section className="mc-editor" aria-labelledby="merchant-editor-heading">
+      <div className="mc-editor-heading">
+        <div>
+          <span className="mc-step">VERIFY</span>
+          <h3 id="merchant-editor-heading">人工核实本地记录</h3>
+          <p>保存后写入当前浏览器。空字段只会在这里被明确清除。</p>
+        </div>
+        <code>{record.placeId}</code>
+      </div>
+      <fieldset className="mc-editor-grid" disabled={saving}>
+        <label className="mc-field">
+          <span>商家名称</span>
+          <input value={record.businessName} maxLength={MERCHANT_LIMITS.businessName} onChange={(e) => update('businessName', e.target.value)} />
+        </label>
+        <label className="mc-field">
+          <span>电话</span>
+          <input value={record.phone} maxLength={MERCHANT_LIMITS.phone} onChange={(e) => update('phone', e.target.value)} />
+        </label>
+        <label className="mc-field mc-editor-wide">
+          <span>地址</span>
+          <input value={record.address} maxLength={MERCHANT_LIMITS.address} onChange={(e) => update('address', e.target.value)} />
+        </label>
+        <label className="mc-field mc-editor-wide">
+          <span>官网 URL</span>
+          <input value={record.websiteUrl} maxLength={MERCHANT_LIMITS.websiteUrl} onChange={(e) => update('websiteUrl', e.target.value)} />
+        </label>
+        <label className="mc-field">
+          <span>邮箱（逗号或换行分隔）</span>
+          <textarea value={record.emails.join('\n')} onChange={(e) => update('emails', splitList(e.target.value))} />
+        </label>
+        <label className="mc-field">
+          <span>社交链接（逗号或换行分隔）</span>
+          <textarea value={record.socialLinks.join('\n')} onChange={(e) => update('socialLinks', splitList(e.target.value))} />
+        </label>
+        <label className="mc-field">
+          <span>页面标题</span>
+          <input value={record.pageTitle} maxLength={MERCHANT_LIMITS.pageTitle} onChange={(e) => update('pageTitle', e.target.value)} />
+        </label>
+        <label className="mc-field">
+          <span>页面描述</span>
+          <textarea value={record.pageDescription} maxLength={MERCHANT_LIMITS.pageDescription} onChange={(e) => update('pageDescription', e.target.value)} />
+        </label>
+        <label className="mc-field mc-editor-wide">
+          <span>清洗后的官网正文（最多 50 KiB）</span>
+          <textarea className="mc-editor-text" value={record.cleanedWebsiteText} onChange={(e) => update('cleanedWebsiteText', e.target.value)} />
+        </label>
+        <label className="mc-field mc-editor-wide">
+          <span>人工备注</span>
+          <textarea value={record.notes} maxLength={MERCHANT_LIMITS.notes} onChange={(e) => update('notes', e.target.value)} />
+        </label>
+        <label className="mc-field">
+          <span>核实状态</span>
+          <select value={record.verificationStatus} onChange={(e) => update('verificationStatus', e.target.value as MerchantRecord['verificationStatus'])}>
+            <option value="verified">已核实</option>
+            <option value="unverified">未核实</option>
+          </select>
+        </label>
+      </fieldset>
+      <div className="mc-editor-actions">
+        <button className="mc-button mc-button-secondary" type="button" onClick={onCancel} disabled={saving}>取消</button>
+        <button className="mc-button mc-button-primary" type="button" onClick={onSave} disabled={saving}>
+          {saving ? '正在保存...' : '确认保存到本地名录'}
+        </button>
+      </div>
+    </section>
   );
 }
 
@@ -218,6 +365,7 @@ export default function MerchantCollectionPage() {
   const requestRef = useRef<AbortController | null>(null);
   const extractionControllersRef = useRef(new Map<string, AbortController>());
   const extractionGenerationRef = useRef(0);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
   const [form, setForm] = useState<SearchForm>({
     textQuery: '',
     centerCoordinates: '',
@@ -229,11 +377,178 @@ export default function MerchantCollectionPage() {
   const [selectedPlaceIds, setSelectedPlaceIds] = useState<Set<string>>(new Set());
   const [extractions, setExtractions] = useState<Record<string, MerchantWebsiteExtractionState>>({});
   const [extracting, setExtracting] = useState(false);
+  const [merchantRecords, setMerchantRecords] = useState<MerchantRecord[]>([]);
+  const [directoryLoading, setDirectoryLoading] = useState(true);
+  const [directoryError, setDirectoryError] = useState('');
+  const [directoryMessage, setDirectoryMessage] = useState('');
+  const [editingRecord, setEditingRecord] = useState<MerchantRecord | null>(null);
+  const [editingExpectedUpdatedAt, setEditingExpectedUpdatedAt] = useState<string | null>(null);
+  const [savingRecord, setSavingRecord] = useState(false);
+  const [storageEstimate, setStorageEstimate] = useState<MerchantStorageEstimate>({ usage: null, quota: null, persisted: null });
+  const [importPreview, setImportPreview] = useState<MerchantCsvPreview | null>(null);
+  const [importFileName, setImportFileName] = useState('');
+  const [applyingImport, setApplyingImport] = useState(false);
 
   useEffect(() => () => {
     requestRef.current?.abort();
     extractionControllersRef.current.forEach((controller) => controller.abort());
   }, []);
+
+  useEffect(() => {
+    void refreshDirectory();
+  }, []);
+
+  async function refreshStorageEstimate() {
+    try {
+      setStorageEstimate(await estimateMerchantStorage());
+    } catch {
+      setStorageEstimate({ usage: null, quota: null, persisted: null });
+    }
+  }
+
+  async function refreshDirectory() {
+    setDirectoryLoading(true);
+    try {
+      setMerchantRecords(await listMerchantRecords());
+      setDirectoryError('');
+      await refreshStorageEstimate();
+    } catch (loadError) {
+      setDirectoryError(loadError instanceof Error ? loadError.message : '无法读取浏览器本地名录');
+    } finally {
+      setDirectoryLoading(false);
+    }
+  }
+
+  function openMerchantRecord(merchant: MerchantSearchResult) {
+    const existing = merchantRecords.find((record) => record.placeId === merchant.placeId);
+    if (existing) {
+      const extraction = extractions[merchant.placeId]?.data;
+      setEditingRecord(mergeMerchantRecord(existing, {
+        placeId: merchant.placeId,
+        businessName: merchant.businessName ?? undefined,
+        address: merchant.formattedAddress ?? undefined,
+        phone: extraction?.phones[0] ?? merchant.internationalPhoneNumber ?? merchant.nationalPhoneNumber ?? undefined,
+        emails: extraction?.emails,
+        websiteUrl: safeExternalUrl(extraction?.sourceUrl ?? merchant.websiteUrl) ?? undefined,
+        pageTitle: extraction?.pageTitle ?? undefined,
+        pageDescription: extraction?.pageDescription ?? undefined,
+        cleanedWebsiteText: extraction?.cleanedWebsiteText ?? undefined,
+        verificationStatus: 'verified',
+        verifiedAt: new Date().toISOString(),
+      }, existing.updatedAt));
+      setEditingExpectedUpdatedAt(existing.updatedAt);
+      return;
+    }
+    setEditingRecord(createRecordDraft(merchant, extractions[merchant.placeId]?.data));
+    setEditingExpectedUpdatedAt(null);
+  }
+
+  async function saveEditingRecord() {
+    if (!editingRecord || savingRecord) return;
+    setSavingRecord(true);
+    setDirectoryError('');
+    try {
+      const now = new Date().toISOString();
+      await putMerchantRecordIfCurrent({
+        ...editingRecord,
+        verifiedAt: editingRecord.verificationStatus === 'verified'
+          ? editingRecord.verifiedAt || now
+          : '',
+        updatedAt: now,
+      }, editingExpectedUpdatedAt);
+      setEditingRecord(null);
+      setEditingExpectedUpdatedAt(null);
+      setDirectoryMessage('本地名录已更新。');
+      await refreshDirectory();
+    } catch (saveError) {
+      setDirectoryError(saveError instanceof Error ? saveError.message : '保存本地记录失败');
+    } finally {
+      setSavingRecord(false);
+    }
+  }
+
+  async function removeMerchantRecord(record: MerchantRecord) {
+    if (!window.confirm(`确定从当前浏览器删除“${record.businessName || record.placeId}”吗？`)) return;
+    try {
+      await deleteMerchantRecord(record.placeId);
+      if (editingRecord?.placeId === record.placeId) {
+        setEditingRecord(null);
+        setEditingExpectedUpdatedAt(null);
+      }
+      setDirectoryMessage('本地记录已删除。');
+      await refreshDirectory();
+    } catch (deleteError) {
+      setDirectoryError(deleteError instanceof Error ? deleteError.message : '删除本地记录失败');
+    }
+  }
+
+  async function exportDirectory() {
+    if (merchantRecords.length === 0) return;
+    const csv = exportMerchantCsv(merchantRecords);
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `duko-merchants-${new Date().toISOString().slice(0, 10)}.csv`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    setDirectoryMessage('CSV 已导出。清洗正文可能包含合法的多行单元格。');
+    try {
+      await markMerchantExported();
+    } catch {
+      // The downloaded backup remains valid even if optional export metadata cannot be updated.
+    }
+  }
+
+  async function selectImportFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    setImportPreview(null);
+    setImportFileName('');
+    if (!file) return;
+    if (file.size > MAX_MERCHANT_CSV_BYTES) {
+      setDirectoryError('CSV 文件不能超过 5 MiB。');
+      return;
+    }
+    try {
+      const preview = previewMerchantCsv(await file.text(), merchantRecords);
+      setImportPreview(preview);
+      setImportFileName(file.name);
+      setDirectoryError('');
+    } catch (importError) {
+      setDirectoryError(importError instanceof Error ? importError.message : 'CSV 解析失败');
+    }
+  }
+
+  async function confirmImport() {
+    if (!importPreview || importPreview.errors > 0 || applyingImport) return;
+    const patches = applicableMerchantPatches(importPreview);
+    setApplyingImport(true);
+    try {
+      if (patches.length > 0) await applyMerchantPatches(patches);
+      setDirectoryMessage(`CSV 已应用：新增 ${importPreview.added} 条，更新 ${importPreview.updated} 条。`);
+      setImportPreview(null);
+      setImportFileName('');
+      await refreshDirectory();
+    } catch (importError) {
+      setDirectoryError(importError instanceof Error ? importError.message : 'CSV 导入失败，未应用更改');
+    } finally {
+      setApplyingImport(false);
+    }
+  }
+
+  async function requestPersistentStorage() {
+    try {
+      const persisted = await requestPersistentMerchantStorage();
+      setDirectoryMessage(persisted === true
+        ? '浏览器已允许持久存储。清除站点数据仍会删除名录。'
+        : persisted === false
+          ? '浏览器未授予持久存储；请定期导出 CSV 备份。'
+          : '当前浏览器不支持持久存储请求。');
+      await refreshStorageEstimate();
+    } catch {
+      setDirectoryError('无法请求浏览器持久存储。');
+    }
+  }
 
   function resetExtractions() {
     extractionGenerationRef.current += 1;
@@ -423,7 +738,7 @@ export default function MerchantCollectionPage() {
         <div>
           <div className="mc-eyebrow">MERCHANT DISCOVERY</div>
           <h1>商家信息采集</h1>
-          <p>按类别和矩形范围查找 Google Places 商家候选，核实前不会保存任何结果。</p>
+          <p>查找 Google Places 候选，人工核实后保存到当前浏览器的本地名录。</p>
         </div>
         <button className="mc-button mc-button-secondary" type="button" onClick={() => navigate('/')}>
           返回清单页面
@@ -595,6 +910,7 @@ export default function MerchantCollectionPage() {
                   <th>状态</th>
                   <th>地图</th>
                   <th>官网提取</th>
+                  <th>本地名录</th>
                 </tr>
               </thead>
               <tbody>
@@ -603,10 +919,13 @@ export default function MerchantCollectionPage() {
                     key={merchant.placeId}
                     merchant={merchant}
                     selected={selectedPlaceIds.has(merchant.placeId)}
+                    collected={merchantRecords.some((record) => record.placeId === merchant.placeId)}
                     extraction={extractions[merchant.placeId]}
                     extracting={extracting}
+                    recordSaving={savingRecord}
                     onToggle={() => toggleMerchant(merchant.placeId)}
                     onRetry={() => retryExtraction(merchant)}
+                    onOpenRecord={() => openMerchantRecord(merchant)}
                   />
                 ))}
               </tbody>
@@ -627,6 +946,170 @@ export default function MerchantCollectionPage() {
             了解搜索结果排序因素
           </a>
         </footer>
+      </section>
+
+      {editingRecord && (
+        <MerchantEditor
+          record={editingRecord}
+          saving={savingRecord}
+          onChange={setEditingRecord}
+          onCancel={() => {
+            setEditingRecord(null);
+            setEditingExpectedUpdatedAt(null);
+          }}
+          onSave={() => void saveEditingRecord()}
+        />
+      )}
+
+      <section className="mc-results mc-directory" aria-labelledby="merchant-directory-heading">
+        <div className="mc-results-header">
+          <div>
+            <span className="mc-step">03</span>
+            <div>
+              <h2 id="merchant-directory-heading">当前浏览器本地名录</h2>
+              <p>数据不会同步到服务端、其他设备或其他浏览器 profile，退出账号也不会自动删除。</p>
+            </div>
+          </div>
+          <div className="mc-result-stats" aria-label="本地名录统计">
+            <span><strong>{merchantRecords.length}</strong> 条记录</span>
+          </div>
+        </div>
+
+        <div className="mc-directory-warning">
+          <strong>本地数据提示</strong>
+          <span>共享浏览器的其他使用者可能访问这些数据；清除站点数据、无痕窗口结束或设备故障会删除名录，请定期导出 CSV。</span>
+        </div>
+
+        <div className="mc-directory-toolbar">
+          <div className="mc-storage-summary">
+            <span>站点用量 {formatBytes(storageEstimate.usage)}</span>
+            <span>估算配额 {formatBytes(storageEstimate.quota)}</span>
+            <span>{storageEstimate.persisted === true ? '持久存储已授予' : '持久存储未授予或不可用'}</span>
+          </div>
+          <div className="mc-extract-actions">
+            <button className="mc-button mc-button-secondary" type="button" onClick={() => void requestPersistentStorage()}>
+              请求持久存储
+            </button>
+            <input
+              ref={importInputRef}
+              className="mc-visually-hidden"
+              type="file"
+              accept=".csv,text/csv"
+              onChange={(event) => void selectImportFile(event)}
+            />
+            <button className="mc-button mc-button-secondary" type="button" onClick={() => importInputRef.current?.click()}>
+              导入 CSV
+            </button>
+            <button className="mc-button mc-button-primary mc-extract-button" type="button" onClick={() => void exportDirectory()} disabled={merchantRecords.length === 0}>
+              导出 CSV 备份
+            </button>
+          </div>
+        </div>
+
+        {directoryError && <div className="mc-alert mc-alert-error mc-directory-alert" role="alert">{directoryError}</div>}
+        {directoryMessage && <div className="mc-alert mc-alert-partial mc-directory-alert" role="status">{directoryMessage}</div>}
+
+        {importPreview && (
+          <div className="mc-import-preview">
+            <div className="mc-import-summary">
+              <div>
+                <strong>导入预览：{importFileName}</strong>
+                <span>尚未写入 IndexedDB</span>
+              </div>
+              <div>
+                <span>新增 {importPreview.added}</span>
+                <span>更新 {importPreview.updated}</span>
+                <span>无变化 {importPreview.unchanged}</span>
+                <span className={importPreview.errors > 0 ? 'mc-import-error-count' : ''}>错误 {importPreview.errors}</span>
+              </div>
+            </div>
+            {importPreview.errors > 0 && (
+              <div className="mc-import-errors">
+                {importPreview.rows.filter((row) => row.errors.length > 0).map((row) => (
+                  <div key={row.line}>第 {row.line} 行{row.placeId ? `（${row.placeId}）` : ''}：{row.errors.join('；')}</div>
+                ))}
+              </div>
+            )}
+            <div className="mc-editor-actions">
+              <button className="mc-button mc-button-secondary" type="button" onClick={() => setImportPreview(null)} disabled={applyingImport}>取消导入</button>
+              <button
+                className="mc-button mc-button-primary"
+                type="button"
+                onClick={() => void confirmImport()}
+                disabled={applyingImport || importPreview.errors > 0 || importPreview.added + importPreview.updated === 0}
+              >
+                {applyingImport ? '正在应用...' : '确认应用新增和更新'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {directoryLoading && (
+          <div className="mc-empty-state mc-loading-state" aria-live="polite">
+            <div className="mc-loader" />
+            <div><strong>正在读取本地名录</strong></div>
+          </div>
+        )}
+        {!directoryLoading && merchantRecords.length === 0 && (
+          <div className="mc-empty-state">
+            <div className="mc-empty-index">0</div>
+            <div>
+              <strong>本地名录为空</strong>
+              <p>从搜索结果点击“核实并纳入”，或导入标准 CSV 备份。</p>
+            </div>
+          </div>
+        )}
+        {!directoryLoading && merchantRecords.length > 0 && (
+          <div className="mc-table-shell">
+            <table className="mc-table mc-directory-table">
+              <thead>
+                <tr>
+                  <th>商家</th>
+                  <th>联系方式</th>
+                  <th>官网</th>
+                  <th>核实状态</th>
+                  <th>更新时间</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {merchantRecords.map((record) => {
+                  const websiteUrl = safeExternalUrl(record.websiteUrl);
+                  return (
+                    <tr key={record.placeId}>
+                      <td>
+                        <div className="mc-business-name">{record.businessName || '未命名商家'}</div>
+                        <div>{record.address || '未提供地址'}</div>
+                        <div className="mc-place-id">{record.placeId}</div>
+                      </td>
+                      <td>
+                        <div>{record.phone || '未提供电话'}</div>
+                        <div>{record.emails.length > 0 ? record.emails.join(', ') : '未提供邮箱'}</div>
+                      </td>
+                      <td>{websiteUrl ? <a href={websiteUrl} target="_blank" rel="noreferrer">{websiteLabel(websiteUrl)}</a> : '未提供'}</td>
+                      <td><span className={`mc-extract-state mc-extract-state-${record.verificationStatus === 'verified' ? 'success' : 'pending'}`}>{record.verificationStatus === 'verified' ? '已核实' : '未核实'}</span></td>
+                      <td>{new Date(record.updatedAt).toLocaleString()}</td>
+                      <td className="mc-record-actions">
+                        <button
+                          className="mc-inline-button"
+                          type="button"
+                          disabled={savingRecord}
+                          onClick={() => {
+                            setEditingRecord({ ...record, emails: [...record.emails], socialLinks: [...record.socialLinks] });
+                            setEditingExpectedUpdatedAt(record.updatedAt);
+                          }}
+                        >
+                          编辑
+                        </button>
+                        <button className="mc-inline-button mc-delete-link" type="button" disabled={savingRecord} onClick={() => void removeMerchantRecord(record)}>删除</button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
     </main>
   );

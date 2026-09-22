@@ -18,6 +18,7 @@
 .mc-header,
 .mc-search-panel,
 .mc-results,
+.mc-editor,
 .mc-page > .mc-alert {
   width: min(1440px, 100%);
   margin-left: auto;
@@ -181,7 +182,9 @@
   font-weight: 700;
 }
 
-.mc-field input {
+.mc-field input,
+.mc-field textarea,
+.mc-field select {
   width: 100%;
   min-width: 0;
   box-sizing: border-box;
@@ -194,7 +197,14 @@
   font-size: 13px;
 }
 
-.mc-field input:focus {
+.mc-field textarea {
+  min-height: 78px;
+  resize: vertical;
+}
+
+.mc-field input:focus,
+.mc-field textarea:focus,
+.mc-field select:focus {
   outline: 2px solid rgba(39, 109, 150, 0.2);
   border-color: var(--mc-blue);
 }
@@ -579,6 +589,182 @@
   font-size: 11px;
 }
 
+.mc-directory-cell {
+  min-width: 120px;
+}
+
+.mc-directory-badge {
+  display: block;
+  width: fit-content;
+  margin-bottom: 5px;
+  border-radius: 999px;
+  padding: 3px 7px;
+  background: #e6f3eb;
+  color: #287044;
+  font-size: 10px;
+}
+
+.mc-editor {
+  box-sizing: border-box;
+  margin-top: 24px;
+  border: 2px solid var(--mc-blue);
+  padding: 20px;
+  background: #f7fbfd;
+  box-shadow: 0 14px 34px rgba(25, 72, 96, 0.12);
+}
+
+.mc-editor-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 18px;
+  border-bottom: 1px solid #bfd1da;
+  padding-bottom: 14px;
+}
+
+.mc-editor-heading h3 {
+  display: inline;
+  margin: 0 0 0 10px;
+  font-size: 16px;
+}
+
+.mc-editor-heading p {
+  margin: 6px 0 0;
+  color: var(--mc-muted);
+  font-size: 11px;
+}
+
+.mc-editor-heading code {
+  color: var(--mc-muted);
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+
+.mc-editor-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  min-width: 0;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+.mc-editor-wide {
+  grid-column: 1 / -1;
+}
+
+.mc-editor-text {
+  min-height: 160px !important;
+}
+
+.mc-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.mc-editor-actions .mc-button-primary {
+  width: auto;
+}
+
+.mc-directory-warning {
+  display: flex;
+  gap: 12px;
+  padding: 12px 20px;
+  border-bottom: 1px solid #e8c577;
+  background: #fff8df;
+  color: #765612;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.mc-directory-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--mc-line);
+  background: #f8faf9;
+}
+
+.mc-storage-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px 14px;
+  color: var(--mc-muted);
+  font-size: 10px;
+}
+
+.mc-directory-alert {
+  margin: 12px 20px 0;
+}
+
+.mc-import-preview {
+  margin: 14px 20px;
+  border: 1px solid #9eb6c3;
+  padding: 14px;
+  background: #f3f8fa;
+  font-size: 11px;
+}
+
+.mc-import-summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.mc-import-summary > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+}
+
+.mc-import-summary > div:first-child {
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mc-import-error-count,
+.mc-import-errors {
+  color: #913c36;
+}
+
+.mc-import-errors {
+  max-height: 140px;
+  margin-top: 12px;
+  overflow: auto;
+  border-top: 1px solid #dfaaa6;
+  padding-top: 8px;
+  line-height: 1.6;
+}
+
+.mc-directory-table {
+  min-width: 900px;
+}
+
+.mc-record-actions {
+  white-space: nowrap;
+}
+
+.mc-delete-link {
+  color: #9f312a;
+}
+
+.mc-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .mc-google-attribution {
   color: #5e5e5e;
   font-size: 12px;
@@ -649,6 +835,30 @@
 
   .mc-extraction-grid {
     grid-template-columns: 1fr;
+  }
+
+  .mc-editor-heading,
+  .mc-directory-toolbar,
+  .mc-import-summary,
+  .mc-directory-warning {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .mc-editor-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .mc-editor-wide {
+    grid-column: auto;
+  }
+
+  .mc-editor-actions {
+    flex-direction: column-reverse;
+  }
+
+  .mc-editor-actions .mc-button {
+    width: 100%;
   }
 
   .mc-table-shell {

@@ -41,3 +41,40 @@ export interface MerchantWebsiteExtractionState {
   data?: MerchantWebsiteExtraction;
   error?: string;
 }
+
+export type MerchantVerificationStatus = 'unverified' | 'verified';
+
+export interface MerchantRecord {
+  placeId: string;
+  businessName: string;
+  address: string;
+  phone: string;
+  emails: string[];
+  websiteUrl: string;
+  socialLinks: string[];
+  pageTitle: string;
+  pageDescription: string;
+  cleanedWebsiteText: string;
+  notes: string;
+  verificationStatus: MerchantVerificationStatus;
+  verifiedAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MerchantRecordPatch {
+  placeId: string;
+  businessName?: string;
+  address?: string;
+  phone?: string;
+  emails?: string[];
+  websiteUrl?: string;
+  socialLinks?: string[];
+  pageTitle?: string;
+  pageDescription?: string;
+  cleanedWebsiteText?: string;
+  notes?: string;
+  verificationStatus?: MerchantVerificationStatus;
+  verifiedAt?: string;
+  createdAt?: string;
+}

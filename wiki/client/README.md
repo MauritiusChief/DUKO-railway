@@ -14,7 +14,7 @@
 | `/warehouse-scan` | `WarehouseScanPage` | admin / manager / warehouse | 仓库条形码点数录入（见 [仓库扫码](../server/warehouse-scan.md)） |
 | `/warehouse-manage` | `WarehouseManagePage` | admin / manager | 扫码记录/映射维护、汇总与 JSON 导入 |
 | `/inventory` | `InventoryDashboardPage` | 管理员 / 经理 | 库存下载/上传、趋势查验和分类 |
-| `/merchant-collection` | `MerchantCollectionPage` | 管理员 / 经理 | Google Places 商家搜索和临时候选展示 |
+| `/merchant-collection` | `MerchantCollectionPage` | 管理员 / 经理 | Google Places 搜索、官网提取、浏览器本地名录和 CSV 备份 |
 | `/debug` | `DebugPage` | 管理员 | 直接测试 SKU 搜索工具 |
 | `/trace` | `TracePage` | 管理员 | 查看最近 30 天 LLM trace |
 | `/all-history` | `AllHistoryPage` | 管理员 | 浏览全部用户解析历史 |
@@ -27,9 +27,9 @@
 - `client/src/stores/tableParseStore.ts`：输入、颜色、解析 items、产品、图片模式和解析事件桥接。
 - `client/src/stores/layoutStore.ts`：单个当前布局及全部墙/块编辑算法。
 - `client/src/stores/quotationStore.ts`：任务列表、选中详情、两路 SSE、确认和草稿。
-- 页面局部 state：库存 job UI、历史详情选择、图片临时数据、布局物料输出和商家临时搜索结果等。
+- 页面局部 state：库存 job UI、历史详情选择、图片临时数据、布局物料输出和商家临时搜索/官网提取草稿等。
 
-浏览器持久化不是统一数据库：解析 items、当前布局、报价草稿和 access token 使用不同 `localStorage` key；用户历史、笔记、报价任务和成功的库存识别结果则由服务端 SQLite 保存。清除浏览器数据不会删除服务端记录，服务端重启也不会删除 SQLite，但会丢失运行中的库存 job、SSE 订阅等内存状态。
+浏览器持久化不是统一数据库：解析 items、当前布局、报价草稿和 access token 使用不同 `localStorage` key；人工确认的商家名录使用独立 IndexedDB `duko-merchant-collection`；用户历史、笔记、报价任务和成功的库存识别结果则由服务端 SQLite 保存。商家名录不随账号同步或登出清除，需由用户导出 CSV 备份。清除浏览器数据不会删除服务端记录，但会删除本地商家名录。
 
 ## 通信约定
 
