@@ -362,6 +362,7 @@ function ExtractionDetails({ extraction }: { extraction: MerchantWebsiteExtracti
 
 export default function MerchantCollectionPage() {
   const navigate = useNavigate();
+  // 搜索和官网抓取分开管理取消域，generation 用于屏蔽旧批次的迟到响应。
   const requestRef = useRef<AbortController | null>(null);
   const extractionControllersRef = useRef(new Map<string, AbortController>());
   const extractionGenerationRef = useRef(0);
@@ -377,6 +378,7 @@ export default function MerchantCollectionPage() {
   const [selectedPlaceIds, setSelectedPlaceIds] = useState<Set<string>>(new Set());
   const [extractions, setExtractions] = useState<Record<string, MerchantWebsiteExtractionState>>({});
   const [extracting, setExtracting] = useState(false);
+  // 本地名录与临时搜索结果分层；只有前者来自 IndexedDB。
   const [merchantRecords, setMerchantRecords] = useState<MerchantRecord[]>([]);
   const [directoryLoading, setDirectoryLoading] = useState(true);
   const [directoryError, setDirectoryError] = useState('');
@@ -422,6 +424,7 @@ export default function MerchantCollectionPage() {
   function openMerchantRecord(merchant: MerchantSearchResult) {
     const existing = merchantRecords.find((record) => record.placeId === merchant.placeId);
     if (existing) {
+      // 用户主动“核实并合并”后才把候选非空字段带入编辑器，不自动覆盖本地数据。
       const extraction = extractions[merchant.placeId]?.data;
       setEditingRecord(mergeMerchantRecord(existing, {
         placeId: merchant.placeId,
@@ -449,6 +452,7 @@ export default function MerchantCollectionPage() {
     setDirectoryError('');
     try {
       const now = new Date().toISOString();
+      // 保存时以打开编辑器时的 updatedAt 做 CAS，避免跨标签页静默覆盖。
       await putMerchantRecordIfCurrent({
         ...editingRecord,
         verifiedAt: editingRecord.verificationStatus === 'verified'
@@ -510,6 +514,7 @@ export default function MerchantCollectionPage() {
       return;
     }
     try {
+      // 解析阶段只生成预览 patch，不打开写事务。
       const preview = previewMerchantCsv(await file.text(), merchantRecords);
       setImportPreview(preview);
       setImportFileName(file.name);
@@ -524,6 +529,7 @@ export default function MerchantCollectionPage() {
     const patches = applicableMerchantPatches(importPreview);
     setApplyingImport(true);
     try {
+      // applyMerchantPatches 在单个 transaction 中重新读取并合并当前记录。
       if (patches.length > 0) await applyMerchantPatches(patches);
       setDirectoryMessage(`CSV 已应用：新增 ${importPreview.added} 条，更新 ${importPreview.updated} 条。`);
       setImportPreview(null);
@@ -696,6 +702,7 @@ export default function MerchantCollectionPage() {
       return next;
     });
 
+    // 共享 cursor 的三个 worker 构成小型并发池，避免一次搜索同时打满服务端。
     let cursor = 0;
     const worker = async () => {
       while (cursor < merchants.length && extractionGenerationRef.current === generation) {

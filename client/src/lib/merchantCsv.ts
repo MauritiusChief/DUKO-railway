@@ -6,6 +6,7 @@ import {
 } from './merchantDb';
 import type { MerchantRecord, MerchantRecordPatch } from '../types/merchant';
 
+/** CSV 是本地名录的备份边界；不接受无限文件或无限行。 */
 export const MAX_MERCHANT_CSV_BYTES = 5 * 1024 * 1024;
 export const MAX_MERCHANT_CSV_ROWS = 5_000;
 
@@ -53,6 +54,7 @@ function recordToCsvRow(record: MerchantRecord): MerchantCsvRow {
     updatedAt: record.updatedAt,
   };
   for (const key of MERCHANT_CSV_HEADERS) {
+    // Papa 会为公式值添加一个 '；先双写真实前导 '，导入时才能无损区分。
     if (row[key].startsWith("'")) row[key] = `'${row[key]}`;
   }
   return row;
@@ -65,6 +67,7 @@ export function exportMerchantCsv(records: MerchantRecord[]): string {
     quotes: true,
     escapeFormulae: true,
   });
+  // BOM 帮助常见电子表格软件按 UTF-8 打开中文字段。
   return `\uFEFF${csv}`;
 }
 
@@ -127,6 +130,7 @@ export function previewMerchantCsv(csv: string, existingRecords: MerchantRecord[
   if (!parsed.meta.fields?.includes('placeId')) throw new Error('CSV 缺少必需列 placeId');
   if (parsed.data.length > MAX_MERCHANT_CSV_ROWS) throw new Error(`CSV 最多允许 ${MAX_MERCHANT_CSV_ROWS} 行`);
 
+  // Papa 的 row 是逻辑记录索引；另行扫描引号状态，才能在多行单元格后报告物理文件行号。
   const recordStartLines: number[] = [1];
   let physicalLine = 1;
   let inQuotes = false;
@@ -177,6 +181,7 @@ export function previewMerchantCsv(csv: string, existingRecords: MerchantRecord[
 
     const current = existing.get(patch.placeId);
     if (!current) return { line, placeId, action: 'new', errors: [], patch };
+    // 固定 updatedAt，让预览只反映字段变化，不制造虚假的“更新”。
     const merged = mergeMerchantRecord(current, patch, current.updatedAt);
     return {
       line,
@@ -197,6 +202,7 @@ export function previewMerchantCsv(csv: string, existingRecords: MerchantRecord[
 }
 
 export function applicableMerchantPatches(preview: MerchantCsvPreview): MerchantRecordPatch[] {
+  // 无变化行不进入最终事务，错误行则会在 UI 中阻止整个导入。
   return preview.rows
     .filter((row) => row.action === 'new' || row.action === 'update')
     .flatMap((row) => row.patch ? [row.patch] : []);

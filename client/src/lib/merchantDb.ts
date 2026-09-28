@@ -1,5 +1,6 @@
 import type { MerchantRecord, MerchantRecordPatch } from '../types/merchant';
 
+/** 浏览器本地名录的数据边界；这里不保存 Google 原始响应或未确认草稿。 */
 const DATABASE_NAME = 'duko-merchant-collection';
 const DATABASE_VERSION = 1;
 const MERCHANT_STORE = 'merchants';
@@ -8,6 +9,7 @@ const META_STORE = 'meta';
 const MAX_TEXT_BYTES = 50 * 1024;
 const textEncoder = new TextEncoder();
 
+/** 编辑、CSV 导入和 IndexedDB 写入共用的最终字段限制。 */
 export const MERCHANT_LIMITS = {
   placeId: 256,
   businessName: 500,
@@ -59,6 +61,7 @@ function openMerchantDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DATABASE_NAME, DATABASE_VERSION);
     request.onupgradeneeded = () => {
+      // 迁移只能增量创建缺失 store；升级失败时由 IndexedDB 自动回滚版本事务。
       const database = request.result;
       if (!database.objectStoreNames.contains(MERCHANT_STORE)) {
         database.createObjectStore(MERCHANT_STORE, { keyPath: 'placeId' });
@@ -79,6 +82,7 @@ function merchantDatabaseExists(): Promise<boolean> {
     let creationAborted = false;
     const request = indexedDB.open(DATABASE_NAME);
     request.onupgradeneeded = () => {
+      // open() 会隐式创建空数据库；立即 abort 可在只读页面保持“首次写入才建库”。
       creationAborted = true;
       request.transaction?.abort();
     };
@@ -149,6 +153,7 @@ function cleanText(value: unknown): string {
   return normalized;
 }
 
+/** 在任何持久化或预览合并前规范化外部 patch，防止 CSV 绕过编辑器限制。 */
 export function normalizeMerchantPatch(input: MerchantRecordPatch): MerchantRecordPatch {
   const patch: MerchantRecordPatch = {
     placeId: requiredString(input.placeId, 'Place ID', MERCHANT_LIMITS.placeId),
@@ -177,6 +182,7 @@ export function normalizeMerchantPatch(input: MerchantRecordPatch): MerchantReco
   return patch;
 }
 
+/** 校验完整记录；与 patch 不同，空值在显式编辑保存时会被保留。 */
 export function normalizeMerchantRecord(input: MerchantRecord): MerchantRecord {
   const patch = normalizeMerchantPatch(input);
   const updatedAt = dateString(input.updatedAt, '更新时间', false);
@@ -199,6 +205,10 @@ export function normalizeMerchantRecord(input: MerchantRecord): MerchantRecord {
   };
 }
 
+/**
+ * 按 Place ID 合并再次确认或导入数据。传入的空字符串和空数组不会清除旧值；
+ * 显式清空只能通过完整记录编辑和 put 路径完成。
+ */
 export function mergeMerchantRecord(
   existing: MerchantRecord | undefined,
   input: MerchantRecordPatch,
@@ -237,11 +247,13 @@ export function mergeMerchantRecord(
 }
 
 export function merchantRecordContentEqual(left: MerchantRecord, right: MerchantRecord): boolean {
+  // 预览只比较业务内容，避免一次模拟合并生成的新 updatedAt 被误判为更新。
   const withoutUpdatedAt = ({ updatedAt: _ignored, ...record }: MerchantRecord) => record;
   return JSON.stringify(withoutUpdatedAt(left)) === JSON.stringify(withoutUpdatedAt(right));
 }
 
 export async function listMerchantRecords(): Promise<MerchantRecord[]> {
+  // 先无副作用探测，避免用户仅打开空页面就留下 IndexedDB。
   if (!await merchantDatabaseExists()) return [];
   const database = await openMerchantDatabase();
   try {
@@ -279,6 +291,7 @@ export async function putMerchantRecordIfCurrent(
     try {
       const store = transaction.objectStore(MERCHANT_STORE);
       const current = await requestResult(store.get(normalized.placeId)) as MerchantRecord | undefined;
+      // updatedAt 充当轻量 CAS，阻止其他标签页的新数据被旧编辑草稿覆盖。
       const unchanged = expectedUpdatedAt === null ? current === undefined : current?.updatedAt === expectedUpdatedAt;
       if (!unchanged) throw new Error('该记录已在其他页面更新，请重新载入后再编辑');
       store.put(normalized);
@@ -307,6 +320,7 @@ export async function deleteMerchantRecord(placeId: string): Promise<void> {
 }
 
 export async function applyMerchantPatches(patches: MerchantRecordPatch[]): Promise<void> {
+  // 在 transaction 外先校验全部输入，避免明显错误启动写事务。
   const normalizedPatches = patches.map(normalizeMerchantPatch);
   const database = await openMerchantDatabase();
   try {
@@ -322,6 +336,7 @@ export async function applyMerchantPatches(patches: MerchantRecordPatch[]): Prom
       transaction.objectStore(META_STORE).put(meta);
       await completion;
     } catch (error) {
+      // 显式 abort 保证循环中后段失败时，前面已排队的 put 也不会部分提交。
       try { transaction.abort(); } catch {}
       await completion.catch(() => undefined);
       throw error;
@@ -343,6 +358,7 @@ export async function markMerchantExported(): Promise<void> {
 }
 
 export async function estimateMerchantStorage(): Promise<MerchantStorageEstimate> {
+  // StorageManager 返回整个 origin 的估算值，不是本数据库的精确占用。
   if (!navigator.storage) return { usage: null, quota: null, persisted: null };
   const [estimate, persisted] = await Promise.all([
     navigator.storage.estimate(),

@@ -1,3 +1,9 @@
+/**
+ * 商家官网首页提取。
+ *
+ * 安全链路固定为：URL 校验 -> DNS 全量解析和公网地址校验 -> 固定 IP 请求 ->
+ * 每跳重定向重新校验 -> 限长解压 -> 可终止 worker 解析。原始 HTML 不落盘。
+ */
 import dns from 'node:dns/promises';
 import http, { type IncomingHttpHeaders } from 'node:http';
 import https from 'node:https';
@@ -7,7 +13,9 @@ import { Worker } from 'node:worker_threads';
 import { load } from 'cheerio';
 import type { MerchantWebsiteExtractionInput } from '../validation/merchants.js';
 
+/** 出站请求使用固定标识，不伪装普通浏览器。 */
 export const WEBSITE_USER_AGENT = 'DUKO-Merchant-Contact-Extractor/1.0';
+/** 重定向次数、压缩体积、解压体积和返回正文分别独立设限。 */
 export const MAX_REDIRECTS = 3;
 export const MAX_COMPRESSED_BYTES = 2 * 1024 * 1024;
 export const MAX_DECOMPRESSED_BYTES = 5 * 1024 * 1024;
@@ -15,6 +23,7 @@ export const MAX_CLEANED_TEXT_BYTES = 50 * 1024;
 const DEFAULT_TIMEOUT_MS = 10_000;
 const MAX_CONTACT_VALUES = 50;
 
+/** 路由只暴露稳定错误码，不把 DNS、TLS 或目标站响应正文返回浏览器。 */
 export type WebsiteExtractionErrorCode =
   | 'invalid_url'
   | 'blocked_address'
@@ -60,6 +69,7 @@ interface RawWebsiteResponse {
   body: Buffer;
 }
 
+/** 测试注入点；生产默认使用真实 DNS、固定 IP transport 和解析 worker。 */
 interface WebsiteExtractorDependencies {
   resolveHostname?: (hostname: string, signal?: AbortSignal) => Promise<ResolvedAddress[]>;
   requestPage?: (
@@ -78,6 +88,7 @@ interface WebsiteExtractorDependencies {
   signal?: AbortSignal;
 }
 
+/** 将 IPv4 转为无符号 32 位值，供 CIDR 判定使用。 */
 function parseIpv4(address: string): number | null {
   if (net.isIP(address) !== 4) return null;
   return address.split('.').reduce((value, octet) => (value << 8) + Number(octet), 0) >>> 0;
@@ -88,6 +99,7 @@ function ipv4InCidr(value: number, base: number, prefix: number): boolean {
   return (value & mask) === (base & mask);
 }
 
+/** 只允许公网单播 IPv4；私网、回环、CGNAT、文档和保留网段全部拒绝。 */
 function isPublicIpv4(address: string): boolean {
   const value = parseIpv4(address);
   if (value === null) return false;
@@ -110,6 +122,7 @@ function isPublicIpv4(address: string): boolean {
   return !blocked.some(([base, prefix]) => ipv4InCidr(value, parseIpv4(base)!, prefix));
 }
 
+/** 展开压缩 IPv6 和 IPv4 尾部表示，统一转换为 128 位整数。 */
 function parseIpv6(address: string): bigint | null {
   if (net.isIP(address) !== 6 || address.includes('%')) return null;
   let normalized = address.toLowerCase();
@@ -143,6 +156,7 @@ function ipv6Base(address: string): bigint {
   return value;
 }
 
+/** 只允许 2000::/3 中排除特殊用途网段后的公网 IPv6。 */
 function isPublicIpv6(address: string): boolean {
   const value = parseIpv6(address);
   if (value === null) return false;
@@ -158,6 +172,7 @@ function isPublicIpv6(address: string): boolean {
   return !blocked.some(([base, prefix]) => ipv6InCidr(value, ipv6Base(base), prefix));
 }
 
+/** SSRF 地址边界：未知格式也按非公网处理。 */
 export function isPublicIpAddress(address: string): boolean {
   const family = net.isIP(address);
   if (family === 4) return isPublicIpv4(address);
@@ -165,6 +180,7 @@ export function isPublicIpAddress(address: string): boolean {
   return false;
 }
 
+/** 入口和每次重定向共用同一 URL 校验，禁止非 HTTP(S) 和 URL 凭据。 */
 function parseWebsiteUrl(value: string): URL {
   let url: URL;
   try {
@@ -179,6 +195,11 @@ function parseWebsiteUrl(value: string): URL {
   return url;
 }
 
+/**
+ * 使用 Node c-ares Resolver 直接查询 A/AAAA，并支持在总 deadline 到达时 cancel。
+ * 注意：这不是 Windows getaddrinfo/dns.lookup；c-ares 若指向不可用 DNS
+ * （例如无监听服务的 127.0.0.1:53），两类查询都会失败并映射为 dns_failed。
+ */
 async function defaultResolveHostname(hostname: string, signal?: AbortSignal): Promise<ResolvedAddress[]> {
   const literal = hostname.startsWith('[') && hostname.endsWith(']')
     ? hostname.slice(1, -1)
@@ -190,6 +211,7 @@ async function defaultResolveHostname(hostname: string, signal?: AbortSignal): P
   if (signal?.aborted) throw new WebsiteExtractionError('timeout');
   signal?.addEventListener('abort', cancel, { once: true });
   try {
+    // 单一地址族不存在不应阻止另一地址族成功，因此等待两类查询分别结算。
     const [ipv4, ipv6] = await Promise.allSettled([
       resolver.resolve4(literal),
       resolver.resolve6(literal),
@@ -202,6 +224,7 @@ async function defaultResolveHostname(hostname: string, signal?: AbortSignal): P
     if (ipv6.status === 'fulfilled') {
       addresses.push(...ipv6.value.map((address) => ({ address, family: 6 as const })));
     }
+    // 当前 502/dns_failed 的路径就在这里：A 和 AAAA 都未得到任何地址。
     if (addresses.length === 0) throw new WebsiteExtractionError('dns_failed');
     return addresses;
   } catch (error) {
@@ -212,6 +235,10 @@ async function defaultResolveHostname(hostname: string, signal?: AbortSignal): P
   }
 }
 
+/**
+ * 验证该主机返回的全部地址，只要其中任一地址非公网就拒绝整次请求。
+ * 返回的第一个已验证地址随后会固定到 TCP/TLS 连接，避免再次 DNS 查询。
+ */
 async function resolvePublicTarget(
   url: URL,
   resolver: (hostname: string, signal?: AbortSignal) => Promise<ResolvedAddress[]>,
@@ -231,6 +258,7 @@ async function resolvePublicTarget(
   return addresses[0];
 }
 
+/** 让 DNS、重定向、下载、解压和解析共享同一个绝对截止时间。 */
 function withDeadline<T>(promise: Promise<T>, deadlineMs: number, signal?: AbortSignal): Promise<T> {
   return new Promise((resolve, reject) => {
     if (signal?.aborted || Date.now() >= deadlineMs) {
@@ -256,6 +284,7 @@ function withDeadline<T>(promise: Promise<T>, deadlineMs: number, signal?: Abort
   });
 }
 
+/** 流式统计压缩响应字节，超限时同时销毁响应和底层请求。 */
 function readResponseBody(response: http.IncomingMessage, request: http.ClientRequest): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
@@ -285,6 +314,10 @@ function readResponseBody(response: http.IncomingMessage, request: http.ClientRe
   });
 }
 
+/**
+ * 连接 DNS 阶段选定的 IP，但保留原始 Host 和 HTTPS SNI/证书校验。
+ * 这样既关闭 DNS 检查后的 rebinding 窗口，也不会降低 TLS 身份验证。
+ */
 export async function requestPinnedPage(
   url: URL,
   address: ResolvedAddress,
@@ -300,12 +333,12 @@ export async function requestPinnedPage(
     const transport = url.protocol === 'https:' ? https : http;
     const request = transport.request({
       protocol: url.protocol,
-      hostname: address.address,
+      hostname: address.address, // TCP 只连接已验证 IP，不让 transport 再解析域名。
       family: address.family,
       port: url.port || undefined,
       path: `${url.pathname}${url.search}`,
       method: 'GET',
-      servername: url.protocol === 'https:' ? url.hostname : undefined,
+      servername: url.protocol === 'https:' ? url.hostname : undefined, // TLS 仍校验原始域名。
       rejectUnauthorized: true,
       headers: {
         Host: url.host,
@@ -347,6 +380,7 @@ function headerValue(value: string | string[] | undefined): string {
   return Array.isArray(value) ? value[0] ?? '' : value ?? '';
 }
 
+/** 支持常见 HTTP 压缩，并在解压流中限制输出，防止压缩炸弹。 */
 async function decodeBody(body: Buffer, encodingHeader: string, signal?: AbortSignal): Promise<Buffer> {
   const encoding = encodingHeader.trim().toLowerCase();
   if (!encoding || encoding === 'identity') {
@@ -394,6 +428,7 @@ async function decodeBody(body: Buffer, encodingHeader: string, signal?: AbortSi
   });
 }
 
+/** 按 Content-Type charset 解码；未知 charset 保守回退 UTF-8。 */
 function decodeHtml(buffer: Buffer, contentType: string): string {
   const charset = /charset\s*=\s*["']?([^;\s"']+)/i.exec(contentType)?.[1] ?? 'utf-8';
   try {
@@ -407,6 +442,7 @@ function cleanText(value: string): string {
   return value.replace(/\s+/g, ' ').trim();
 }
 
+/** 按 UTF-8 字节数二分截断，避免按 JS 字符长度判断后超过持久化上限。 */
 function truncateUtf8(value: string, maxBytes: number): { value: string; truncated: boolean } {
   if (Buffer.byteLength(value, 'utf8') <= maxBytes) return { value, truncated: false };
   let low = 0;
@@ -448,6 +484,10 @@ function safeCanonicalUrl(value: string | undefined, sourceUrl: string): string 
   }
 }
 
+/**
+ * 纯静态 HTML 提取：先删除脚本和隐藏节点，再读取链接及可见文本。
+ * 不执行 JavaScript，也不跟随页面内 Contact/About 链接。
+ */
 export function extractContactsFromHtml(html: string, sourceUrl: string): Omit<WebsiteExtractionResult, 'placeId'> {
   const $ = load(html);
   const pageTitle = cleanText($('title').first().text()).slice(0, 500) || null;
@@ -484,11 +524,16 @@ export function extractContactsFromHtml(html: string, sourceUrl: string): Omit<W
   };
 }
 
+/** 开发态加载 .ts worker，编译后的生产态加载同目录 .js worker。 */
 function parserWorkerUrl(): URL {
   const isTs = import.meta.url.endsWith('.ts');
   return new URL(isTs ? './website-contact-parser-worker.ts' : './website-contact-parser-worker.js', import.meta.url);
 }
 
+/**
+ * Cheerio 构建 DOM 是同步 CPU/内存工作，将其隔离到 worker 后可在 deadline 时 terminate。
+ * worker 启动、消息或非零退出失败统一映射为 network_error，不泄露 HTML 或内部异常。
+ */
 export function extractContactsInWorker(
   html: string,
   sourceUrl: string,
@@ -530,6 +575,7 @@ export function extractContactsInWorker(
   });
 }
 
+/** 单首页提取编排器；一次调用内的所有步骤共享 timeoutMs 总预算。 */
 export async function extractWebsiteContacts(
   input: MerchantWebsiteExtractionInput,
   overrides: WebsiteExtractorDependencies = {},
@@ -546,6 +592,7 @@ export async function extractWebsiteContacts(
   overrides.signal?.addEventListener('abort', abortOperation, { once: true });
   try {
     for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount += 1) {
+      // 每一跳都重新解析并验证全部 IP，不能沿用上一主机的安全结论。
       const address = await withDeadline(
         resolvePublicTarget(currentUrl, resolveHostname, operationController.signal),
         deadlineMs,
@@ -566,6 +613,7 @@ export async function extractWebsiteContacts(
         throw new WebsiteExtractionError('upstream_http_error', response.statusCode);
       }
 
+      // 状态码和 Content-Type 在解压、字符解码、Cheerio 解析之前拒绝。
       const contentType = headerValue(response.headers['content-type']);
       const mediaType = contentType.split(';')[0].trim().toLowerCase();
       if (mediaType !== 'text/html' && mediaType !== 'application/xhtml+xml') {

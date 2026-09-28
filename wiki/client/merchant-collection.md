@@ -57,6 +57,26 @@
 - 空名录只浏览时不会留下数据库；首次保存记录或确认 CSV 导入时才创建。
 - 记录正文每次写入都重新检查 50 KiB UTF-8 上限；URL、字段长度和数组项数量也在写入层统一校验。
 
+当前版本升级事务只增量创建缺失的 object store，不会清空已有记录。未来增加字段或索引时必须提高 `DATABASE_VERSION` 并在 `onupgradeneeded` 中迁移；不允许通过删除数据库代替迁移。
+
+持久化字段和首版上限：
+
+| 字段 | 格式/上限 |
+| --- | --- |
+| `placeId` | 必填，最多 256 字符，唯一键 |
+| `businessName` | 最多 500 字符 |
+| `address` | 最多 1000 字符 |
+| `phone` | 最多 128 字符 |
+| `emails` | 最多 50 项，每项最多 320 字符 |
+| `websiteUrl` | 最多 2048 字符，只允许 HTTP(S) |
+| `socialLinks` | 最多 50 项，每项最多 2048 字符且只允许 HTTP(S) |
+| `pageTitle` | 最多 500 字符 |
+| `pageDescription` | 最多 2000 字符 |
+| `cleanedWebsiteText` | 最多 50 KiB UTF-8 |
+| `notes` | 最多 10000 字符 |
+| `verificationStatus` | `verified` 或 `unverified` |
+| `verifiedAt`, `createdAt`, `updatedAt` | ISO 日期时间；`verifiedAt` 可为空 |
+
 临时候选点击“核实并纳入”后先进入编辑表单，用户确认才写入。命中已有 Place ID 时显示“已收录”，用户主动点击“核实并合并”后，候选和官网草稿的非空字段进入编辑表单，空字段不清除原记录。本地表格的“编辑”是显式编辑路径，允许用户清空字段。保存使用 `updatedAt` 比较，其他标签页已修改同一记录时拒绝旧草稿覆盖。
 
 页面显示 `navigator.storage.estimate()` 返回的整个站点估算用量和配额，并允许用户主动调用 `navigator.storage.persist()`；浏览器拒绝持久存储不会阻止功能。IndexedDB 不会因登出自动删除，共享浏览器的其他使用者可能看到数据；清除站点数据、无痕窗口结束、profile 损坏或设备故障仍会删除名录。
@@ -64,6 +84,12 @@
 ## CSV 备份
 
 CSV 使用 Papa Parse 解析和生成，不使用手工逗号拆分：
+
+固定表头顺序为：
+
+```text
+placeId,businessName,address,phone,emails,websiteUrl,socialLinks,pageTitle,pageDescription,cleanedWebsiteText,notes,verificationStatus,verifiedAt,createdAt,updatedAt
+```
 
 - 导出范围只有 IndexedDB 本地名录，使用固定表头、UTF-8 BOM、标准双引号和 CRLF；`emails`、`socialLinks` 用 JSON 字符串数组编码。
 - 以 `=`, `+`, `-`, `@`、制表符或回车开头的单元格由 Papa Parse 添加公式防护；原始前导单引号会额外转义，重新导入自己的备份时可还原。

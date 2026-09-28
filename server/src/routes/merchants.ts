@@ -84,6 +84,7 @@ export function createMerchantsRouter(search: MerchantSearchService = searchGoog
 
 export const merchantsRouter = createMerchantsRouter();
 
+/** 将稳定领域错误映射为 HTTP；502 表示 DNS/目标站/transport 阶段失败。 */
 function statusForWebsiteExtractionError(error: WebsiteExtractionError): number {
   switch (error.code) {
     case 'invalid_url':
@@ -104,6 +105,7 @@ function statusForWebsiteExtractionError(error: WebsiteExtractionError): number 
   }
 }
 
+/** 面向用户的消息不包含目标响应正文、解析器异常或网络内部细节。 */
 function messageForWebsiteExtractionError(error: WebsiteExtractionError): string {
   switch (error.code) {
     case 'invalid_url':
@@ -126,12 +128,14 @@ export function createMerchantWebsiteRouter(
   extract: WebsiteExtractionService = extractWebsiteContacts,
 ): Router {
   const router = Router();
+  // 顺序有安全含义：角色和速率限制先于 8 KiB body parser，抓取槽位在 body 解析后获取。
   router.use(requireAnyRole('admin', 'manager'));
   router.use(merchantWebsiteLimiter);
   router.use(express.json({ limit: '8kb' }));
   router.use(merchantWebsiteConcurrencyLimiter);
 
   router.post('/extract', validate(merchantWebsiteExtractionSchema), async (req, res) => {
+    // 浏览器取消、断开或导航离开时，终止 DNS、下载、解压和 worker 链路。
     const controller = new AbortController();
     const abortIfDisconnected = () => {
       if (!res.writableEnded) controller.abort();
@@ -157,6 +161,7 @@ export function createMerchantWebsiteRouter(
     }
   });
 
+  // 路由在全局 20 MiB parser 之前挂载，因此需要在本 router 内处理 JSON parser 错误。
   const jsonErrorHandler: ErrorRequestHandler = (error, _req, res, next) => {
     const type = (error as { type?: string }).type;
     if (type === 'entity.too.large') {

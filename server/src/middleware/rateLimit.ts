@@ -58,6 +58,7 @@ export const merchantWebsiteLimiter = rateLimit({
 });
 
 export const MAX_CONCURRENT_WEBSITE_EXTRACTIONS = 4;
+/** 仅统计当前 Node 进程；多实例部署时每个实例各自拥有四个槽位。 */
 let activeWebsiteExtractions = 0;
 
 /** 进程级官网抓取并发上限，防止瞬时请求绕过时间窗口限流并耗尽连接或内存。 */
@@ -76,6 +77,7 @@ export function merchantWebsiteConcurrencyLimiter(
 
   activeWebsiteExtractions += 1;
   let released = false;
+  // finish 覆盖正常响应，close 覆盖客户端断开；幂等 release 防止两个事件重复减计数。
   const release = () => {
     if (released) return;
     released = true;

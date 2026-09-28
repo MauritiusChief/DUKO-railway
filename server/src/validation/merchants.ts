@@ -58,6 +58,10 @@ export const merchantSearchSchema = z.object({
 
 export type MerchantSearchInput = z.infer<typeof merchantSearchSchema>;
 
+/**
+ * 官网 URL 在进入 DNS/网络层前执行第一层结构校验。
+ * 网络层仍会重复校验每次重定向，并负责 IP/SSRF 判断。
+ */
 export const merchantWebsiteExtractionSchema = z.object({
   placeId: z.string().trim().min(1, 'Place ID 不能为空').max(256, 'Place ID 过长'),
   websiteUrl: z.string().trim().min(1, '官网 URL 不能为空').max(2_048, '官网 URL 过长').superRefine((value, ctx) => {

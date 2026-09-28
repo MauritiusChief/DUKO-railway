@@ -44,6 +44,7 @@ export interface MerchantWebsiteExtractionState {
 
 export type MerchantVerificationStatus = 'unverified' | 'verified';
 
+/** 人工确认后才可持久化的本地记录，不复用 Google 搜索 DTO。 */
 export interface MerchantRecord {
   placeId: string;
   businessName: string;
@@ -62,6 +63,7 @@ export interface MerchantRecord {
   updatedAt: string;
 }
 
+/** CSV 导入和再次确认使用的非空合并 patch；缺失字段不会清除旧值。 */
 export interface MerchantRecordPatch {
   placeId: string;
   businessName?: string;
