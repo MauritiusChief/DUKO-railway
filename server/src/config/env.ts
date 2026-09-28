@@ -52,6 +52,9 @@ export const config = {
   /** OpenRouter API key —— 多模态 Agent 默认使用 */
   openrouterApiKey: getEnv('OPENROUTER_API_KEY'),
 
+  /** Google Places API key —— 商家文本搜索使用，缺失时仅禁用该可选能力 */
+  googlePlacesApiKey: getEnv('GOOGLE_PLACES_API_KEY'),
+
   /** HTTP 监听端口 */
   port: getEnvInt('PORT', 3023),
 
