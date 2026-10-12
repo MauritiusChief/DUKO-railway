@@ -83,6 +83,7 @@ Wiki 页面尚不存在时创建主题明确的页面。
 
 ```bash
 npm --prefix server test
+npm --prefix client test
 npm --prefix client run build
 npm --prefix server run build
 npm --prefix script run build
@@ -90,7 +91,7 @@ npm --prefix auto run build
 npm run railway:build
 ```
 
-服务端测试使用 Vitest。仓库当前没有前端、script 或 auto 的测试脚本，以各自 build 作为静态验证。数据命令和浏览器自动化有副作用，不为“验证”而运行。
+服务端和客户端测试使用 Vitest；客户端当前测试覆盖商家 IndexedDB/CSV。script 和 auto 没有测试脚本，以各自 build 作为静态验证。数据命令和浏览器自动化有副作用，不为“验证”而运行。
 
 ## 安全
 

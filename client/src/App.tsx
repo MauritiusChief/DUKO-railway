@@ -10,6 +10,7 @@ import QuotationTasksPage from './pages/QuotationTasksPage';
 import InventoryDashboardPage from './pages/InventoryDashboardPage';
 import WarehouseScanPage from './pages/WarehouseScanPage';
 import WarehouseManagePage from './pages/WarehouseManagePage';
+import MerchantCollectionPage from './pages/MerchantCollectionPage';
 import AdminGuard from './components/AdminGuard';
 import RoleGuard from './components/RoleGuard';
 
@@ -73,6 +74,14 @@ export default function App() {
         element={
           <RoleGuard allowedRoles={['admin', 'manager']}>
             <InventoryDashboardPage />
+          </RoleGuard>
+        }
+      />
+      <Route
+        path="/merchant-collection"
+        element={
+          <RoleGuard allowedRoles={['admin', 'manager']}>
+            <MerchantCollectionPage />
           </RoleGuard>
         }
       />

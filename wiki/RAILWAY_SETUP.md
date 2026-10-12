@@ -51,6 +51,7 @@ Railway Volume 的挂载、备份、限制及计费以 [Volumes 官方文档](ht
 | --- | --- | --- |
 | `DEEPSEEK_API_KEY` | 文本 Agent | 聊天、表格解析和布局文本编排需要 |
 | `OPENROUTER_API_KEY` | 多模态 Agent | 图片清单和布局 OCR 需要 |
+| `GOOGLE_PLACES_API_KEY` | Google Places 商家搜索 | 可选；限制到 Places API (New)，并配置 quota 和预算告警 |
 | `PORT` | HTTP 端口 | 通常使用 Railway 注入值 |
 | `AUTO_PROCESS` | 启动时处理原始 CSV | 默认 `false`；生产环境谨慎开启 |
 | `AUTO_INGEST` | SQLite 为空时导入 Exposed CSV、引用表和向量库 | 默认 `false`；需要 `/data` 中已有输入文件 |
@@ -78,6 +79,7 @@ Railway Volume 的挂载、备份、限制及计费以 [Volumes 官方文档](ht
 - 重新部署后用户与任务仍存在，以确认 `/data` 确实挂载。
 - 外部 auto worker 使用 `wss://<域名>/api/auto/connect`，并在前端显示在线。
 - 图片功能只有在 `OPENROUTER_API_KEY` 可用时工作；文本 Agent 只有在 `DEEPSEEK_API_KEY` 可用时工作。
+- 商家搜索只有在 `GOOGLE_PLACES_API_KEY` 可用时工作；缺失不会阻止服务启动，但端点返回 503。
 
 ## 数据与安全备份
 

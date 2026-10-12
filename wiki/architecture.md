@@ -9,6 +9,10 @@ DUKO 是由四个 Node.js/TypeScript 子项目组成的单仓库应用：
   | REST + fetch/ReadableStream SSE
   v
 Express server ---- SQLite / LanceDB / 进程内状态
+  |       \
+  |        \ HTTPS（受限商家文本搜索）
+  |         v
+  |       Google Places API (New) / 公开商家官网
   |
   | WebSocket（单 worker、双向任务协议）
   v
@@ -34,6 +38,7 @@ Odoo 页面 ---- script 用户脚本（直接操作当前页面 DOM）
 
 - Zustand 内存状态：当前表单、加载状态、SSE 日志和选中项。
 - `localStorage`：access token、当前解析表、当前布局、报价草稿、库存最近结果、语言等可恢复数据。
+- IndexedDB：人工确认后的商家本地名录，以 Place ID 为唯一键；只存在于当前 origin/profile，通过 CSV 手动备份和迁移。
 - 下载文件：表格 JSON 存档和布局 JSON，可由用户重新导入。
 
 ## Server
@@ -49,8 +54,11 @@ Odoo 页面 ---- script 用户脚本（直接操作当前页面 DOM）
 - 仓库条形码点数：扫码录入、型号↔SKU 映射、汇总与原型 JSON 导入。
 - 报价/库存任务队列、SSE 广播和 `auto` WebSocket 协议。
 - 客户端构建产物与用户脚本下载文件的提供。
+- 仅限 admin/manager 的 Google Places 商家文本搜索；结果只在请求响应中返回，不写入服务端数据库。
 
 REST 用于短请求、查询和命令；SSE 用于 LLM 流式结果、报价全局/单任务更新和库存 job 更新。SSE 连接是 server 到浏览器的单向事件流，确认、取消等反向操作仍走 REST。
+
+商家搜索页面 `/merchant-collection` 向 `POST /api/merchants/search` 提交类别查询、连续 48 州范围内的中心坐标和矩形半宽。server 使用环境变量中的 key 调用固定 Google Places Text Search endpoint，最多读取三页并映射为专用 DTO。用户可另行选择商家，通过 `POST /api/merchant-websites/extract` 安全抓取静态官网首页；该路径不复用 auto worker 或其 Odoo 登录态。搜索结果和提取草稿只保存在页面内存，人工确认后才以 Place ID 写入当前浏览器 IndexedDB；服务端不持久化商家名录。CSV 由浏览器直接导入、导出，不经过 server。详见 [服务端商家搜索](./server/merchant-search.md)和[客户端商家信息采集](./client/merchant-collection.md)。
 
 ## Auto 与 WebSocket
 
