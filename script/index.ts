@@ -2,13 +2,11 @@
 // 在 Odoo quotation 页面自动注入浮动面板
 
 import { initPanel } from './panel';
+import { TARGET, isTargetPage } from './target';
 
 (function main() {
-  console.log(`DUKO Quote Filler ${__BUILD_TS__}`);
-  const url = window.location.href;
-
-  // 仅在 Odoo quotation 相关页面激活（含 sales/new, sales/xxx 等）
-  if (!url.includes('dukouserp.com/odoo')) return;
+  console.log(`${TARGET.name} ${__BUILD_TS__}`);
+  if (!isTargetPage()) return;
 
   // 等待页面基本加载完成再注入面板（给 Odoo 框架渲染留时间）
   if (document.readyState === 'loading') {

@@ -70,12 +70,17 @@ npm --prefix server run db:ingest
 npm --prefix server test
 npm --prefix client run build
 npm --prefix server run build
-npm --prefix script run build
+npm --prefix script run typecheck
+npm --prefix script test
+npm --prefix script run build:manual
+npm --prefix script run verify:manual
 npm --prefix auto run build
 npm run railway:build
 ```
 
 按改动范围执行最小相关集合；合并前对受影响的全部子项目执行构建。`db:process`、`db:ingest` 和 worker 流程会读写数据或访问外部系统，不属于无副作用验证。
+
+ScriptCat 的本地销售／采购测试脚本位于 `script/dist/manual/`，安装和共用代码结构见 [Script 文档](wiki/script/README.md)。`npm --prefix script run build` 是发布命令，会将销售脚本复制到 `server/public/script/`；手动测试使用上面的 `build:manual`。
 
 ## 文档
 

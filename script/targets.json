@@ -1,0 +1,20 @@
+{
+  "sales": {
+    "id": "sales",
+    "path": "/odoo/sales",
+    "name": "DUKO Sales Filler",
+    "filename": "duko-sales-filler.user.js",
+    "productCell": "td.o_sol_product_many2one_cell",
+    "quantityField": "product_uom_qty",
+    "supportsDiscount": true
+  },
+  "purchase": {
+    "id": "purchase",
+    "path": "/odoo/purchase",
+    "name": "DUKO Purchase Filler",
+    "filename": "duko-purchase-filler.user.js",
+    "productCell": "td[name=\"product_id\"]",
+    "quantityField": "product_qty",
+    "supportsDiscount": false
+  }
+}

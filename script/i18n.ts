@@ -7,9 +7,12 @@ export type ScriptCatLang = 'zh' | 'en';
 
 export interface ScriptCatTexts {
   panelTitle: Record<ScriptCatLang, string>;
+  salesPanelTitle: Record<ScriptCatLang, string>;
+  purchasePanelTitle: Record<ScriptCatLang, string>;
   minimize: Record<ScriptCatLang, string>;
   close: Record<ScriptCatLang, string>;
   csvLabel: Record<ScriptCatLang, string>;
+  purchaseCsvLabel: Record<ScriptCatLang, string>;
   writeBtn: Record<ScriptCatLang, string>;
   statusReady: Record<ScriptCatLang, string>;
   statusWriting: Record<ScriptCatLang, string>;
@@ -28,6 +31,18 @@ export interface ScriptCatTexts {
 }
 
 export const texts: ScriptCatTexts = {
+  salesPanelTitle: {
+    zh: 'DUKO 销售填入器',
+    en: 'DUKO Sales Filler',
+  },
+  purchasePanelTitle: {
+    zh: 'DUKO 采购填入器',
+    en: 'DUKO Purchase Filler',
+  },
+  purchaseCsvLabel: {
+    zh: '粘贴 CSV（productName,quantity）：',
+    en: 'Paste CSV (productName,quantity):',
+  },
   panelTitle: {
     zh: 'DUKO 填入器',
     en: 'DUKO Filler',

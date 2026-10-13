@@ -54,7 +54,7 @@ npm --prefix client run dev
 npm --prefix auto run dev
 ```
 
-用户脚本没有 watch/dev 命令；修改后重新构建，再在脚本管理器中更新构建产物。
+用户脚本没有 watch/dev 命令；修改后用 `npm --prefix script run build:manual` 生成销售／采购两份本地测试脚本，再在脚本管理器中更新安装。此命令不运行生产复制钩子，细节见 [Script 文档](script/README.md)。
 
 ## 构建与启动
 
@@ -83,13 +83,18 @@ npm run railway:start
 
 ## 测试
 
-当前自动测试仅配置在服务端：
+服务端、客户端和用户脚本均有自动测试：
 
 ```bash
 npm --prefix server test
+npm --prefix client test
+npm --prefix script run typecheck
+npm --prefix script test
+npm --prefix script run build:manual
+npm --prefix script run verify:manual
 ```
 
-Vitest 读取 `server/vitest.config.ts`，匹配 `server/src/**/*.test.ts`。现有测试重点覆盖结构化 SKU 搜索和布局物料清单算法。`client`、`auto`、`script` 没有 package test 命令；其基本静态验证分别依赖 build。
+服务端和客户端使用 Vitest。用户脚本使用 Node test runner 和隔离 jsdom 检查销售／采购路径、字段输入、第三列处理、覆写及失败恢复；`verify:manual` 验证构建产物。`auto` 没有 package test 命令，其基本静态验证依赖 build。
 
 完整的非 Odoo 验证通常至少运行：
 
@@ -98,10 +103,15 @@ npm --prefix server test
 npm --prefix client run build
 npm --prefix server run build
 npm --prefix auto run build
-npm --prefix script run build
+npm --prefix script run typecheck
+npm --prefix script test
+npm --prefix script run build:manual
+npm --prefix script run verify:manual
 ```
 
 真实 Odoo 操作依赖账号、登录态和当时的页面 DOM，不能由上述单元测试证明。
+
+用户脚本的 `npm --prefix script run build` 是发布构建，会自动复制到 `server/public/script/`；本地手动测试使用 `build:manual`，两者不要混用。
 
 ## 数据处理命令
 
@@ -144,8 +154,9 @@ node server/dist/refresh-data-cli.js
 - `server/dist/`：服务端 JavaScript 与声明文件。
 - `auto/dist/`：worker JavaScript。
 - `script/dist/duko-filler.user.js`：用户脚本产物；是否同时存在旧 source map 不应作为当前构建契约。
+- `script/dist/manual/duko-sales-filler.user.js`、`duko-purchase-filler.user.js`：销售／采购本地测试脚本，同目录的 `sales.build-meta.json`、`purchase.build-meta.json` 记录各自构建信息。
 - `server/public/script/duko-filler.user.js`：`script` postbuild 复制的下载文件。
-- `server/public/script/build-meta.json`：脚本构建时间戳，构建配置在 `script/rspack.config.js`。
+- `server/public/script/build-meta.json`：发布脚本构建时间戳，由 `script/postbuild.cjs` 从本地构建目录复制；配置和 metadata 生成共用 `script/build-config.cjs`。
 - `*.tsbuildinfo`：TypeScript 增量/solution build 元数据，可能由 build 生成；`client/tsconfig.tsbuildinfo` 和 `server/tsconfig.tsbuildinfo` 当前已被 Git 跟踪，构建后应只保留符合本次源码变化的更新。
 
 `dist/`、数据目录、`.env`、`auto/data/` 和 `server/public/script/` 已由 `.gitignore` 排除。不要手工修改生成文件；修改源码后重新构建。

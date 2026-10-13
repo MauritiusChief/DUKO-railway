@@ -32,9 +32,11 @@
 
 ## ScriptCat
 
-- `script/` 构建 Odoo 页面用户脚本，产物复制到 `server/public/script/`，由无需登录的下载端点提供。
+- `script/` 以 `targets.json` 为销售／采购差异的唯一配置来源，共享同一填表代码；页面分别限于 `/odoo/sales`、`/odoo/purchase` 根路径及子路径，写入时再次检查路径和当前订单表格。
+- `npm --prefix script run build:manual` 只在 `script/dist/manual/` 生成两份手动安装脚本和构建信息，不运行生产复制步骤；发布命令 `npm --prefix script run build` 自动运行 `postbuild.cjs`，将销售脚本复制到 `server/public/script/`，由无需登录的下载端点提供。采购脚本尚未接入该下载入口。
 - 脚本依赖 Odoo DOM 和页面行为，不是稳定公共 API；选择器或写入逻辑变化需要在授权的非生产场景人工验证。
 - Odoo 修改报价行数量会清空当前行已填折扣；ScriptCat 必须按数量、可选折扣、提交的顺序写入。
+- 采购 ScriptCat 只使用 CSV 型号和数量，静默忽略第三列；提交确认及失败恢复共用销售实现，回归验证仅运行隔离 DOM，不连接 Odoo。
 
 ## 待确认
 

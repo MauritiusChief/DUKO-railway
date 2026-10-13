@@ -1,8 +1,21 @@
 // 类型定义 —— ScriptCat 脚本与面板共享
 // 从 MIGRATION_PLAN §3.2 提取并适配
 
-/** rspack DefinePlugin 构建时注入的时间戳 */
-declare const __BUILD_TS__: string;
+export interface OdooTarget {
+  id: 'sales' | 'purchase';
+  path: string;
+  name: string;
+  filename: string;
+  productCell: string;
+  quantityField: string;
+  supportsDiscount: boolean;
+}
+
+/** 两份 bundle 使用同一入口，由构建注入对应的页面配置。 */
+declare global {
+  const __BUILD_TS__: string;
+  const __ODOO_TARGET__: OdooTarget;
+}
 
 /** Odoo quotation 表中一行待写入的零件 */
 export interface WrittenPart {

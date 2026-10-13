@@ -4,12 +4,17 @@
   "private": true,
   "scripts": {
     "build": "rspack build",
+    "build:manual": "node build-manual.cjs",
+    "verify:manual": "node verify-manual.cjs",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test tests/filler.test.cjs",
     "postbuild": "node postbuild.cjs"
   },
   "devDependencies": {
     "@rspack/cli": "^1.2.0",
     "@rspack/core": "^1.2.0",
     "@types/tampermonkey": "^5.0.0",
+    "jsdom": "^26.1.0",
     "ts-loader": "^9.5.0",
     "typescript": "^5.5.0"
   }

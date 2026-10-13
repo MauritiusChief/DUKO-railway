@@ -4,6 +4,8 @@
 import type { CsvRow, PanelStatus, WrittenPart, WriteResult } from './types';
 import { writePartsToQuotation, overwriteQuotation } from './quotation';
 import { texts, type ScriptCatLang } from './i18n';
+import { parseCsv } from './csv';
+import { TARGET, assertTargetPage, isTargetPage } from './target';
 
 // ---- 面板 DOM 选择器（不挂全局，闭包内维护） ----
 
@@ -149,54 +151,11 @@ GM_addStyle(`
 }
 `);
 
-// ---- CSV 解析 ----
-
-/** 将 CSV 文本解析为 CsvRow 数组。
- *  支持 header 行 productName,quantity[,discount]（可选，自动跳过）
- *  支持 "," 或 tab 分隔 */
-function parseCsv(text: string): CsvRow[] {
-  const lines = text
-    .split('\n')
-    .map((l) => l.trim())
-    .filter(Boolean);
-
-  if (lines.length === 0) return [];
-
-  // 检测第一行是否为 header（包含 productName 或 quantity）
-  const first = lines[0].toLowerCase();
-  const hasHeader = first.includes('productname') || first.includes('product') || first.includes('sku') || first.includes('型号');
-
-  const dataLines = hasHeader ? lines.slice(1) : lines;
-  const rows: CsvRow[] = [];
-
-  for (const line of dataLines) {
-    // 支持逗号或 tab 分隔
-    const sep = line.includes('\t') ? '\t' : ',';
-    const parts = line.split(sep);
-
-    const productName = (parts[0] ?? '').trim();
-    if (!productName) continue;
-
-    const quantity = parseInt(parts[1]?.trim() ?? '1', 10) || 1;
-
-    // 第三列折扣：空值保留为 undefined（不触碰 Odoo 折扣），无效值忽略
-    const discountRaw = (parts[2] ?? '').trim();
-    let discount: number | undefined;
-    if (discountRaw !== '') {
-      const parsed = Number(discountRaw);
-      if (isFinite(parsed) && parsed >= 0 && parsed <= 100) discount = parsed;
-    }
-
-    rows.push({ productName, quantity, ...(discount !== undefined ? { discount } : {}) });
-  }
-
-  return rows;
-}
-
 // ---- 面板构建 ----
 
 /** 初始化并注入浮动面板到页面 */
 export function initPanel(): void {
+  if (!isTargetPage()) return;
   // 防止重复注入
   if (document.querySelector('.duko-panel-wrap')) return;
 
@@ -206,7 +165,7 @@ export function initPanel(): void {
   // --- 标题栏 ---
   const header = document.createElement('div');
   header.className = 'duko-panel-header';
-  header.innerHTML = `<span>${t('panelTitle')}</span>`;
+  header.innerHTML = `<span>${t(TARGET.id === 'sales' ? 'salesPanelTitle' : 'purchasePanelTitle')}</span>`;
 
   const btnGroup = document.createElement('div');
   btnGroup.className = 'duko-panel-header-btns';
@@ -250,7 +209,7 @@ export function initPanel(): void {
 
   // 文本框标签
   const label = document.createElement('label');
-  label.textContent = t('csvLabel');
+  label.textContent = t(TARGET.supportsDiscount ? 'csvLabel' : 'purchaseCsvLabel');
   body.appendChild(label);
 
   // CSV 文本框
@@ -311,6 +270,7 @@ export function initPanel(): void {
     setStatus(statusEl, 'writing', t('statusWriting'));
 
     try {
+      assertTargetPage();
       const parts = currentRows.map((r) => ({
         partModel: r.productName,
         quantity: r.quantity,
@@ -365,11 +325,11 @@ function updatePreview(
 
   table.style.display = '';
   table.innerHTML = `
-    <thead><tr><th>#</th><th>${t('colModel')}</th><th>${t('colQty')}</th><th>${t('colDiscount')}</th></tr></thead>
+    <thead><tr><th>#</th><th>${t('colModel')}</th><th>${t('colQty')}</th>${TARGET.supportsDiscount ? `<th>${t('colDiscount')}</th>` : ''}</tr></thead>
     <tbody>
       ${rows
         .map(
-          (r, i) => `<tr><td>${i + 1}</td><td>${escapeHtml(r.productName)}</td><td>${r.quantity}</td><td>${r.discount ?? ''}</td></tr>`,
+          (r, i) => `<tr><td>${i + 1}</td><td>${escapeHtml(r.productName)}</td><td>${r.quantity}</td>${TARGET.supportsDiscount ? `<td>${r.discount ?? ''}</td>` : ''}</tr>`,
         )
         .join('')}
     </tbody>`;

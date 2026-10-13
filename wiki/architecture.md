@@ -24,7 +24,7 @@ Odoo 页面 ---- script 用户脚本（直接操作当前页面 DOM）
 - `client/`：React 18 + Vite SPA，负责认证、清单解析、布局、报价、库存、历史与管理员界面。路由见 `client/src/App.tsx`。
 - `server/`：Express API、LLM Agent、SKU 检索、任务编排、认证和静态文件服务。入口为 `server/src/index.ts`。
 - `auto/`：独立运行的 Playwright worker，主动连接服务端，复用 Chromium profile 中的 Odoo 登录态，执行报价、库存下载和趋势查验。
-- `script/`：ScriptCat/Tampermonkey 用户脚本。它注入 Odoo 页面并直接操作当前报价表格，不经过 `auto` 任务队列。
+- `script/`：ScriptCat/Tampermonkey 用户脚本。它注入 Odoo 销售／采购页面并直接操作当前订单表格，不经过 `auto` 任务队列。
 
 生产式构建后，Express 从 `client/dist/` 提供 SPA 静态文件，因此网页与 API 可共用一个 HTTP 端口。开发时 Vite 单独监听并代理 `/api`。
 
@@ -70,9 +70,9 @@ REST 用于短请求、查询和命令；SSE 用于 LLM 流式结果、报价全
 
 ## Script
 
-`script/` 是独立于服务端队列的人工辅助路径。构建产物含用户脚本元数据，在匹配的 Odoo 页面注入可拖动面板；用户粘贴 SKU/数量 CSV 后可追加或覆写当前报价表格。它使用浏览器 DOM、Odoo autocomplete 和事件模拟，行为集中在 `script/panel.ts` 与 `script/quotation.ts`。
+`script/` 是独立于服务端队列的人工辅助路径。`targets.json` 定义销售／采购路径、产品控件、数量字段与折扣能力，同一个入口分别生成两份独立安装脚本；用户粘贴 SKU/数量 CSV 后可追加或覆写当前订单表格。销售支持可选折扣，采购静默忽略第三列。它使用浏览器 DOM、Odoo autocomplete 和事件模拟，行为集中在 `script/panel.ts` 与 `script/quotation.ts`，查询限定于当前可见订单表格。
 
-构建会把脚本复制到 `server/public/script/`，网页主页通过无需登录的下载入口获取它。脚本直接依赖 Odoo DOM 结构，选择器变化是其主要脆弱点。
+`build:manual` 将销售、采购测试脚本写入 `script/dist/manual/`，不写生产目录；发布命令 `build` 则由 npm 的 `postbuild` 将销售脚本复制到 `server/public/script/`，网页主页通过无需登录的下载入口获取它。采购尚未接入下载入口。脚本直接依赖 Odoo DOM 结构，选择器变化是其主要脆弱点；构建、验证和安装步骤见 [Script 文档](script/README.md)。
 
 ## 数据与状态
 

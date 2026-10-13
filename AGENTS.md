@@ -86,12 +86,15 @@ npm --prefix server test
 npm --prefix client test
 npm --prefix client run build
 npm --prefix server run build
-npm --prefix script run build
+npm --prefix script run typecheck
+npm --prefix script test
+npm --prefix script run build:manual
+npm --prefix script run verify:manual
 npm --prefix auto run build
 npm run railway:build
 ```
 
-服务端和客户端测试使用 Vitest；客户端当前测试覆盖商家 IndexedDB/CSV。script 和 auto 没有测试脚本，以各自 build 作为静态验证。数据命令和浏览器自动化有副作用，不为“验证”而运行。
+服务端和客户端测试使用 Vitest；客户端当前测试覆盖商家 IndexedDB/CSV。script 使用 Node test runner 和隔离 jsdom，以 `build:manual` 生成销售／采购本地测试脚本，再用 `verify:manual` 检查安装产物；auto 没有测试脚本，以 build 作为静态验证。`npm --prefix script run build` 与根 `railway:build` 会将销售脚本复制到 `server/public/script/`，本地手动测试应使用 `build:manual`。数据命令和浏览器自动化有副作用，不为“验证”而运行。
 
 ## 安全
 

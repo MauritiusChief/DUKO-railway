@@ -11,7 +11,7 @@
 - [管理、历史与追踪](client/admin-history-and-trace.md)：认证、用户管理、个人/全量历史、搜索调试与 LLM trace。
 - [Server 概览](server/README.md)：服务端入口；下分 [Agents 与工具](server/agents-and-tools.md)、[认证与持久化](server/auth-and-persistence.md)、[数据与搜索](server/data-and-search.md)、[实时通信与自动化](server/realtime-and-automation.md)、[仓库扫码](server/warehouse-scan.md)。
 - [Auto Worker](auto/README.md)：独立 Playwright worker 的配置、任务和运行边界。
-- [手工 CSV Quote Filler](script/README.md)：Odoo 用户脚本的构建、使用与 DOM 风险。
+- [手工 CSV 销售／采购填入器](script/README.md)：双脚本本地构建、手动安装与 DOM 风险。
 - 部署资料：[Railway 部署](RAILWAY_SETUP.md)、[WSL 可选操作环境](RAILWAY_SETUP_WSL.md)。本索引不复制其中的平台步骤。
 - [Windows 局域网手机测试](windows-lan-mobile-testing.md)：PM2 本地服务在同一可信 Wi-Fi 中供 Android 手机访问时的防火墙、网络与相机排查。
 - [实施计划](plans/README.md)：需要跨组件协调或记录重要取舍的临时方案。
